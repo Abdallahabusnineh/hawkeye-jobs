@@ -129,9 +129,24 @@ SOURCES = {
     "linkedin_posts": "LinkedIn hiring posts",
 }
 
+SOURCE_HINTS = {
+    "linkedin": "worldwide",
+    "indeed": "worldwide, except Remote",
+    "bayt": "Jordan + Gulf only",
+    "naukrigulf": "Gulf only",
+    "google_jobs": "worldwide",
+    "linkedin_posts": "global posts — LinkedIn login required",
+}
+
 SOURCE_ORDER = [
     "linkedin", "indeed", "bayt", "naukrigulf", "google_jobs", "linkedin_posts",
 ]
+
+
+def source_choice_label(source_id: str) -> str:
+    label = SOURCES[source_id]
+    hint = SOURCE_HINTS.get(source_id)
+    return f"{label}  ({hint})" if hint else label
 
 BROWSER_SOURCES = {"bayt", "naukrigulf", "google_jobs", "linkedin_posts"}
 

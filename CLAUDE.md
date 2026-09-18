@@ -32,7 +32,7 @@ Tests: `python3 -m unittest discover -s tests -v`
 
 ## Pipeline
 
-1. **`src/settings.py`** — reuse or prompt for keywords / locations / sources.
+1. **`src/settings.py`** — reuse or prompt for keywords / locations / websites (`src/picker.py` for arrow+space menus).
 2. **`src/catalog.py`** — expand those choices into per-site queries.
 3. **`src/scraper.py`** — JobSpy scrapes LinkedIn + Indeed (no browser). 48h window.
 4. **`src/browser.py`** + Selenium scrapers when those sources are selected:
@@ -52,6 +52,7 @@ Set in `.env` (gitignored): `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`. Copy 
 |---|---|
 | `src/catalog.py` | Add countries or sources, fix per-site location slugs |
 | `src/settings.py` | Prompt / config.json behaviour |
+| `src/picker.py` | Arrow / space selection UI |
 | `src/filters.py` | Title matching / hiring-post signals |
 | `src/scraper.py` | LinkedIn/Indeed JobSpy calls |
 | `src/bayt.py` | Bayt selectors |

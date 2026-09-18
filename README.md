@@ -6,8 +6,8 @@ Deduplicates across sources and across runs. Nothing runs in the background — 
 
 ## Features
 
-- Interactive terminal setup: keywords, locations, sources
-- Remembers your last choices in `config.json` (`Y` to reuse, `n` to change)
+- Interactive checkboxes: arrows move, space selects, enter confirms
+- Remembers your last choices in `config.json`
 - Searches LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts
 - Keeps titles that match your keywords
 - Only includes jobs posted in the last 48 hours
@@ -55,13 +55,12 @@ python src/main.py
 
 You will be asked for:
 
-1. Search keywords (comma-separated), e.g. `Python Developer, Django`
-2. Locations (numbers or `all`)
-3. Sources (numbers or `all`)
+1. Search keywords (type them, comma-separated), e.g. `Flutter Developer, Dart Developer`
+2. Locations — ↑↓ move, space to select, `a` for all, enter to confirm
+3. Websites — same controls
+4. Next run: Yes/No to reuse saved settings (↑↓ and enter)
 
-The next run shows those settings and asks `Use these? [Y/n]`.
-
-Bayt.com and NaukriGulf only cover Jordan/Gulf. Choosing UK or Remote for those sources is skipped automatically.
+Bayt.com and NaukriGulf only cover Jordan/Gulf. Choosing UK or Remote for those sites is skipped automatically.
 
 ### LinkedIn hiring posts (optional)
 
@@ -93,6 +92,7 @@ hawkeye-jobs/
 ├── src/
 │   ├── main.py            # Prompts, then runs the pipeline
 │   ├── settings.py        # Terminal prompts + config.json
+│   ├── picker.py          # Arrow/space checkbox menus
 │   ├── catalog.py         # Location/source → per-site queries
 │   ├── filters.py         # Title / hiring-post matching
 │   ├── scraper.py         # LinkedIn + Indeed (JobSpy)

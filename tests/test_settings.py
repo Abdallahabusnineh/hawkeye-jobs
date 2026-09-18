@@ -13,6 +13,8 @@ import settings
 class ParseSelectionTests(unittest.TestCase):
     def test_all(self):
         self.assertEqual(settings.parse_selection("all", 3), [0, 1, 2])
+        self.assertEqual(settings.parse_selection("ALL", 3), [0, 1, 2])
+        self.assertEqual(settings.parse_selection("0", 3), [0, 1, 2])
 
     def test_space_separated_one_based(self):
         self.assertEqual(settings.parse_selection("1 3", 4), [0, 2])
@@ -30,7 +32,7 @@ class ConfigRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "config.json"
             data = {
-                "keywords": ["Python Developer"],
+                "keywords": ["Flutter Developer"],
                 "locations": ["jordan", "uae"],
                 "sources": ["linkedin", "indeed"],
             }
@@ -52,7 +54,7 @@ class CollectSettingsTests(unittest.TestCase):
             path = Path(tmp) / "config.json"
             path.write_text(json.dumps(saved), encoding="utf-8")
             with patch("builtins.input", return_value="Y"):
-                result = settings.collect_settings(path)
+                result = settings.collect_settings(path, interactive=False)
         self.assertEqual(result, saved)
 
     def test_prompts_when_user_declines_saved(self):
@@ -66,13 +68,13 @@ class CollectSettingsTests(unittest.TestCase):
             path.write_text(json.dumps(saved), encoding="utf-8")
             answers = iter([
                 "n",
-                "Python Developer",
+                "Flutter Developer",
                 "1",
                 "1",
             ])
             with patch("builtins.input", side_effect=lambda *a, **k: next(answers)):
-                result = settings.collect_settings(path)
-            self.assertEqual(result["keywords"], ["Python Developer"])
+                result = settings.collect_settings(path, interactive=False)
+            self.assertEqual(result["keywords"], ["Flutter Developer"])
             self.assertEqual(result["locations"], ["jordan"])
             self.assertEqual(result["sources"], ["linkedin"])
             self.assertEqual(json.loads(path.read_text(encoding="utf-8")), result)

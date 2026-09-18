@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from catalog import expand_searches
+from catalog import expand_searches, source_choice_label
 
 
 class ExpandSearchesTests(unittest.TestCase):
@@ -24,7 +24,7 @@ class ExpandSearchesTests(unittest.TestCase):
 
     def test_indeed_includes_country_code(self):
         searches = expand_searches(
-            ["Python Developer"],
+            ["Flutter Developer"],
             ["uk"],
             ["indeed"],
         )
@@ -32,7 +32,7 @@ class ExpandSearchesTests(unittest.TestCase):
             searches["indeed"],
             [
                 {
-                    "term": "Python Developer",
+                    "term": "Flutter Developer",
                     "location": "United Kingdom",
                     "country": "uk",
                 }
@@ -57,26 +57,26 @@ class ExpandSearchesTests(unittest.TestCase):
 
     def test_google_remote_appends_remote_to_term(self):
         searches = expand_searches(
-            ["Python Developer"],
+            ["Flutter Developer"],
             ["remote"],
             ["google_jobs"],
         )
         self.assertEqual(
             searches["google_jobs"],
-            [("Python Developer remote", "")],
+            [("Flutter Developer remote", "")],
         )
 
     def test_linkedin_posts_build_hiring_phrases(self):
         searches = expand_searches(
-            ["Python Developer"],
+            ["Flutter Developer"],
             ["jordan"],
             ["linkedin_posts"],
         )
         self.assertEqual(
             searches["linkedin_posts"],
             [
-                "hiring Python Developer",
-                "looking for Python Developer",
+                "hiring Flutter Developer",
+                "looking for Flutter Developer",
             ],
         )
 
@@ -84,6 +84,10 @@ class ExpandSearchesTests(unittest.TestCase):
         searches = expand_searches(["X"], ["jordan"], ["linkedin"])
         self.assertEqual(searches["bayt"], [])
         self.assertEqual(searches["indeed"], [])
+
+    def test_site_menu_mentions_coverage(self):
+        self.assertIn("Gulf only", source_choice_label("naukrigulf"))
+        self.assertIn("LinkedIn jobs", source_choice_label("linkedin"))
 
 
 if __name__ == "__main__":

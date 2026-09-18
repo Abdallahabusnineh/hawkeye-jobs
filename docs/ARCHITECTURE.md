@@ -11,6 +11,7 @@ hawkeye-jobs/
 ├── src/
 │   ├── main.py          # Prompts, then runs the pipeline
 │   ├── settings.py      # Terminal prompts + config.json
+│   ├── picker.py        # Arrow/space checkbox and yes/no menus
 │   ├── catalog.py       # Location/source → per-site queries
 │   ├── filters.py       # Title / hiring-post matching
 │   ├── scraper.py       # LinkedIn + Indeed via JobSpy
@@ -58,13 +59,13 @@ print jobs + send_email()       → Terminal list + Gmail HTML digest
 
 ### `src/settings.py` — Terminal prompts + saved config
 
-`collect_settings()` loads `config.json` if present and asks `Use these? [Y/n]`. `Y` (or Enter) reuses it. `n` prompts for keywords, numbered locations, and numbered sources, then writes `config.json`.
+`collect_settings()` loads `config.json` if present and shows a Yes/No picker (`↑↓` + enter). Yes reuses it. No (or no saved file) prompts for keywords (typed), then checkbox lists for locations and websites (`↑↓` move, space select, `a` all, enter confirm). Writes `config.json`. If stdin is not a TTY, it falls back to numbered lists.
 
 `config.json` shape:
 
 ```json
 {
-  "keywords": ["Python Developer"],
+  "keywords": ["Flutter Developer"],
   "locations": ["jordan", "uae"],
   "sources": ["linkedin", "indeed"]
 }
@@ -235,7 +236,7 @@ https://www.linkedin.com/search/results/content/?keywords=<enc>&datePosted=%22pa
 ```
 `datePosted=past-24h` keeps posts fresh; `sortBy=date_posted` surfaces newest first. Cross-run dedup (`seen_jobs.json`) prevents re-emailing the same post.
 
-**Search phrases (`LINKEDIN_POST_SEARCHES`):** `"were hiring flutter"`, `hiring flutter developer`, `flutter developer wanted`, `looking for flutter developer`.
+**Search phrases:** built from the user's keywords, e.g. `hiring Flutter Developer`, `looking for Flutter Developer`.
 
 **Relevance filter (`is_hiring_post`):** does **not** use `is_relevant_job()` (post text is prose, not a title). A post is kept only if its text mentions a user keyword stem **and** contains a hiring signal (`hiring`, `looking for`, `wanted`, `vacancy`, `open position`, …). Recency is enforced by the URL filter plus `_post_within_48h()` for LinkedIn's compact times (`5h`, `1d`, `2w`).
 
@@ -429,4 +430,4 @@ cp .env.example .env   # fill in GMAIL_USER / GMAIL_PASS / RECIPIENT_EMAIL
 bash run.sh            # prompts for keywords, locations, sources
 ```
 
-To change saved searches: answer `n` at `Use these? [Y/n]`, or `rm -f config.json`.
+To change saved searches: pick **No** on the reuse menu, or `rm -f config.json`.

@@ -13,8 +13,8 @@ class KeywordStemsTests(unittest.TestCase):
 
     def test_keeps_multiple_distinct_stems(self):
         self.assertEqual(
-            keyword_stems(["Python Developer", "Django"]),
-            ["python", "django"],
+            keyword_stems(["Flutter Developer", "Dart"]),
+            ["flutter", "dart"],
         )
 
     def test_keeps_phrase_when_only_generic_words(self):
@@ -48,19 +48,19 @@ class HiringPostTests(unittest.TestCase):
     def test_keeps_hiring_post_with_keyword(self):
         self.assertTrue(
             is_hiring_post(
-                "We're hiring a Python developer in Amman",
-                ["Python Developer"],
+                "We're hiring a Flutter developer in Amman",
+                ["Flutter Developer"],
             )
         )
 
     def test_rejects_keyword_without_hiring_signal(self):
         self.assertFalse(
-            is_hiring_post("I love python programming", ["Python Developer"])
+            is_hiring_post("I love flutter programming", ["Flutter Developer"])
         )
 
     def test_rejects_hiring_post_for_other_stack(self):
         self.assertFalse(
-            is_hiring_post("We're hiring a Java developer", ["Python Developer"])
+            is_hiring_post("We're hiring a Java developer", ["Flutter Developer"])
         )
 
 
