@@ -4,8 +4,9 @@ import json
 import sys
 from pathlib import Path
 
-from catalog import LOCATION_ORDER, LOCATIONS, SOURCE_ORDER, SOURCES, source_choice_label
-from picker import color_question, pick_many, pick_one
+from catalog import SOURCE_ORDER, SOURCES, get_location, normalize_location_id, source_choice_label
+from countries import CountryFetchError, load_countries
+from picker import color_error, color_hint, color_question, pick_many, pick_one, pick_searchable
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = ROOT / "config.json"
@@ -62,8 +63,13 @@ def save_config(data: dict, path: Path = DEFAULT_CONFIG_PATH) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
-def _format_saved(data: dict) -> str:
-    labels = [LOCATIONS[i]["label"] for i in data["locations"] if i in LOCATIONS]
+def _format_saved(data: dict, country_labels=None) -> str:
+    country_labels = country_labels or {}
+    labels = []
+    for loc_id in data["locations"]:
+        nid = normalize_location_id(loc_id)
+        loc = get_location(loc_id, country_labels.get(nid) or country_labels.get(loc_id))
+        labels.append(loc["label"] if loc else loc_id)
     source_labels = [SOURCES[i] for i in data["sources"] if i in SOURCES]
     return (
         f"  Keywords: {', '.join(data['keywords'])}\n"
@@ -107,31 +113,47 @@ def _prompt_from_list(title: str, items: list) -> list:
         return indexes
 
 
-def prompt_new_settings(interactive: bool = True) -> dict:
+def _resolve_countries(countries) -> list:
+    if countries is not None:
+        return list(countries)
+    print(color_hint("\nLoading world countries from restcountries.com…"))
+    try:
+        loaded = load_countries()
+    except CountryFetchError as exc:
+        print(color_error(str(exc)))
+        sys.exit(1)
+    print(color_hint(f"Loaded {len(loaded)} places (including Remote)."))
+    return loaded
+
+
+def prompt_new_settings(interactive: bool = True, countries=None) -> dict:
     keywords = _prompt_keywords()
-    location_labels = [LOCATIONS[key]["label"] for key in LOCATION_ORDER]
+    countries = _resolve_countries(countries)
+    location_labels = [c["label"] for c in countries]
     source_labels = [source_choice_label(key) for key in SOURCE_ORDER]
     if interactive:
-        loc_idx = pick_many("Locations", location_labels)
+        loc_idx = pick_searchable("Search and select countries", location_labels)
         src_idx = pick_many("Which websites should I search?", source_labels)
     else:
-        loc_idx = _prompt_from_list("Locations", location_labels)
+        loc_idx = _prompt_from_list("Search and select countries", location_labels)
         src_idx = _prompt_from_list("Which websites should I search?", source_labels)
     return {
         "keywords": keywords,
-        "locations": [LOCATION_ORDER[i] for i in loc_idx],
+        "locations": [countries[i]["id"] for i in loc_idx],
         "sources": [SOURCE_ORDER[i] for i in src_idx],
     }
 
 
-def collect_settings(path: Path = DEFAULT_CONFIG_PATH, interactive=None) -> dict:
+def collect_settings(path: Path = DEFAULT_CONFIG_PATH, interactive=None, countries=None) -> dict:
     """Return settings from a reuse prompt, or ask and save a new config."""
     if interactive is None:
         interactive = can_use_picker()
 
     saved = load_config(path)
     if saved:
-        print("Saved search settings:\n" + _format_saved(saved))
+        resolved = _resolve_countries(countries)
+        labels_map = {c["id"]: c["label"] for c in resolved}
+        print("Saved search settings:\n" + _format_saved(saved, labels_map))
         if interactive:
             choice = pick_one("Use these saved settings?", ["Yes", "No"], default=0)
             if choice == 0:
@@ -140,8 +162,9 @@ def collect_settings(path: Path = DEFAULT_CONFIG_PATH, interactive=None) -> dict
             answer = _ask("Use these? [Y/n] ").lower()
             if answer in ("", "y", "yes"):
                 return saved
+        countries = resolved
 
-    data = prompt_new_settings(interactive=interactive)
+    data = prompt_new_settings(interactive=interactive, countries=countries)
     save_config(data, path)
     print(f"\nSaved to {path.name}. Next run can reuse these.")
     return data

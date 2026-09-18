@@ -7,6 +7,7 @@ Deduplicates across sources and across runs. Nothing runs in the background — 
 ## Features
 
 - Interactive checkboxes: arrows move, space selects, enter confirms
+- Country list from [REST Countries](https://restcountries.com) — type to search, space to select
 - Remembers your last choices in `config.json`
 - Searches LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts
 - Keeps titles that match your keywords
@@ -56,11 +57,13 @@ python src/main.py
 You will be asked for:
 
 1. Search keywords (type them, comma-separated), e.g. `Flutter Developer, Dart Developer`
-2. Locations — ↑↓ move, space to select, `a` for all, enter to confirm
-3. Websites — same controls
+2. Countries — type to filter, ↑↓ move, space to select, `*` for all visible matches, enter to confirm
+3. Websites — ↑↓ move, space to select, `a` for all, enter to confirm
 4. Next run: Yes/No to reuse saved settings (↑↓ and enter)
 
-Bayt.com and NaukriGulf only cover Jordan/Gulf. Choosing UK or Remote for those sites is skipped automatically.
+Bayt.com and NaukriGulf only cover Jordan/Gulf. Other countries still search LinkedIn, Indeed, and Google Jobs.
+
+Delete `countries_cache.json` only if a previous failed run saved a bad list; each `bash run.sh` already calls the API again.
 
 ### LinkedIn hiring posts (optional)
 
@@ -75,8 +78,9 @@ Sign in, close Chrome, then run hawkeye-jobs and include **LinkedIn hiring posts
 ## Reset
 
 ```bash
-rm -f seen_jobs.json    # notify about listings again
-rm -f config.json       # re-enter keywords / locations / sources
+rm -f seen_jobs.json         # notify about listings again
+rm -f config.json            # re-enter keywords / countries / sources
+rm -f countries_cache.json   # re-download the world country list
 ```
 
 If an older version installed a macOS LaunchAgent:
@@ -92,8 +96,9 @@ hawkeye-jobs/
 ├── src/
 │   ├── main.py            # Prompts, then runs the pipeline
 │   ├── settings.py        # Terminal prompts + config.json
-│   ├── picker.py          # Arrow/space checkbox menus
-│   ├── catalog.py         # Location/source → per-site queries
+│   ├── picker.py          # Arrow/space checkbox menus + searchable country list
+│   ├── catalog.py         # Country/source → per-site queries
+│   ├── countries.py       # REST Countries API + cache
 │   ├── filters.py         # Title / hiring-post matching
 │   ├── scraper.py         # LinkedIn + Indeed (JobSpy)
 │   ├── bayt.py            # Bayt.com

@@ -43,6 +43,12 @@ class ConfigRoundTripTests(unittest.TestCase):
         self.assertIsNone(settings.load_config(Path("/tmp/does-not-exist-hawkeye.json")))
 
 
+FAKE_COUNTRIES = [
+    {"id": "jo", "label": "Jordan"},
+    {"id": "ae", "label": "United Arab Emirates"},
+]
+
+
 class CollectSettingsTests(unittest.TestCase):
     def test_reuses_saved_config_on_yes(self):
         saved = {
@@ -54,7 +60,9 @@ class CollectSettingsTests(unittest.TestCase):
             path = Path(tmp) / "config.json"
             path.write_text(json.dumps(saved), encoding="utf-8")
             with patch("builtins.input", return_value="Y"):
-                result = settings.collect_settings(path, interactive=False)
+                result = settings.collect_settings(
+                    path, interactive=False, countries=FAKE_COUNTRIES
+                )
         self.assertEqual(result, saved)
 
     def test_prompts_when_user_declines_saved(self):
@@ -73,9 +81,11 @@ class CollectSettingsTests(unittest.TestCase):
                 "1",
             ])
             with patch("builtins.input", side_effect=lambda *a, **k: next(answers)):
-                result = settings.collect_settings(path, interactive=False)
+                result = settings.collect_settings(
+                    path, interactive=False, countries=FAKE_COUNTRIES
+                )
             self.assertEqual(result["keywords"], ["Flutter Developer"])
-            self.assertEqual(result["locations"], ["jordan"])
+            self.assertEqual(result["locations"], ["jo"])
             self.assertEqual(result["sources"], ["linkedin"])
             self.assertEqual(json.loads(path.read_text(encoding="utf-8")), result)
 

@@ -8,6 +8,7 @@ hawkeye.log
 *.log
 seen_jobs.json
 config.json
+countries_cache.json
 
 # Python
 __pycache__/

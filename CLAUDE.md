@@ -25,14 +25,14 @@ Last search settings are stored in `config.json` (gitignored).
 
 ```bash
 pip install -r requirements.txt
-# python-jobspy==1.1.80, pandas, beautifulsoup4, undetected-chromedriver, setuptools
+# python-jobspy==1.1.80, pandas, requests, beautifulsoup4, undetected-chromedriver, setuptools
 ```
 
 Tests: `python3 -m unittest discover -s tests -v`
 
 ## Pipeline
 
-1. **`src/settings.py`** — reuse or prompt for keywords / locations / websites (`src/picker.py` for arrow+space menus).
+1. **`src/settings.py`** — reuse or prompt for keywords / countries / websites (`src/picker.py`). Countries come from `src/countries.py`.
 2. **`src/catalog.py`** — expand those choices into per-site queries.
 3. **`src/scraper.py`** — JobSpy scrapes LinkedIn + Indeed (no browser). 48h window.
 4. **`src/browser.py`** + Selenium scrapers when those sources are selected:
@@ -50,9 +50,10 @@ Set in `.env` (gitignored): `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`. Copy 
 
 | File | What to touch when... |
 |---|---|
-| `src/catalog.py` | Add countries or sources, fix per-site location slugs |
+| `src/catalog.py` | Per-site location slugs (Bayt/Naukri/Indeed aliases) |
+| `src/countries.py` | World country list (REST Countries + cache) |
 | `src/settings.py` | Prompt / config.json behaviour |
-| `src/picker.py` | Arrow / space selection UI |
+| `src/picker.py` | Arrow / space / type-to-search selection UI |
 | `src/filters.py` | Title matching / hiring-post signals |
 | `src/scraper.py` | LinkedIn/Indeed JobSpy calls |
 | `src/bayt.py` | Bayt selectors |
@@ -68,4 +69,5 @@ Set in `.env` (gitignored): `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`. Copy 
 ```bash
 rm -f seen_jobs.json
 rm -f config.json
+rm -f countries_cache.json
 ```

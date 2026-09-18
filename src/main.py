@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(__file__))
 
 from catalog import BROWSER_SOURCES, expand_searches
+from countries import load_countries
 from scraper import scrape_all
 from bayt import scrape_bayt
 from naukrigulf import scrape_naukrigulf
@@ -54,10 +55,12 @@ def main():
     print("=" * 50)
 
     chosen = collect_settings()
+    country_labels = {c["id"]: c["label"] for c in load_countries()}
     searches = expand_searches(
         chosen["keywords"],
         chosen["locations"],
         chosen["sources"],
+        country_labels=country_labels,
     )
     keywords = chosen["keywords"]
 

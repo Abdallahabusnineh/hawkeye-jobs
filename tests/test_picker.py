@@ -6,13 +6,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from picker import (
     MultiSelectState,
+    SearchSelectState,
     SingleSelectState,
     apply_multiselect_key,
     apply_singleselect_key,
     _multi_lines,
+    _search_box_lines,
+    _search_lines,
     _single_lines,
     GREEN,
     CYAN,
+    MAGENTA,
 )
 
 
@@ -85,6 +89,31 @@ class ColorTests(unittest.TestCase):
         no = next(line for line in lines if "No" in line)
         self.assertIn(GREEN, yes)
         self.assertNotIn(GREEN, no)
+
+
+class SearchBoxTests(unittest.TestCase):
+    def test_empty_query_draws_colored_border_and_placeholder(self):
+        lines = _search_box_lines("")
+        joined = "\n".join(lines)
+        self.assertIn("╭", joined)
+        self.assertIn("╰", joined)
+        self.assertIn("│", joined)
+        self.assertTrue(any(MAGENTA in line for line in lines))
+        self.assertTrue(any("Type a country" in line for line in lines))
+
+    def test_query_appears_inside_the_box(self):
+        lines = _search_box_lines("jordan")
+        self.assertTrue(any("jordan" in line for line in lines))
+        self.assertTrue(any("█" in line for line in lines))
+
+    def test_country_picker_uses_the_search_box(self):
+        state = SearchSelectState(items=["Jordan", "Germany"], query="ger")
+        lines = _search_lines("Search and select countries", state)
+        joined = "\n".join(lines)
+        self.assertIn("╭", joined)
+        self.assertTrue(any(MAGENTA in line for line in lines))
+        self.assertTrue(any("ger" in line for line in lines))
+        self.assertTrue(any("Germany" in line for line in lines))
 
 
 if __name__ == "__main__":

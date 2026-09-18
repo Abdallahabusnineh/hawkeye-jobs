@@ -85,6 +85,18 @@ class ExpandSearchesTests(unittest.TestCase):
         self.assertEqual(searches["bayt"], [])
         self.assertEqual(searches["indeed"], [])
 
+    def test_unknown_country_uses_api_label(self):
+        searches = expand_searches(
+            ["Flutter Developer"],
+            ["jp"],
+            ["linkedin"],
+            country_labels={"jp": "Japan"},
+        )
+        self.assertEqual(
+            searches["linkedin"],
+            [{"term": "Flutter Developer", "location": "Japan"}],
+        )
+
     def test_site_menu_mentions_coverage(self):
         self.assertIn("Gulf only", source_choice_label("naukrigulf"))
         self.assertIn("LinkedIn jobs", source_choice_label("linkedin"))

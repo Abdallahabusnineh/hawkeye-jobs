@@ -11,8 +11,9 @@ hawkeye-jobs/
 ├── src/
 │   ├── main.py          # Prompts, then runs the pipeline
 │   ├── settings.py      # Terminal prompts + config.json
-│   ├── picker.py        # Arrow/space checkbox and yes/no menus
-│   ├── catalog.py       # Location/source → per-site queries
+│   ├── picker.py        # Arrow/space checkbox, searchable country list, yes/no
+│   ├── catalog.py       # Country/source → per-site queries
+│   ├── countries.py     # REST Countries API + countries_cache.json
 │   ├── filters.py       # Title / hiring-post matching
 │   ├── scraper.py       # LinkedIn + Indeed via JobSpy
 │   ├── bayt.py          # Bayt.com via Selenium
@@ -30,7 +31,7 @@ hawkeye-jobs/
 └── CLAUDE.md
 ```
 
-`config.json`, `seen_jobs.json`, and `hawkeye.log` are created at runtime and gitignored.
+`config.json`, `seen_jobs.json`, `countries_cache.json`, and `hawkeye.log` are created at runtime and gitignored.
 
 ---
 
@@ -59,23 +60,27 @@ print jobs + send_email()       → Terminal list + Gmail HTML digest
 
 ### `src/settings.py` — Terminal prompts + saved config
 
-`collect_settings()` loads `config.json` if present and shows a Yes/No picker (`↑↓` + enter). Yes reuses it. No (or no saved file) prompts for keywords (typed), then checkbox lists for locations and websites (`↑↓` move, space select, `a` all, enter confirm). Writes `config.json`. If stdin is not a TTY, it falls back to numbered lists.
+`collect_settings()` loads `config.json` if present and shows a Yes/No picker (`↑↓` + enter). Yes reuses it. No (or no saved file) prompts for keywords (typed), then a searchable country list (`type` to filter, `↑↓` move, space select, `*` all visible, enter confirm), then website checkboxes (`↑↓` move, space select, `a` all, enter confirm). Writes `config.json`. If stdin is not a TTY, it falls back to numbered lists.
+
+Country names come from [REST Countries](https://restcountries.com/v3.1/all?fields=name,cca2) via `src/countries.py`. Every `bash run.sh` run calls the API. If the request fails, `countries_cache.json` from a previous successful fetch is used. There is no hardcoded country picker list.
 
 `config.json` shape:
 
 ```json
 {
   "keywords": ["Flutter Developer"],
-  "locations": ["jordan", "uae"],
+  "locations": ["jo", "ae"],
   "sources": ["linkedin", "indeed"]
 }
 ```
 
+Older configs that stored `jordan` / `uae` still work (`LEGACY_IDS` in `catalog.py`).
+
 ### `src/catalog.py` — Expand user choices into site queries
 
-`LOCATIONS` maps a stable id (`jordan`, `uae`, `remote`, …) to per-site strings/slugs. Sources that do not support a country (Bayt/NaukriGulf outside the Gulf, Indeed for Remote) are skipped.
+`get_location(id)` maps a country id (`jo`, `gb`, `remote`, …) to per-site strings/slugs. `OVERRIDES` holds Indeed/Bayt/NaukriGulf aliases. Sources that do not support a country (Bayt/NaukriGulf outside the Gulf, Indeed for Remote) are skipped. Unknown ISO codes still search LinkedIn, Indeed, and Google Jobs.
 
-`expand_searches(keywords, location_ids, source_ids)` returns:
+`expand_searches(keywords, location_ids, source_ids, country_labels=None)` returns:
 
 ```python
 {
@@ -368,15 +373,15 @@ All scrapers produce job dicts with this shape:
 
 ## Search Coverage
 
-Locations are chosen in the terminal. Per-source support is defined in `src/catalog.py`:
+Locations are chosen from the world list in the terminal. Per-source support:
 
 | Source | Supported locations |
 |---|---|
-| LinkedIn | Jordan, UAE, Saudi, Kuwait, Qatar, Oman, Bahrain, UK, Germany, Netherlands, France, USA, Canada, Remote |
-| Indeed | Jordan, UAE, Saudi, Kuwait, Qatar, Oman, Bahrain, UK, Germany, Netherlands, France, USA, Canada |
-| Bayt | Jordan, UAE, Saudi, Kuwait, Qatar, Oman, Bahrain |
-| NaukriGulf | UAE, Saudi, Kuwait, Qatar, Bahrain |
-| Google Jobs | All of the above including Remote |
+| LinkedIn | Any country from the API, plus Remote |
+| Indeed | Any country from the API (not Remote) |
+| Bayt | Jordan + Gulf only (`OVERRIDES` slugs) |
+| NaukriGulf | Gulf only (`OVERRIDES` slugs) |
+| Google Jobs | Any country from the API, plus Remote |
 | LinkedIn Posts | Global (content search — not location-scoped) |
 
 ---
@@ -389,7 +394,7 @@ If `undetected-chromedriver` fails with version mismatch:
 2. Update `version_main=149` in `src/browser.py` to match
 
 ### Add a country or source mapping
-Edit `LOCATIONS` / `SOURCES` in `src/catalog.py`.
+Country names come from REST Countries. Site-specific slugs (Bayt/NaukriGulf/Indeed aliases) live in `OVERRIDES` in `src/catalog.py`. Add a source in `SOURCES` / `SOURCE_ORDER`.
 
 ### Tune title matching
 Edit `keyword_stems()` stopwords or `is_hiring_post()` signals in `src/filters.py`.

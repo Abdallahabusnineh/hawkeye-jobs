@@ -1,124 +1,97 @@
 """Maps user-facing locations/sources to per-site search queries."""
 
-LOCATIONS = {
-    "jordan": {
+LEGACY_IDS = {
+    "jordan": "jo",
+    "uae": "ae",
+    "saudi": "sa",
+    "kuwait": "kw",
+    "qatar": "qa",
+    "oman": "om",
+    "bahrain": "bh",
+    "uk": "gb",
+    "germany": "de",
+    "netherlands": "nl",
+    "france": "fr",
+    "usa": "us",
+    "canada": "ca",
+}
+
+OVERRIDES = {
+    "jo": {
         "label": "Jordan",
-        "linkedin": "Jordan",
         "indeed": ("Jordan", "jordan"),
         "bayt": "jordan",
-        "naukrigulf": None,
-        "google": "Jordan",
     },
-    "uae": {
+    "ae": {
         "label": "United Arab Emirates",
-        "linkedin": "United Arab Emirates",
         "indeed": ("United Arab Emirates", "united arab emirates"),
         "bayt": "uae",
         "naukrigulf": "uae",
         "google": "UAE",
     },
-    "saudi": {
+    "sa": {
         "label": "Saudi Arabia",
-        "linkedin": "Saudi Arabia",
         "indeed": ("Saudi Arabia", "saudi arabia"),
         "bayt": "saudi-arabia",
         "naukrigulf": "saudi-arabia",
-        "google": "Saudi Arabia",
     },
-    "kuwait": {
+    "kw": {
         "label": "Kuwait",
-        "linkedin": "Kuwait",
         "indeed": ("Kuwait", "kuwait"),
         "bayt": "kuwait",
         "naukrigulf": "kuwait",
-        "google": "Kuwait",
     },
-    "qatar": {
+    "qa": {
         "label": "Qatar",
-        "linkedin": "Qatar",
         "indeed": ("Qatar", "qatar"),
         "bayt": "qatar",
         "naukrigulf": "qatar",
-        "google": "Qatar",
     },
-    "oman": {
+    "om": {
         "label": "Oman",
-        "linkedin": "Oman",
         "indeed": ("Oman", "oman"),
         "bayt": "oman",
-        "naukrigulf": None,
-        "google": "Oman",
     },
-    "bahrain": {
+    "bh": {
         "label": "Bahrain",
-        "linkedin": "Bahrain",
         "indeed": ("Bahrain", "bahrain"),
         "bayt": "bahrain",
         "naukrigulf": "bahrain",
-        "google": "Bahrain",
     },
-    "uk": {
+    "gb": {
         "label": "United Kingdom",
-        "linkedin": "United Kingdom",
         "indeed": ("United Kingdom", "uk"),
-        "bayt": None,
-        "naukrigulf": None,
-        "google": "United Kingdom",
     },
-    "germany": {
+    "de": {
         "label": "Germany",
-        "linkedin": "Germany",
         "indeed": ("Germany", "germany"),
-        "bayt": None,
-        "naukrigulf": None,
-        "google": "Germany",
     },
-    "netherlands": {
+    "nl": {
         "label": "Netherlands",
-        "linkedin": "Netherlands",
         "indeed": ("Netherlands", "netherlands"),
-        "bayt": None,
-        "naukrigulf": None,
-        "google": "Netherlands",
     },
-    "france": {
+    "fr": {
         "label": "France",
-        "linkedin": "France",
         "indeed": ("France", "france"),
-        "bayt": None,
-        "naukrigulf": None,
-        "google": "France",
     },
-    "usa": {
+    "us": {
         "label": "United States",
-        "linkedin": "United States",
         "indeed": ("United States", "usa"),
-        "bayt": None,
-        "naukrigulf": None,
-        "google": "United States",
     },
-    "canada": {
+    "ca": {
         "label": "Canada",
-        "linkedin": "Canada",
         "indeed": ("Canada", "canada"),
-        "bayt": None,
-        "naukrigulf": None,
-        "google": "Canada",
-    },
-    "remote": {
-        "label": "Remote",
-        "linkedin": "Remote",
-        "indeed": None,
-        "bayt": None,
-        "naukrigulf": None,
-        "google": None,
     },
 }
 
-LOCATION_ORDER = [
-    "jordan", "uae", "saudi", "kuwait", "qatar", "oman", "bahrain",
-    "uk", "germany", "netherlands", "france", "usa", "canada", "remote",
-]
+REMOTE_SPEC = {
+    "label": "Remote",
+    "linkedin": "Remote",
+    "indeed": None,
+    "bayt": None,
+    "naukrigulf": None,
+    "google": None,
+}
 
 SOURCES = {
     "linkedin": "LinkedIn jobs",
@@ -142,13 +115,36 @@ SOURCE_ORDER = [
     "linkedin", "indeed", "bayt", "naukrigulf", "google_jobs", "linkedin_posts",
 ]
 
+BROWSER_SOURCES = {"bayt", "naukrigulf", "google_jobs", "linkedin_posts"}
+
 
 def source_choice_label(source_id: str) -> str:
     label = SOURCES[source_id]
     hint = SOURCE_HINTS.get(source_id)
     return f"{label}  ({hint})" if hint else label
 
-BROWSER_SOURCES = {"bayt", "naukrigulf", "google_jobs", "linkedin_posts"}
+
+def normalize_location_id(loc_id: str) -> str:
+    return LEGACY_IDS.get((loc_id or "").strip().lower(), (loc_id or "").strip().lower())
+
+
+def get_location(loc_id: str, label: str | None = None) -> dict | None:
+    """Build per-site location fields. Unknown countries still work on LinkedIn/Google/Indeed."""
+    loc_id = normalize_location_id(loc_id)
+    if not loc_id:
+        return None
+    if loc_id == "remote":
+        return dict(REMOTE_SPEC)
+    over = OVERRIDES.get(loc_id, {})
+    name = label or over.get("label") or loc_id.upper()
+    return {
+        "label": name,
+        "linkedin": name,
+        "indeed": over.get("indeed") or (name, name.lower()),
+        "bayt": over.get("bayt"),
+        "naukrigulf": over.get("naukrigulf"),
+        "google": over.get("google", name),
+    }
 
 
 def _empty_searches() -> dict:
@@ -159,14 +155,16 @@ def _slug(keyword: str) -> str:
     return "-".join(keyword.strip().lower().split())
 
 
-def expand_searches(keywords: list, location_ids: list, source_ids: list) -> dict:
+def expand_searches(keywords: list, location_ids: list, source_ids: list, country_labels=None) -> dict:
     """Build per-source query lists from the user's keywords, locations, and sources."""
     searches = _empty_searches()
     selected = set(source_ids)
     keywords = [kw.strip() for kw in keywords if str(kw).strip()]
+    country_labels = country_labels or {}
 
     for loc_id in location_ids:
-        loc = LOCATIONS.get(loc_id)
+        nid = normalize_location_id(loc_id)
+        loc = get_location(loc_id, country_labels.get(nid) or country_labels.get(loc_id))
         if not loc:
             continue
         for keyword in keywords:
@@ -187,7 +185,7 @@ def expand_searches(keywords: list, location_ids: list, source_ids: list) -> dic
             if "naukrigulf" in selected and loc.get("naukrigulf"):
                 searches["naukrigulf"].append((keyword.lower(), loc["naukrigulf"]))
             if "google_jobs" in selected:
-                if loc_id == "remote":
+                if nid == "remote":
                     searches["google_jobs"].append((f"{keyword} remote", ""))
                 elif loc.get("google") is not None:
                     searches["google_jobs"].append((keyword, loc["google"]))

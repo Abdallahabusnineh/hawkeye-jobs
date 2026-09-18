@@ -11,6 +11,7 @@ DIM = "\033[2m"
 CYAN = "\033[36m"
 GREEN = "\033[32m"
 RED = "\033[31m"
+MAGENTA = "\033[95m"
 
 
 def color_question(text: str) -> str:
@@ -27,6 +28,10 @@ def color_hint(text: str) -> str:
 
 def color_error(text: str) -> str:
     return f"{RED}{text}{RESET}"
+
+
+def color_search_border(text: str) -> str:
+    return f"{BOLD}{MAGENTA}{text}{RESET}"
 
 
 try:
@@ -92,6 +97,80 @@ def apply_multiselect_key(state: MultiSelectState, key: str) -> MultiSelectState
     )
 
 
+@dataclass
+class SearchSelectState:
+    items: list
+    query: str = ""
+    cursor: int = 0
+    selected: list = None
+    done: bool = False
+    error: str = ""
+
+    def __post_init__(self):
+        if self.selected is None:
+            self.selected = [False] * len(self.items)
+
+    def visible_indexes(self) -> list:
+        needle = self.query.lower()
+        if not needle:
+            return list(range(len(self.items)))
+        return [i for i, label in enumerate(self.items) if needle in str(label).lower()]
+
+    def indexes(self) -> list:
+        return [i for i, on in enumerate(self.selected) if on]
+
+
+def apply_search_key(state: SearchSelectState, key: str) -> SearchSelectState:
+    query = state.query
+    cursor = state.cursor
+    selected = list(state.selected)
+    error = ""
+    done = False
+
+    if key.startswith("type:"):
+        query += key[5:]
+        cursor = 0
+    elif key == "backspace":
+        query = query[:-1]
+        cursor = 0
+    elif key == "clear":
+        query = ""
+        cursor = 0
+
+    visible = [
+        i for i, label in enumerate(state.items)
+        if (not query.lower() or query.lower() in str(label).lower())
+    ]
+    if visible:
+        cursor = max(0, min(cursor, len(visible) - 1))
+    else:
+        cursor = 0
+
+    if key == "up" and visible:
+        cursor = (cursor - 1) % len(visible)
+    elif key == "down" and visible:
+        cursor = (cursor + 1) % len(visible)
+    elif key == "space" and visible:
+        selected[visible[cursor]] = not selected[visible[cursor]]
+    elif key == "all" and visible:
+        for idx in visible:
+            selected[idx] = True
+    elif key == "enter":
+        if any(selected):
+            done = True
+        else:
+            error = "Select at least one country with space, or type to search."
+
+    return SearchSelectState(
+        items=list(state.items),
+        query=query,
+        cursor=cursor,
+        selected=selected,
+        done=done,
+        error=error,
+    )
+
+
 def apply_singleselect_key(state: SingleSelectState, key: str) -> SingleSelectState:
     n = len(state.items)
     if n == 0:
@@ -131,6 +210,31 @@ def _read_key() -> str:
     if ch.lower() == "a":
         return "all"
     return ch.lower()
+
+
+def _read_search_key() -> str:
+    ch = sys.stdin.read(1)
+    if ch == "\x03":
+        raise KeyboardInterrupt
+    if ch == "\x1b":
+        nxt = sys.stdin.read(1)
+        if nxt == "[":
+            arrow = sys.stdin.read(1)
+            return {"A": "up", "B": "down"}.get(arrow, "esc")
+        return "esc"
+    if ch in ("\r", "\n"):
+        return "enter"
+    if ch == " ":
+        return "space"
+    if ch == "*":
+        return "all"
+    if ch in ("\x7f", "\x08"):
+        return "backspace"
+    if ch == "\x15":
+        return "clear"
+    if ch.isprintable():
+        return f"type:{ch}"
+    return "ignore"
 
 
 def _draw(lines: list, prev_count: int) -> int:
@@ -178,6 +282,69 @@ def _single_lines(title: str, state: SingleSelectState) -> list:
     return lines
 
 
+def _search_window(visible: list, cursor: int, limit: int = 12) -> list:
+    if not visible:
+        return []
+    start = max(0, cursor - limit // 3)
+    end = min(len(visible), start + limit)
+    start = max(0, end - limit)
+    return visible[start:end]
+
+
+def _pad_visible(text: str, width: int) -> str:
+    if len(text) > width:
+        text = "…" + text[-(width - 1):]
+    return text + " " * (width - len(text))
+
+
+def _search_box_lines(query: str, width: int = 46) -> list:
+    """Draw a magenta-bordered search box around the current query."""
+    inner_w = max(16, width - 4)
+    if query:
+        inner = _pad_visible(query + "█", inner_w)
+        inner_colored = inner
+    else:
+        inner = _pad_visible("Type a country name…", inner_w)
+        inner_colored = color_hint(inner)
+    label = " Search "
+    dash_count = max(1, width - 3 - len(label))
+    top = "╭─" + label + "─" * dash_count + "╮"
+    mid = color_search_border("│ ") + inner_colored + color_search_border(" │")
+    bot = "╰" + "─" * (width - 2) + "╯"
+    return [
+        color_search_border(top),
+        mid,
+        color_search_border(bot),
+    ]
+
+
+def _search_lines(title: str, state: SearchSelectState) -> list:
+    visible = state.visible_indexes()
+    selected_n = sum(1 for on in state.selected if on)
+    match_word = "match" if len(visible) == 1 else "matches"
+    lines = [
+        "",
+        color_question(title),
+        color_hint("All countries  ·  type to filter  ·  space select  ·  * visible  ·  enter confirm"),
+        *_search_box_lines(state.query),
+        color_hint(f"{selected_n} selected  ·  {len(visible)} {match_word}"),
+    ]
+    if state.error:
+        lines.append(color_error(state.error))
+    if not visible:
+        lines.append(color_hint("No countries match."))
+        return lines
+    window = _search_window(visible, state.cursor)
+    for orig_i in window:
+        on = state.selected[orig_i]
+        is_cur = visible[state.cursor] == orig_i if visible else False
+        mark = "[x]" if on else "[ ]"
+        arrow = "❯" if is_cur else " "
+        row = f" {arrow} {mark} {state.items[orig_i]}"
+        lines.append(color_selected(row) if on or is_cur else row)
+    return lines
+
+
 def _run_raw(draw_loop):
     if termios is None or not sys.stdin.isatty():
         raise RuntimeError("interactive picker needs a TTY")
@@ -205,6 +372,25 @@ def pick_many(title: str, items: list) -> list:
         while not state.done:
             state = apply_multiselect_key(state, _read_key())
             height = _draw(_multi_lines(title, state), height)
+        return state.indexes()
+
+    return _run_raw(loop)
+
+
+def pick_searchable(title: str, items: list) -> list:
+    """Filterable checkbox list. Returns selected 0-based indexes."""
+    state = SearchSelectState(items=list(items))
+
+    def loop():
+        nonlocal state
+        height = 0
+        height = _draw(_search_lines(title, state), height)
+        while not state.done:
+            key = _read_search_key()
+            if key == "ignore":
+                continue
+            state = apply_search_key(state, key)
+            height = _draw(_search_lines(title, state), height)
         return state.indexes()
 
     return _run_raw(loop)
