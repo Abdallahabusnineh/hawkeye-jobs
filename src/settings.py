@@ -127,17 +127,48 @@ def _resolve_countries(countries) -> list:
     return loaded
 
 
+def confirm_choices_question(kind: str, names: list, limit: int = 8) -> str:
+    labels = [str(name) for name in names]
+    extra = ""
+    if len(labels) > limit:
+        extra = f" (+{len(labels) - limit} more)"
+        labels = labels[:limit]
+    return f"Confirm these {kind}: {', '.join(labels)}{extra}?"
+
+
+def confirm_choices(kind: str, names: list, interactive: bool) -> bool:
+    question = confirm_choices_question(kind, names)
+    if interactive:
+        return pick_one(question, ["Yes, continue", "No, choose again"], default=0) == 0
+    answer = _ask(color_question(question) + " [Y/n]\n> ").lower()
+    return answer in ("", "y", "yes")
+
+
+def _pick_until_confirmed(kind: str, items: list, pick, interactive: bool) -> list:
+    while True:
+        indexes = pick()
+        names = [items[i] for i in indexes]
+        if confirm_choices(kind, names, interactive):
+            return indexes
+
+
 def prompt_new_settings(interactive: bool = True, countries=None) -> dict:
     keywords = _prompt_keywords()
     countries = _resolve_countries(countries)
     location_labels = [c["label"] for c in countries]
     source_labels = [source_choice_label(key) for key in SOURCE_ORDER]
-    if interactive:
-        loc_idx = pick_searchable("Search and select countries", location_labels)
-        src_idx = pick_many("Which websites should I search?", source_labels)
-    else:
-        loc_idx = _prompt_from_list("Search and select countries", location_labels)
-        src_idx = _prompt_from_list("Which websites should I search?", source_labels)
+    loc_pick = (
+        (lambda: pick_searchable("Search and select countries", location_labels))
+        if interactive
+        else (lambda: _prompt_from_list("Search and select countries", location_labels))
+    )
+    src_pick = (
+        (lambda: pick_many("Which websites should I search?", source_labels))
+        if interactive
+        else (lambda: _prompt_from_list("Which websites should I search?", source_labels))
+    )
+    loc_idx = _pick_until_confirmed("countries", location_labels, loc_pick, interactive)
+    src_idx = _pick_until_confirmed("websites", source_labels, src_pick, interactive)
     return {
         "keywords": keywords,
         "locations": [countries[i]["id"] for i in loc_idx],

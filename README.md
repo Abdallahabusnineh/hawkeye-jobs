@@ -57,8 +57,8 @@ python src/main.py
 You will be asked for:
 
 1. Search keywords (type them, comma-separated), e.g. `Flutter Developer, Mobile Developer`
-2. Countries — type to filter, ↑↓ move, space to select, `*` for all visible matches, enter to confirm
-3. Websites — ↑↓ move, space to select, `a` for all, `d` to remove all, enter to confirm
+2. Countries — type to filter, space to select, enter, then Yes/No to confirm those countries
+3. Websites — space to select, `a` all, `d` remove all, enter, then Yes/No to confirm those sites
 4. Next run: Yes/No to reuse saved settings (↑↓ and enter)
 
 Bayt.com and NaukriGulf only cover Jordan/Gulf. Other countries still search LinkedIn, Indeed, and Google Jobs.

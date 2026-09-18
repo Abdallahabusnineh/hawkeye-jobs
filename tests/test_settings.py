@@ -78,7 +78,9 @@ class CollectSettingsTests(unittest.TestCase):
                 "n",
                 "Flutter Developer",
                 "1",
+                "y",
                 "1",
+                "y",
             ])
             with patch("builtins.input", side_effect=lambda *a, **k: next(answers)):
                 result = settings.collect_settings(
@@ -88,6 +90,50 @@ class CollectSettingsTests(unittest.TestCase):
             self.assertEqual(result["locations"], ["jo"])
             self.assertEqual(result["sources"], ["linkedin"])
             self.assertEqual(json.loads(path.read_text(encoding="utf-8")), result)
+
+    def test_declining_country_confirm_lets_user_pick_again(self):
+        saved = {
+            "keywords": ["Old"],
+            "locations": ["jordan"],
+            "sources": ["linkedin"],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            path.write_text(json.dumps(saved), encoding="utf-8")
+            answers = iter([
+                "n",
+                "Flutter Developer",
+                "1",
+                "n",
+                "2",
+                "y",
+                "1",
+                "y",
+            ])
+            with patch("builtins.input", side_effect=lambda *a, **k: next(answers)):
+                result = settings.collect_settings(
+                    path, interactive=False, countries=FAKE_COUNTRIES
+                )
+            self.assertEqual(result["locations"], ["ae"])
+            self.assertEqual(result["sources"], ["linkedin"])
+
+
+class ConfirmChoicesTests(unittest.TestCase):
+    def test_question_lists_the_chosen_names(self):
+        question = settings.confirm_choices_question(
+            "countries", ["Jordan", "Saudi Arabia"]
+        )
+        self.assertEqual(
+            question,
+            "Confirm these countries: Jordan, Saudi Arabia?",
+        )
+
+    def test_question_truncates_a_long_list(self):
+        names = [f"C{i}" for i in range(20)]
+        question = settings.confirm_choices_question("countries", names, limit=3)
+        self.assertIn("C0, C1, C2", question)
+        self.assertIn("+17 more", question)
+        self.assertTrue(question.endswith("?"))
 
 
 if __name__ == "__main__":
