@@ -51,7 +51,7 @@ Set in `.env` (gitignored): `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`. Copy 
 | File | What to touch when... |
 |---|---|
 | `src/catalog.py` | Per-site location slugs (Bayt/Naukri/Indeed aliases) |
-| `src/countries.py` | World country list (REST Countries + cache) |
+| `src/countries.py` | World country list (public API on every run) |
 | `src/settings.py` | Prompt / config.json behaviour |
 | `src/picker.py` | Arrow / space / type-to-search selection UI |
 | `src/filters.py` | Title matching / hiring-post signals |

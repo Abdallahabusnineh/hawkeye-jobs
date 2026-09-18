@@ -53,7 +53,7 @@ def _build_url(keyword: str, location_slug: str) -> str:
     Examples:
         ("flutter developer", "uae")         → .../flutter-developer-jobs-in-uae
         ("flutter engineer",  "gulf-region") → .../flutter-engineer-jobs
-        ("dart developer",    "")            → .../dart-developer-jobs
+        ("Mobile Developer",    "")            → .../dart-developer-jobs
     """
     kw = keyword.replace(" ", "-")
     if location_slug and location_slug not in ("gulf-region", ""):

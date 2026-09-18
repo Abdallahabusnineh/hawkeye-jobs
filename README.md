@@ -7,7 +7,7 @@ Deduplicates across sources and across runs. Nothing runs in the background — 
 ## Features
 
 - Interactive checkboxes: arrows move, space selects, enter confirms
-- Country list from [REST Countries](https://restcountries.com) — type to search, space to select
+- Country list from a public API on every `bash run.sh` run — type to search, space to select
 - Remembers your last choices in `config.json`
 - Searches LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts
 - Keeps titles that match your keywords
@@ -56,9 +56,9 @@ python src/main.py
 
 You will be asked for:
 
-1. Search keywords (type them, comma-separated), e.g. `Flutter Developer, Dart Developer`
+1. Search keywords (type them, comma-separated), e.g. `Flutter Developer, Mobile Developer`
 2. Countries — type to filter, ↑↓ move, space to select, `*` for all visible matches, enter to confirm
-3. Websites — ↑↓ move, space to select, `a` for all, enter to confirm
+3. Websites — ↑↓ move, space to select, `a` for all, `d` to remove all, enter to confirm
 4. Next run: Yes/No to reuse saved settings (↑↓ and enter)
 
 Bayt.com and NaukriGulf only cover Jordan/Gulf. Other countries still search LinkedIn, Indeed, and Google Jobs.
@@ -117,13 +117,13 @@ hawkeye-jobs/
 
 ## Troubleshooting
 
-| Problem | What to try |
-|---------|-------------|
-| No email | Jobs still print in the terminal. Fill in `.env` |
+| Problem                       | What to try                                                |
+| ----------------------------- | ---------------------------------------------------------- |
+| No email                      | Jobs still print in the terminal. Fill in `.env`           |
 | 0 jobs from Bayt / NaukriGulf | Chrome must be installed; those sites are Gulf/Jordan only |
-| Chrome version error | Set `version_main` in `src/browser.py` to match Chrome |
-| Gmail auth error | Generate a new App Password |
-| LinkedIn posts empty | Log in once using the persistent Chrome profile above |
+| Chrome version error          | Set `version_main` in `src/browser.py` to match Chrome     |
+| Gmail auth error              | Generate a new App Password                                |
+| LinkedIn posts empty          | Log in once using the persistent Chrome profile above      |
 
 ## License
 

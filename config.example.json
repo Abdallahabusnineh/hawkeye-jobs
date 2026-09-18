@@ -1,5 +1,16 @@
 {
-  "keywords": ["Flutter Developer", "Dart Developer"],
-  "locations": ["jo", "ae", "remote"],
-  "sources": ["linkedin", "indeed", "google_jobs"]
+  "keywords": [
+    "Flutter Developer",
+    "Mobile Developer"
+  ],
+  "locations": [
+    "jo",
+    "ae",
+    "remote"
+  ],
+  "sources": [
+    "linkedin",
+    "indeed",
+    "google_jobs"
+  ]
 }

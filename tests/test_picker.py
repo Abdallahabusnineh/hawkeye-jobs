@@ -40,6 +40,18 @@ class MultiSelectKeyTests(unittest.TestCase):
         state = apply_multiselect_key(self.state, "all")
         self.assertEqual(state.selected, [True, True, True])
 
+    def test_none_clears_every_row(self):
+        state = apply_multiselect_key(self.state, "all")
+        state = apply_multiselect_key(state, "none")
+        self.assertEqual(state.selected, [False, False, False])
+        self.assertFalse(state.done)
+
+    def test_hint_mentions_remove_all(self):
+        lines = _multi_lines("Which websites should I search?", self.state)
+        hint = next(line for line in lines if "all" in line.lower())
+        self.assertIn("d", hint)
+        self.assertIn("remove all", hint)
+
     def test_enter_without_selection_stays_open(self):
         state = apply_multiselect_key(self.state, "enter")
         self.assertFalse(state.done)
@@ -114,6 +126,37 @@ class SearchBoxTests(unittest.TestCase):
         self.assertTrue(any(MAGENTA in line for line in lines))
         self.assertTrue(any("ger" in line for line in lines))
         self.assertTrue(any("Germany" in line for line in lines))
+
+    def test_selected_countries_are_listed_by_name(self):
+        state = SearchSelectState(
+            items=["Remote", "Afghanistan", "Jordan", "Germany"],
+            selected=[True, False, True, False],
+        )
+        lines = _search_lines("Search and select countries", state)
+        summary = next(line for line in lines if "Selected:" in line)
+        self.assertIn("Remote", summary)
+        self.assertIn("Jordan", summary)
+        self.assertNotIn("Afghanistan", summary)
+        self.assertIn(GREEN, summary)
+
+    def test_selected_names_stay_visible_while_filtering(self):
+        state = SearchSelectState(
+            items=["Jordan", "Germany", "Japan"],
+            selected=[True, False, True],
+            query="ger",
+        )
+        lines = _search_lines("Search and select countries", state)
+        summary = next(line for line in lines if "Selected:" in line)
+        self.assertIn("Jordan", summary)
+        self.assertIn("Japan", summary)
+
+    def test_confirmed_line_lists_selected_names(self):
+        from picker import confirmed_line
+        text = confirmed_line(["Jordan", "Germany"])
+        self.assertIn("Selected:", text)
+        self.assertIn("Jordan", text)
+        self.assertIn("Germany", text)
+        self.assertIn(GREEN, text)
 
 
 if __name__ == "__main__":

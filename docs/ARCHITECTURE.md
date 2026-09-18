@@ -62,7 +62,7 @@ print jobs + send_email()       → Terminal list + Gmail HTML digest
 
 `collect_settings()` loads `config.json` if present and shows a Yes/No picker (`↑↓` + enter). Yes reuses it. No (or no saved file) prompts for keywords (typed), then a searchable country list (`type` to filter, `↑↓` move, space select, `*` all visible, enter confirm), then website checkboxes (`↑↓` move, space select, `a` all, enter confirm). Writes `config.json`. If stdin is not a TTY, it falls back to numbered lists.
 
-Country names come from [REST Countries](https://restcountries.com/v3.1/all?fields=name,cca2) via `src/countries.py`. Every `bash run.sh` run calls the API. If the request fails, `countries_cache.json` from a previous successful fetch is used. There is no hardcoded country picker list.
+Country names are fetched live from a public country API every `bash run.sh` run (`src/countries.py` tries FIRST.org, then a GitHub countries dump, then CountriesNow). If every request fails, `countries_cache.json` from a previous successful fetch is used. There is no hardcoded country picker list.
 
 `config.json` shape:
 

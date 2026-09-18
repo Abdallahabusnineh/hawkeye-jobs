@@ -34,6 +34,10 @@ def color_search_border(text: str) -> str:
     return f"{BOLD}{MAGENTA}{text}{RESET}"
 
 
+def confirmed_line(names: list) -> str:
+    return color_selected("Selected: " + ", ".join(str(name) for name in names))
+
+
 try:
     import termios
     import tty
@@ -83,6 +87,8 @@ def apply_multiselect_key(state: MultiSelectState, key: str) -> MultiSelectState
         selected[cursor] = not selected[cursor]
     elif key == "all":
         selected = [True] * n
+    elif key == "none":
+        selected = [False] * n
     elif key == "enter":
         if any(selected):
             done = True
@@ -158,6 +164,9 @@ def apply_search_key(state: SearchSelectState, key: str) -> SearchSelectState:
     elif key == "enter":
         if any(selected):
             done = True
+        elif visible:
+            selected[visible[cursor]] = True
+            done = True
         else:
             error = "Select at least one country with space, or type to search."
 
@@ -209,6 +218,8 @@ def _read_key() -> str:
         return "space"
     if ch.lower() == "a":
         return "all"
+    if ch.lower() == "d":
+        return "none"
     return ch.lower()
 
 
@@ -255,7 +266,7 @@ def _multi_lines(title: str, state: MultiSelectState) -> list:
     lines = [
         "",
         color_question(title),
-        color_hint("↑↓ move  ·  space select  ·  a all  ·  enter confirm"),
+        color_hint("↑↓ move  ·  space select  ·  a all  ·  d remove all  ·  enter confirm"),
     ]
     if state.error:
         lines.append(color_error(state.error))
@@ -318,16 +329,31 @@ def _search_box_lines(query: str, width: int = 46) -> list:
     ]
 
 
+def _selected_names(state: SearchSelectState) -> list:
+    return [state.items[i] for i, on in enumerate(state.selected) if on]
+
+
+def _selected_summary_line(state: SearchSelectState, limit: int = 12) -> str:
+    names = [str(name) for name in _selected_names(state)]
+    if not names:
+        return color_hint("Selected: none")
+    extra = ""
+    if len(names) > limit:
+        extra = f"  (+{len(names) - limit} more)"
+        names = names[:limit]
+    return color_selected("Selected: " + ", ".join(names) + extra)
+
+
 def _search_lines(title: str, state: SearchSelectState) -> list:
     visible = state.visible_indexes()
-    selected_n = sum(1 for on in state.selected if on)
     match_word = "match" if len(visible) == 1 else "matches"
     lines = [
         "",
         color_question(title),
         color_hint("All countries  ·  type to filter  ·  space select  ·  * visible  ·  enter confirm"),
         *_search_box_lines(state.query),
-        color_hint(f"{selected_n} selected  ·  {len(visible)} {match_word}"),
+        _selected_summary_line(state),
+        color_hint(f"{len(visible)} {match_word}"),
     ]
     if state.error:
         lines.append(color_error(state.error))
@@ -374,7 +400,10 @@ def pick_many(title: str, items: list) -> list:
             height = _draw(_multi_lines(title, state), height)
         return state.indexes()
 
-    return _run_raw(loop)
+    indexes = _run_raw(loop)
+    print()
+    print(confirmed_line([items[i] for i in indexes]))
+    return indexes
 
 
 def pick_searchable(title: str, items: list) -> list:
@@ -393,7 +422,10 @@ def pick_searchable(title: str, items: list) -> list:
             height = _draw(_search_lines(title, state), height)
         return state.indexes()
 
-    return _run_raw(loop)
+    indexes = _run_raw(loop)
+    print()
+    print(confirmed_line([items[i] for i in indexes]))
+    return indexes
 
 
 def pick_one(title: str, items: list, default: int = 0) -> int:

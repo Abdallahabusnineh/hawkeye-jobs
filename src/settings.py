@@ -6,7 +6,7 @@ from pathlib import Path
 
 from catalog import SOURCE_ORDER, SOURCES, get_location, normalize_location_id, source_choice_label
 from countries import CountryFetchError, load_countries
-from picker import color_error, color_hint, color_question, pick_many, pick_one, pick_searchable
+from picker import color_error, color_hint, color_question, confirmed_line, pick_many, pick_one, pick_searchable
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = ROOT / "config.json"
@@ -91,7 +91,7 @@ def can_use_picker() -> bool:
 
 def _prompt_keywords() -> list:
     while True:
-        raw = _ask(color_question("Search keywords (comma-separated, e.g. Flutter Developer, Dart Developer):") + "\n> ")
+        raw = _ask(color_question("Search keywords (comma-separated, e.g. Flutter Developer, Mobile Developer):") + "\n> ")
         keywords = parse_keywords(raw)
         if keywords:
             return keywords
@@ -110,13 +110,14 @@ def _prompt_from_list(title: str, items: list) -> list:
         except ValueError as exc:
             print(f"  {exc}")
             continue
+        print(confirmed_line([items[i] for i in indexes]))
         return indexes
 
 
 def _resolve_countries(countries) -> list:
     if countries is not None:
         return list(countries)
-    print(color_hint("\nLoading world countries from restcountries.com…"))
+    print(color_hint("\nLoading world countries from the public API…"))
     try:
         loaded = load_countries()
     except CountryFetchError as exc:

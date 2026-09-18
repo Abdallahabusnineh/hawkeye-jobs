@@ -29,6 +29,34 @@ class ParseCountriesTests(unittest.TestCase):
             ],
         )
 
+    def test_parses_first_org_payload(self):
+        payload = {
+            "status": "ok",
+            "data": {
+                "DE": {"country": "Germany", "region": "Europe"},
+                "JO": {"country": "Jordan", "region": "ME"},
+            },
+        }
+        countries = parse_countries(payload)
+        self.assertEqual(
+            [(c["id"], c["label"]) for c in countries],
+            [("de", "Germany"), ("jo", "Jordan")],
+        )
+
+    def test_parses_countriesnow_payload(self):
+        payload = {
+            "error": False,
+            "data": [
+                {"name": "Jordan", "Iso2": "JO"},
+                {"name": "Germany", "Iso2": "DE"},
+            ],
+        }
+        countries = parse_countries(payload)
+        self.assertEqual(
+            [(c["id"], c["label"]) for c in countries],
+            [("de", "Germany"), ("jo", "Jordan")],
+        )
+
 
 class LoadCountriesTests(unittest.TestCase):
     def test_uses_api_and_writes_cache(self):
@@ -103,6 +131,19 @@ class SearchSelectTests(unittest.TestCase):
         state = apply_search_key(self.state, "type:j")
         state = apply_search_key(state, "all")
         self.assertEqual(state.selected, [True, False, True])
+
+    def test_enter_confirms_highlighted_when_none_selected(self):
+        state = apply_search_key(self.state, "down")
+        state = apply_search_key(state, "enter")
+        self.assertTrue(state.done)
+        self.assertEqual(state.indexes(), [1])
+
+    def test_enter_keeps_already_selected_countries(self):
+        state = apply_search_key(self.state, "space")
+        state = apply_search_key(state, "down")
+        state = apply_search_key(state, "enter")
+        self.assertTrue(state.done)
+        self.assertEqual(state.indexes(), [0])
 
 
 if __name__ == "__main__":
