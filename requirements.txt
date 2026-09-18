@@ -1,0 +1,6 @@
+python-jobspy==1.1.80
+pandas
+requests
+beautifulsoup4
+undetected-chromedriver
+setuptools
