@@ -6,7 +6,7 @@ from pathlib import Path
 
 from catalog import SOURCE_ORDER, SOURCES, get_location, normalize_location_id, source_choice_label
 from countries import CountryFetchError, load_countries
-from picker import color_error, color_hint, color_question, confirmed_line, pick_many, pick_one, pick_searchable
+from picker import color_error, color_hint, color_question, color_selected, confirmed_line, pick_many, pick_one, pick_searchable
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = ROOT / "config.json"
@@ -136,18 +136,30 @@ def confirm_choices_question(kind: str, names: list, limit: int = 8) -> str:
     return f"Confirm these {kind}: {', '.join(labels)}{extra}?"
 
 
+def confirm_picker_title(kind: str) -> str:
+    return f"Are these {kind} correct?"
+
+
+def short_choice_name(name: str) -> str:
+    return str(name).split("  (")[0]
+
+
 def confirm_choices(kind: str, names: list, interactive: bool) -> bool:
-    question = confirm_choices_question(kind, names)
+    print()
+    print(color_question(confirm_choices_question(kind, names)))
+    for name in names:
+        print(color_selected(f"  • {name}"))
+    title = confirm_picker_title(kind)
     if interactive:
-        return pick_one(question, ["Yes, continue", "No, choose again"], default=0) == 0
-    answer = _ask(color_question(question) + " [Y/n]\n> ").lower()
+        return pick_one(title, ["Yes, continue", "No, choose again"], default=0) == 0
+    answer = _ask(color_question(title) + " [Y/n]\n> ").lower()
     return answer in ("", "y", "yes")
 
 
 def _pick_until_confirmed(kind: str, items: list, pick, interactive: bool) -> list:
     while True:
         indexes = pick()
-        names = [items[i] for i in indexes]
+        names = [short_choice_name(items[i]) for i in indexes]
         if confirm_choices(kind, names, interactive):
             return indexes
 

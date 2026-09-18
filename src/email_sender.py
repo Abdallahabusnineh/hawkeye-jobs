@@ -230,4 +230,4 @@ def send_email(jobs: list):
         print(f"[email] Sent successfully to {RECIPIENT}")
     except Exception as e:
         print(f"[email] Failed to send: {e}")
-        raise
+        print("[email] Jobs were still printed above. Check GMAIL_USER / GMAIL_PASS in .env.")

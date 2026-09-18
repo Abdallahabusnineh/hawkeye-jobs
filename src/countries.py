@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 API_URLS = [
@@ -19,6 +20,12 @@ REMOTE = {"id": "remote", "label": "Remote"}
 
 class CountryFetchError(RuntimeError):
     """Raised when the live country API fails and there is no cached list."""
+
+
+def pretty_country_name(name: str) -> str:
+    """Drop UN-style suffixes like '(the)' from official country names."""
+    text = str(name or "").strip()
+    return re.sub(r"\s*\(the\)\s*$", "", text, flags=re.IGNORECASE).strip()
 
 
 def _rows_from_payload(payload) -> list:
@@ -61,7 +68,7 @@ def _country_from_row(row) -> dict | None:
     ).strip().lower()
     if not name or len(cca2) != 2:
         return None
-    return {"id": cca2, "label": name}
+    return {"id": cca2, "label": pretty_country_name(name)}
 
 
 def parse_countries(payload) -> list:

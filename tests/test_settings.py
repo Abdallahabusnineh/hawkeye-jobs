@@ -136,5 +136,12 @@ class ConfirmChoicesTests(unittest.TestCase):
         self.assertTrue(question.endswith("?"))
 
 
+    def test_confirm_picker_title_stays_short(self):
+        self.assertEqual(
+            settings.confirm_picker_title("countries"),
+            "Are these countries correct?",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

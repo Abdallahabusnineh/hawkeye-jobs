@@ -97,6 +97,42 @@ class ExpandSearchesTests(unittest.TestCase):
             [{"term": "Flutter Developer", "location": "Japan"}],
         )
 
+    def test_indeed_skips_jordan(self):
+        searches = expand_searches(
+            ["Flutter Developer"],
+            ["jordan"],
+            ["indeed"],
+        )
+        self.assertEqual(searches["indeed"], [])
+
+    def test_indeed_accepts_egypt(self):
+        searches = expand_searches(
+            ["Flutter Developer"],
+            ["eg"],
+            ["indeed"],
+            country_labels={"eg": "Egypt"},
+        )
+        self.assertEqual(
+            searches["indeed"],
+            [{
+                "term": "Flutter Developer",
+                "location": "Egypt",
+                "country": "egypt",
+            }],
+        )
+
+    def test_uae_drops_the_suffix(self):
+        searches = expand_searches(
+            ["Flutter Developer"],
+            ["ae"],
+            ["linkedin"],
+            country_labels={"ae": "United Arab Emirates (the)"},
+        )
+        self.assertEqual(
+            searches["linkedin"],
+            [{"term": "Flutter Developer", "location": "United Arab Emirates"}],
+        )
+
     def test_site_menu_mentions_coverage(self):
         self.assertIn("Gulf only", source_choice_label("naukrigulf"))
         self.assertIn("LinkedIn jobs", source_choice_label("linkedin"))

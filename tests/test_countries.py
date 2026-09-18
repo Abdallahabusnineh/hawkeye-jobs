@@ -43,6 +43,15 @@ class ParseCountriesTests(unittest.TestCase):
             [("de", "Germany"), ("jo", "Jordan")],
         )
 
+    def test_strips_un_the_suffix(self):
+        payload = {
+            "data": {
+                "AE": {"country": "United Arab Emirates (the)"},
+            }
+        }
+        countries = parse_countries(payload)
+        self.assertEqual(countries[0]["label"], "United Arab Emirates")
+
     def test_parses_countriesnow_payload(self):
         payload = {
             "error": False,

@@ -1,5 +1,7 @@
 """Maps user-facing locations/sources to per-site search queries."""
 
+from countries import pretty_country_name
+
 LEGACY_IDS = {
     "jordan": "jo",
     "uae": "ae",
@@ -19,7 +21,7 @@ LEGACY_IDS = {
 OVERRIDES = {
     "jo": {
         "label": "Jordan",
-        "indeed": ("Jordan", "jordan"),
+        "indeed": None,
         "bayt": "jordan",
     },
     "ae": {
@@ -104,7 +106,7 @@ SOURCES = {
 
 SOURCE_HINTS = {
     "linkedin": "worldwide",
-    "indeed": "worldwide, except Remote",
+    "indeed": "not Jordan or Remote",
     "bayt": "Jordan + Gulf only",
     "naukrigulf": "Gulf only",
     "google_jobs": "worldwide",
@@ -117,6 +119,32 @@ SOURCE_ORDER = [
 
 BROWSER_SOURCES = {"bayt", "naukrigulf", "google_jobs", "linkedin_posts"}
 
+# JobSpy Indeed country_indeed values. Jordan is not in this list.
+INDEED_COUNTRIES = frozenset({
+    "argentina", "australia", "austria", "bahrain", "belgium", "bulgaria",
+    "brazil", "canada", "chile", "china", "colombia", "costa rica", "croatia",
+    "cyprus", "czech republic", "czechia", "denmark", "ecuador", "egypt",
+    "estonia", "finland", "france", "germany", "greece", "hong kong", "hungary",
+    "india", "indonesia", "ireland", "israel", "italy", "japan", "kuwait",
+    "latvia", "lithuania", "luxembourg", "malaysia", "malta", "mexico",
+    "morocco", "netherlands", "new zealand", "nigeria", "norway", "oman",
+    "pakistan", "panama", "peru", "philippines", "poland", "portugal", "qatar",
+    "romania", "saudi arabia", "singapore", "slovakia", "slovenia",
+    "south africa", "south korea", "spain", "sweden", "switzerland", "taiwan",
+    "thailand", "türkiye", "turkey", "ukraine", "united arab emirates", "uk",
+    "united kingdom", "usa", "us", "united states", "uruguay", "venezuela",
+    "vietnam", "usa/ca", "worldwide",
+})
+
+INDEED_ALIASES = {
+    "united states": "usa",
+    "united states of america": "usa",
+    "united kingdom": "uk",
+    "great britain": "uk",
+    "uae": "united arab emirates",
+    "türkiye": "turkey",
+}
+
 
 def source_choice_label(source_id: str) -> str:
     label = SOURCES[source_id]
@@ -128,6 +156,16 @@ def normalize_location_id(loc_id: str) -> str:
     return LEGACY_IDS.get((loc_id or "").strip().lower(), (loc_id or "").strip().lower())
 
 
+def _indeed_query(name: str, override):
+    if "indeed" in override:
+        return override["indeed"]
+    cleaned = pretty_country_name(name)
+    country = INDEED_ALIASES.get(cleaned.lower(), cleaned.lower())
+    if country not in INDEED_COUNTRIES:
+        return None
+    return (cleaned, country)
+
+
 def get_location(loc_id: str, label: str | None = None) -> dict | None:
     """Build per-site location fields. Unknown countries still work on LinkedIn/Google/Indeed."""
     loc_id = normalize_location_id(loc_id)
@@ -136,11 +174,11 @@ def get_location(loc_id: str, label: str | None = None) -> dict | None:
     if loc_id == "remote":
         return dict(REMOTE_SPEC)
     over = OVERRIDES.get(loc_id, {})
-    name = label or over.get("label") or loc_id.upper()
+    name = over.get("label") or pretty_country_name(label or "") or loc_id.upper()
     return {
         "label": name,
         "linkedin": name,
-        "indeed": over.get("indeed") or (name, name.lower()),
+        "indeed": _indeed_query(name, over),
         "bayt": over.get("bayt"),
         "naukrigulf": over.get("naukrigulf"),
         "google": over.get("google", name),
