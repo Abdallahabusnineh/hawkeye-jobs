@@ -1,6 +1,6 @@
 # hawkeye-jobs — Architecture & Code Reference
 
-Automated Flutter job hunter. Runs every 2 hours via macOS LaunchAgent, scraping LinkedIn, Indeed, Bayt.com, NaukriGulf, and Google Jobs, then emailing new listings.
+Terminal job hunter. The user picks keywords, locations, and sources; it scrapes LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts, then prints and emails new listings.
 
 ---
 
@@ -9,7 +9,10 @@ Automated Flutter job hunter. Runs every 2 hours via macOS LaunchAgent, scraping
 ```
 hawkeye-jobs/
 ├── src/
-│   ├── main.py          # Orchestrator — runs full pipeline
+│   ├── main.py          # Prompts, then runs the pipeline
+│   ├── settings.py      # Terminal prompts + config.json
+│   ├── catalog.py       # Location/source → per-site queries
+│   ├── filters.py       # Title / hiring-post matching
 │   ├── scraper.py       # LinkedIn + Indeed via JobSpy
 │   ├── bayt.py          # Bayt.com via Selenium
 │   ├── naukrigulf.py    # NaukriGulf via Selenium
@@ -19,31 +22,32 @@ hawkeye-jobs/
 │   ├── tracker.py       # Cross-run deduplication (seen_jobs.json)
 │   ├── utils.py         # Shared: clean_url(), is_within_48h()
 │   └── email_sender.py  # HTML email builder + Gmail SMTP sender
-├── .env.example         # Credential template (copy to .env)
+├── config.example.json  # Sample search settings
+├── .env.example         # Credential template
 ├── run.sh               # Loads .env and runs the pipeline
 ├── requirements.txt
 └── CLAUDE.md
 ```
 
-`seen_jobs.json` and `hawkeye.log` are created at runtime and gitignored.
+`config.json`, `seen_jobs.json`, and `hawkeye.log` are created at runtime and gitignored.
 
 ---
 
 ## Pipeline Flow (`src/main.py`)
 
 ```
+collect_settings()              → reuse config.json or prompt in the terminal
+expand_searches()               → per-site queries from keywords × locations
+    ↓
 scrape_all()                    → LinkedIn + Indeed (JobSpy, no browser)
     ↓
-create_driver()                 → One Chrome instance shared across all Selenium scrapers
-scrape_bayt(seen_urls, driver)
-scrape_naukrigulf(seen_urls, driver)
-scrape_google_jobs(seen_urls, driver)
-scrape_linkedin_posts(seen_urls, driver)   → LinkedIn hiring posts (content search, needs logged-in profile)
+create_driver()                 → Chrome only if a browser source is selected
+scrape_bayt / naukrigulf / google_jobs / linkedin_posts
 driver.quit()
     ↓
-filter_new_jobs(all_jobs)       → Remove already-emailed jobs (seen_jobs.json)
+filter_new_jobs(all_jobs)       → Remove already-seen jobs (seen_jobs.json)
     ↓
-send_email(new_jobs)            → Gmail SMTP SSL, HTML email
+print jobs + send_email()       → Terminal list + Gmail HTML digest
 ```
 
 `seen_urls` is a Python `set` built from all JobSpy results before Selenium scrapers run. Each Selenium scraper receives and mutates the same set — preventing cross-source duplicates within a single run (e.g. the same job appearing on both Bayt and Google Jobs).
@@ -52,57 +56,54 @@ send_email(new_jobs)            → Gmail SMTP SSL, HTML email
 
 ## Source Files
 
-### `src/scraper.py` — LinkedIn + Indeed
+### `src/settings.py` — Terminal prompts + saved config
 
-Uses the `python-jobspy` library to scrape LinkedIn and Indeed. No browser required.
+`collect_settings()` loads `config.json` if present and asks `Use these? [Y/n]`. `Y` (or Enter) reuses it. `n` prompts for keywords, numbered locations, and numbered sources, then writes `config.json`.
 
-**Key constants:**
+`config.json` shape:
 
-```python
-LINKEDIN_SEARCHES  # list of {term, location} dicts
-INDEED_SEARCHES    # list of {term, location, country} dicts
-GOOGLE_SEARCHES    # list of {term, location} dicts (passed to JobSpy — currently unused, JobSpy Google is broken)
-
-_HARD_EXCLUDE = [
-    "qa engineer", "qa lead", "qa manager", "quality assurance",
-    "test engineer", "tester", "automation tester", "automation engineer", "sdet",
-    "selenium", "appium", "cypress",
-    "ai engineer", "ai developer", "ml engineer", "machine learning",
-    "data scientist", "data engineer", "data analyst", "data architect",
-    "devops", "site reliability", "sre ",
-    "backend developer", "backend engineer",
-    "react developer", "react native developer", "angular developer", "vue developer",
-    "python developer", "java developer", "node developer", "nodejs",
-    "php developer", "ruby developer", ".net developer", "c# developer",
-    "ios developer", "android developer",
-    "ui/ux", "ux designer", "ui designer", "graphic designer", "product designer",
-    "project manager", "product manager", "scrum master", "agile coach",
-    "business analyst", "recruiter", "hr ",
-    "embedded", "firmware", "hardware",
-]
-
-_REQUIRED = ["flutter", "dart", "cross platform", "cross-platform"]
+```json
+{
+  "keywords": ["Python Developer"],
+  "locations": ["jordan", "uae"],
+  "sources": ["linkedin", "indeed"]
+}
 ```
 
-**`_is_flutter_job(title: str) -> bool`**
+### `src/catalog.py` — Expand user choices into site queries
 
-Filters job titles. Logic:
-1. If any `_HARD_EXCLUDE` substring is found in the lowercased title → reject
-2. If any `_REQUIRED` keyword is found → accept
-3. If `\bmobile\b` matches (word boundary regex) → accept — uses `re.search` not `in` to prevent "automobile" from matching
-4. Otherwise → reject
+`LOCATIONS` maps a stable id (`jordan`, `uae`, `remote`, …) to per-site strings/slugs. Sources that do not support a country (Bayt/NaukriGulf outside the Gulf, Indeed for Remote) are skipped.
 
-**`_parse_jobs(jobs, seen_urls, location) -> list`**
+`expand_searches(keywords, location_ids, source_ids)` returns:
 
-Converts a JobSpy DataFrame to the standard job dict format:
-- Calls `clean_url()` to strip UTM params before dedup check
-- Calls `_is_flutter_job()` for title filtering
-- Calls `is_within_48h()` for date filtering
-- Returns list of dicts with keys: `title`, `url`, `description`, `source`, `keyword`, `location`, `published`, `date_found`
+```python
+{
+  "linkedin": [{"term", "location"}, ...],
+  "indeed": [{"term", "location", "country"}, ...],
+  "bayt": [(term_slug, country_slug), ...],
+  "naukrigulf": [(keyword, location_slug), ...],
+  "google_jobs": [(term, location), ...],
+  "linkedin_posts": ["hiring {keyword}", "looking for {keyword}", ...],
+}
+```
 
-**`scrape_all() -> list`**
+### `src/filters.py` — Keyword matching
 
-Iterates `LINKEDIN_SEARCHES` and `INDEED_SEARCHES`, calls `scrape_jobs()` with `hours_old=48`, returns combined list. Catches per-search exceptions so one failure doesn't abort the whole run.
+`keyword_stems()` drops generic role words (`developer`, `engineer`, …). `is_relevant_job(title, keywords)` keeps a title if a stem matches as a whole word (`mobile` will not match `automobile`). `is_hiring_post(text, keywords)` additionally requires a hiring signal.
+
+### `src/scraper.py` — LinkedIn + Indeed
+
+Uses the `python-jobspy` library. No browser required. Search lists are passed in from `expand_searches()`, not hardcoded.
+
+**`_parse_jobs(jobs, seen_urls, location, keywords) -> list`**
+
+- `clean_url()` before dedup
+- `is_relevant_job()` for title filtering
+- `is_within_48h()` for date filtering
+
+**`scrape_all(linkedin_searches, indeed_searches, keywords) -> list`**
+
+Calls `scrape_jobs()` with `hours_old=48`. One failed search does not abort the run.
 
 ---
 
@@ -146,7 +147,7 @@ Example: `https://www.bayt.com/en/uae/jobs/flutter-developer-jobs/`
 
 **`_ensure_window(driver)`** — closes any extra browser tabs opened during navigation, switches back to tab 0. Called before and after each `driver.get()`.
 
-**`_parse_bayt_page(html, seen_urls, location)`** — parses raw HTML with BeautifulSoup. Applies `_is_flutter_job()` and `is_within_48h()`.
+**`_parse_bayt_page(html, seen_urls, location, keywords)`** — parses raw HTML with BeautifulSoup. Applies `is_relevant_job()` and `is_within_48h()`.
 
 ---
 
@@ -236,7 +237,7 @@ https://www.linkedin.com/search/results/content/?keywords=<enc>&datePosted=%22pa
 
 **Search phrases (`LINKEDIN_POST_SEARCHES`):** `"were hiring flutter"`, `hiring flutter developer`, `flutter developer wanted`, `looking for flutter developer`.
 
-**Relevance filter (`_is_hiring_flutter_post`):** does **not** use `_is_flutter_job()` (post text is prose, not a title). A post is kept only if its text mentions `flutter` **and** contains a hiring signal (`hiring`, `looking for`, `wanted`, `vacancy`, `open position`, …). Recency is enforced by the URL filter plus `_post_within_48h()` for LinkedIn's compact times (`5h`, `1d`, `2w`).
+**Relevance filter (`is_hiring_post`):** does **not** use `is_relevant_job()` (post text is prose, not a title). A post is kept only if its text mentions a user keyword stem **and** contains a hiring signal (`hiring`, `looking for`, `wanted`, `vacancy`, `open position`, …). Recency is enforced by the URL filter plus `_post_within_48h()` for LinkedIn's compact times (`5h`, `1d`, `2w`).
 
 **HTML selectors (as of 2026 — LinkedIn changes its DOM often):**
 | Data | Selector |
@@ -366,14 +367,16 @@ All scrapers produce job dicts with this shape:
 
 ## Search Coverage
 
-| Source | Regions |
+Locations are chosen in the terminal. Per-source support is defined in `src/catalog.py`:
+
+| Source | Supported locations |
 |---|---|
 | LinkedIn | Jordan, UAE, Saudi, Kuwait, Qatar, Oman, Bahrain, UK, Germany, Netherlands, France, USA, Canada, Remote |
-| Indeed | UAE, Saudi, Kuwait, Qatar, Oman, Bahrain, UK, Germany, Netherlands, USA, Canada |
+| Indeed | Jordan, UAE, Saudi, Kuwait, Qatar, Oman, Bahrain, UK, Germany, Netherlands, France, USA, Canada |
 | Bayt | Jordan, UAE, Saudi, Kuwait, Qatar, Oman, Bahrain |
-| NaukriGulf | Gulf-wide, UAE, Saudi, Kuwait, Qatar, Bahrain |
-| Google Jobs | UAE, Saudi, Kuwait, Qatar, Jordan, UK, Germany, Netherlands, USA, Canada, Remote/Worldwide |
-| LinkedIn Posts | Global (content search — hiring posts, not location-scoped) |
+| NaukriGulf | UAE, Saudi, Kuwait, Qatar, Bahrain |
+| Google Jobs | All of the above including Remote |
+| LinkedIn Posts | Global (content search — not location-scoped) |
 
 ---
 
@@ -384,18 +387,11 @@ If `undetected-chromedriver` fails with version mismatch:
 1. Check Chrome version: `google-chrome --version` (or check in Chrome → About)
 2. Update `version_main=149` in `src/browser.py` to match
 
-### Add a new search term or location
-- **LinkedIn / Indeed:** add a dict to `LINKEDIN_SEARCHES` or `INDEED_SEARCHES` in `src/scraper.py`
-- **Bayt:** add a `(term_slug, country_slug)` tuple to `BAYT_SEARCHES` in `src/bayt.py`
-- **NaukriGulf:** add a `(keyword, location_slug, "")` tuple to `NAUKRIGULF_SEARCHES` in `src/naukrigulf.py`
-- **Google Jobs:** add a `(term, location)` tuple to `GOOGLE_SEARCHES` in `src/google_jobs.py`
-- **LinkedIn Posts:** add a phrase string to `LINKEDIN_POST_SEARCHES` in `src/linkedin_posts.py` (tune `_HIRING_SIGNALS` to widen/narrow what counts as a hiring post)
+### Add a country or source mapping
+Edit `LOCATIONS` / `SOURCES` in `src/catalog.py`.
 
-### Add/remove excluded job titles
-Edit `_HARD_EXCLUDE` in `src/scraper.py`. The same list is used for all sources because `bayt.py`, `naukrigulf.py`, and `google_jobs.py` all import `_is_flutter_job` from `scraper.py`.
-
-### Add a new required keyword
-Edit `_REQUIRED` in `src/scraper.py`. Currently: `["flutter", "dart", "cross platform", "cross-platform"]`.
+### Tune title matching
+Edit `keyword_stems()` stopwords or `is_hiring_post()` signals in `src/filters.py`.
 
 ### Fix broken selectors
 Bayt and NaukriGulf change their HTML periodically. If a scraper returns 0 jobs:
@@ -405,7 +401,7 @@ Bayt and NaukriGulf change their HTML periodically. If a scraper returns 0 jobs:
 
 ### Google Jobs returns 0
 If `.PUpOsf` or `[role="list"].EDblX` selectors stop working:
-1. Open `https://www.google.com/search?q=Flutter+Developer+jobs+UAE&ibp=htl;jobs&hl=en` in Chrome
+1. Open a Google Jobs URL for any keyword in Chrome
 2. Inspect the job title elements and the apply-link list containers
 3. Update the selectors in `src/google_jobs.py` → `_parse_google_page()`
 
@@ -430,14 +426,7 @@ Install: `pip install -r requirements.txt`
 
 ```bash
 cp .env.example .env   # fill in GMAIL_USER / GMAIL_PASS / RECIPIENT_EMAIL
-bash run.sh
+bash run.sh            # prompts for keywords, locations, sources
 ```
 
-Logs: `hawkeye.log` in project root.
-
-macOS LaunchAgent (runs every 2 hours):
-```bash
-launchctl list | grep hawkeye          # check status
-launchctl unload ~/Library/LaunchAgents/com.hawkeye-jobs.plist
-launchctl load  ~/Library/LaunchAgents/com.hawkeye-jobs.plist
-```
+To change saved searches: answer `n` at `Use these? [Y/n]`, or `rm -f config.json`.

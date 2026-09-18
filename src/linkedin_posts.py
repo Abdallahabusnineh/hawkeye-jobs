@@ -15,15 +15,15 @@ Authentication (REQUIRED):
     LinkedIn shows an auth wall to anonymous visitors on content search. This
     scraper reuses a persistent Chrome profile (browser.create_driver's
     user_data_dir). Log into LinkedIn ONCE by hand in that profile; the session
-    cookie is then reused on every scheduled run. If the session is missing or
+    cookie is then reused on later runs. If the session is missing or
     expired, the scraper detects the login/authwall redirect, prints a clear
     instruction, and returns [] without crashing the rest of the pipeline.
 
 URL pattern:
     https://www.linkedin.com/search/results/content/?keywords=<enc>
         &datePosted=%22past-24h%22&sortBy=%22date_posted%22
-    - datePosted=past-24h keeps posts fresh (the job runs every 2h; cross-run
-      dedup in tracker.py prevents re-emailing the same post).
+    - datePosted=past-24h keeps posts fresh; cross-run
+      dedup in tracker.py prevents re-emailing the same post.
     - sortBy=date_posted surfaces the newest posts first.
 
 HTML selectors (last verified 2026 — LinkedIn obfuscates/changes its DOM often):
@@ -36,11 +36,10 @@ HTML selectors (last verified 2026 — LinkedIn obfuscates/changes its DOM often
     ⚠ If this returns 0 posts while you ARE logged in, open the search URL in the
     profile browser, inspect a post card, and update the selectors below.
 
-Relevance filter (_is_hiring_flutter_post):
-    Unlike the other sources we do NOT use _is_flutter_job() here — post text is
-    freeform prose, not a job title. Instead a post is kept only if its text
-    mentions "flutter" AND contains a hiring signal ("hiring", "wanted",
-    "looking for", "vacancy", "open position", ...). This keeps precision high.
+Relevance filter (is_hiring_post):
+    Unlike the other sources we do NOT use is_relevant_job() here — post text is
+    freeform prose, not a job title. A post is kept only if it mentions a user
+    keyword stem AND contains a hiring signal.
 
 Job dict schema (same shape as every other scraper):
     title       -> the post's opening line (the hook), truncated
@@ -56,22 +55,7 @@ import time
 from datetime import datetime
 from urllib.parse import quote
 from bs4 import BeautifulSoup
-
-# Keyword phrases fed into the content search (chosen with the user).
-LINKEDIN_POST_SEARCHES = [
-    '"were hiring flutter"',
-    "hiring flutter developer",
-    "flutter developer wanted",
-    "looking for flutter developer",
-]
-
-# A post must contain "flutter" AND at least one of these hiring signals.
-_HIRING_SIGNALS = [
-    "hiring", "we're hiring", "were hiring", "we are hiring",
-    "looking for", "wanted", "join our team", "join us",
-    "open position", "open role", "opening", "vacancy", "vacancies",
-    "now hiring", "apply now", "send your cv", "send your resume", "dm me",
-]
+from filters import is_hiring_post
 
 _MAX_SCROLLS = 4          # how many times to scroll to lazy-load more posts
 _SCROLL_PAUSE = 2.0       # seconds to wait after each scroll
@@ -102,14 +86,6 @@ def _post_within_48h(rel: str) -> bool:
     return False  # w, mo, yr, y
 
 
-def _is_hiring_flutter_post(text: str) -> bool:
-    """Keep a post only if it mentions Flutter AND reads like a hiring post."""
-    t = text.lower()
-    if "flutter" not in t:
-        return False
-    return any(sig in t for sig in _HIRING_SIGNALS)
-
-
 def _build_url(keyword: str) -> str:
     """Build a LinkedIn content-search URL for the given keyword phrase."""
     kw = quote(keyword)
@@ -128,19 +104,8 @@ def _is_logged_out(driver) -> bool:
     return any(x in cur for x in ("/login", "/authwall", "/checkpoint", "linkedin.com/uas"))
 
 
-def _parse_posts_page(html: str, seen_urls: set, keyword: str) -> list:
-    """
-    Parse a LinkedIn content-search results page into job dicts.
-
-    Args:
-        html      : driver.page_source after the page has loaded + scrolled
-        seen_urls : set of URLs already found this run (mutated in-place)
-        keyword   : the search phrase (stored on each result for context)
-
-    Returns:
-        list of job dicts (title, url, description, source, keyword, location,
-        published, date_found)
-    """
+def _parse_posts_page(html: str, seen_urls: set, keyword: str, keywords: list) -> list:
+    """Parse a LinkedIn content-search results page into job dicts."""
     soup = BeautifulSoup(html, "html.parser")
     result = []
 
@@ -152,7 +117,6 @@ def _parse_posts_page(html: str, seen_urls: set, keyword: str) -> list:
         try:
             urn = card.get("data-urn", "")
             if not urn or "activity" not in urn:
-                # fall back to any nested element carrying the activity urn
                 nested = card.select_one('[data-urn*="urn:li:activity"]')
                 urn = nested.get("data-urn", "") if nested else ""
             if not urn:
@@ -167,41 +131,39 @@ def _parse_posts_page(html: str, seen_urls: set, keyword: str) -> list:
                 ".feed-shared-inline-show-more-text"
             )
             post_text = text_tag.get_text(" ", strip=True) if text_tag else ""
-            if not _is_hiring_flutter_post(post_text):
+            if not is_hiring_post(post_text, keywords):
                 continue
 
             author_tag = card.select_one(
                 ".update-components-actor__title, .update-components-actor__name"
             )
             author = author_tag.get_text(" ", strip=True) if author_tag else "LinkedIn member"
-            # LinkedIn often duplicates the name for a11y ("Jane Doe Jane Doe") — dedupe halves.
             half = len(author) // 2
             if half and author[:half].strip() == author[half:].strip():
                 author = author[:half].strip()
 
             time_tag = card.select_one(".update-components-actor__sub-description")
             rel = time_tag.get_text(" ", strip=True) if time_tag else ""
-            rel = rel.split("•")[0].strip() if rel else ""  # "5h • Edited" -> "5h"
+            rel = rel.split("•")[0].strip() if rel else ""
             if not _post_within_48h(rel):
                 continue
 
             seen_urls.add(url)
 
-            # Title = the opening hook of the post, trimmed to one clean line.
             hook = " ".join(post_text.split())
             title = (hook[:90] + "…") if len(hook) > 90 else hook
             if not title:
-                title = f"{author} is hiring (Flutter)"
+                title = f"{author} is hiring"
 
             result.append({
-                "title":       title,
-                "url":         url,
+                "title": title,
+                "url": url,
                 "description": f"{author} · LinkedIn hiring post",
-                "source":      "LinkedIn Post",
-                "keyword":     keyword,
-                "location":    "",
-                "published":   rel,
-                "date_found":  datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+                "source": "LinkedIn Post",
+                "keyword": keyword,
+                "location": "",
+                "published": rel,
+                "date_found": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
             })
         except Exception:
             continue
@@ -209,35 +171,18 @@ def _parse_posts_page(html: str, seen_urls: set, keyword: str) -> list:
     return result
 
 
-def scrape_linkedin_posts(seen_urls: set, driver) -> list:
-    """
-    Scrape all LINKEDIN_POST_SEARCHES and return a combined list of job dicts.
-
-    Requires the driver to have been created with a persistent, LinkedIn-logged-in
-    profile (browser.create_driver(user_data_dir=...)). If not logged in, prints
-    a one-time instruction and returns [] — it never aborts the pipeline.
-
-    For each search phrase:
-        1. Navigate to the content-search URL.
-        2. Bail early (with guidance) if redirected to a login/authwall page.
-        3. Scroll a few times to lazy-load posts.
-        4. Parse the page for hiring-Flutter posts.
-
-    Args:
-        seen_urls : set of URLs already found in this run (shared with other scrapers)
-        driver    : Selenium WebDriver from browser.create_driver(user_data_dir=...)
-
-    Returns:
-        list of job dicts
-    """
+def scrape_linkedin_posts(seen_urls: set, driver, searches=None, keywords=None) -> list:
+    """Scrape LinkedIn hiring posts for the given phrases. Never aborts the pipeline."""
+    searches = searches or []
+    keywords = keywords or []
     all_jobs = []
     print("\n[LinkedIn Posts]")
 
-    for i, keyword in enumerate(LINKEDIN_POST_SEARCHES):
+    for keyword in searches:
         display = f"  '{keyword}'"
         try:
             driver.get(_build_url(keyword))
-            time.sleep(5)  # initial render
+            time.sleep(5)
 
             if _is_logged_out(driver):
                 profile = os.environ.get("LINKEDIN_PROFILE_DIR", "~/.hawkeye-linkedin-profile")
@@ -246,15 +191,15 @@ def scrape_linkedin_posts(seen_urls: set, driver) -> list:
                 print("    (open Chrome with that --user-data-dir, sign in to LinkedIn, close it)")
                 return all_jobs
 
-            # Lazy-load more posts by scrolling.
             for _ in range(_MAX_SCROLLS):
                 driver.execute_script("window.scrollBy(0, document.body.scrollHeight);")
                 time.sleep(_SCROLL_PAUSE)
 
-            jobs = _parse_posts_page(driver.page_source, seen_urls, keyword)
+            jobs = _parse_posts_page(driver.page_source, seen_urls, keyword, keywords)
             all_jobs.extend(jobs)
             print(f"{display}: {len(jobs)} posts")
         except Exception as e:
             print(f"{display}: Error - {e}"[:120])
 
     return all_jobs
+

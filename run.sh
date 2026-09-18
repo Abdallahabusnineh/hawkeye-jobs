@@ -18,4 +18,4 @@ if [ ! -x "$PYTHON" ]; then
   exit 1
 fi
 
-"$PYTHON" src/main.py >> "$DIR/hawkeye.log" 2>&1
+"$PYTHON" src/main.py

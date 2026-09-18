@@ -28,7 +28,7 @@ Window management:
     every driver.get() to prevent "no such window" Selenium errors.
 
 Filtering:
-    - _is_flutter_job() from scraper.py (shared title filter)
+    - is_relevant_job() from filters.py (user keywords)
     - is_within_48h() from utils.py (date filter)
     - seen_urls set (cross-source URL deduplication within the run)
 """
@@ -36,22 +36,8 @@ Filtering:
 import time
 from datetime import datetime
 from bs4 import BeautifulSoup
-from scraper import _is_flutter_job
+from filters import is_relevant_job
 from utils import is_within_48h
-
-NAUKRIGULF_SEARCHES = [
-    ("flutter developer",  "gulf-region",       ""),
-    ("flutter developer",  "uae",               "1"),
-    ("flutter developer",  "saudi-arabia",      "2"),
-    ("flutter developer",  "kuwait",            "3"),
-    ("flutter developer",  "qatar",             "4"),
-    ("flutter developer",  "bahrain",           "5"),
-    ("flutter engineer",   "gulf-region",       ""),
-    ("flutter engineer",   "uae",               "1"),
-    ("mobile developer",   "uae",               "1"),
-    ("mobile developer",   "saudi-arabia",      "2"),
-    ("dart developer",     "gulf-region",       ""),
-]
 
 BASE = "https://www.naukrigulf.com"
 
@@ -75,7 +61,7 @@ def _build_url(keyword: str, location_slug: str) -> str:
     return f"{BASE}/{kw}-jobs"
 
 
-def _parse_naukrigulf_page(html: str, seen_urls: set, location: str) -> list:
+def _parse_naukrigulf_page(html: str, seen_urls: set, location: str, keywords: list) -> list:
     """
     Parse a NaukriGulf search results page and return matching job dicts.
 
@@ -99,7 +85,7 @@ def _parse_naukrigulf_page(html: str, seen_urls: set, location: str) -> list:
 
             title_tag = link_tag.select_one(".designation-title")
             title = title_tag.get_text(strip=True) if title_tag else link_tag.get_text(strip=True)
-            if not _is_flutter_job(title):
+            if not is_relevant_job(title, keywords):
                 continue
 
             href = link_tag.get("href", "")
@@ -158,28 +144,14 @@ def _ensure_main_window(driver):
         pass
 
 
-def scrape_naukrigulf(seen_urls: set, driver) -> list:
-    """
-    Scrape all NAUKRIGULF_SEARCHES and return a combined list of job dicts.
-
-    For each search:
-        1. Calls _ensure_main_window() to reset tab state.
-        2. Builds the URL via _build_url() and navigates to it.
-        3. Waits 6 seconds for Angular to render the job cards.
-        4. Calls _ensure_main_window() again in case new tabs opened.
-        5. Passes driver.page_source to _parse_naukrigulf_page() for extraction.
-
-    Args:
-        seen_urls : set of URLs already found in this run (shared with other scrapers)
-        driver    : Selenium WebDriver instance from browser.create_driver()
-
-    Returns:
-        list of job dicts
-    """
+def scrape_naukrigulf(seen_urls: set, driver, searches=None, keywords=None) -> list:
+    """Scrape the given NaukriGulf searches and return matching job dicts."""
+    searches = searches or []
+    keywords = keywords or []
     all_jobs = []
     print("\n[NaukriGulf]")
 
-    for keyword, location_slug, _ in NAUKRIGULF_SEARCHES:
+    for keyword, location_slug in searches:
         url = _build_url(keyword, location_slug)
         display = f"  '{keyword}' in {location_slug}"
         try:
@@ -188,7 +160,7 @@ def scrape_naukrigulf(seen_urls: set, driver) -> list:
             time.sleep(6)
             _ensure_main_window(driver)
 
-            jobs = _parse_naukrigulf_page(driver.page_source, seen_urls, location_slug)
+            jobs = _parse_naukrigulf_page(driver.page_source, seen_urls, location_slug, keywords)
             all_jobs.extend(jobs)
             print(f"{display}: {len(jobs)} jobs")
         except Exception as e:

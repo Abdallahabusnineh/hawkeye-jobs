@@ -1,7 +1,7 @@
 """
 email_sender.py — HTML email builder and Gmail sender
 =======================================================
-Builds a styled HTML digest of new Flutter job listings and sends it via Gmail SMTP SSL.
+Builds a styled HTML digest of new job listings and sends it via Gmail SMTP SSL.
 
 Credentials (from environment variables):
     GMAIL_USER       — sender Gmail address (e.g. you@gmail.com)
@@ -12,7 +12,7 @@ Credentials (from environment variables):
 Email structure:
     ┌─────────────────────────────────┐
     │  🦅 hawkeye-jobs  (dark header) │
-    │  N new Flutter jobs • timestamp │
+    │  N new jobs • timestamp         │
     ├─────────────────────────────────┤
     │  Sources: LinkedIn(3) Bayt(2)…  │  ← coloured pills, one per source
     ├─────────────────────────────────┤
@@ -38,9 +38,16 @@ from email.mime.text import MIMEText
 from datetime import datetime
 
 
-GMAIL_USER = os.environ.get("GMAIL_USER", "")
-GMAIL_PASS = os.environ.get("GMAIL_PASS", "")
-RECIPIENT  = os.environ.get("RECIPIENT_EMAIL", GMAIL_USER)
+GMAIL_USER = ""
+GMAIL_PASS = ""
+RECIPIENT = ""
+
+
+def _load_credentials():
+    global GMAIL_USER, GMAIL_PASS, RECIPIENT
+    GMAIL_USER = os.environ.get("GMAIL_USER", "")
+    GMAIL_PASS = os.environ.get("GMAIL_PASS", "")
+    RECIPIENT = os.environ.get("RECIPIENT_EMAIL", GMAIL_USER)
 
 
 def _source_color(source: str) -> str:
@@ -141,7 +148,7 @@ def _build_html(jobs: list) -> str:
             hawkeye-jobs
           </h1>
           <p style="margin:6px 0 0;color:#a0b4c8;font-size:14px;">
-            {len(jobs)} new Flutter job{'s' if len(jobs)>1 else ''} found • {now}
+            {len(jobs)} new job{'s' if len(jobs)>1 else ''} found • {now}
           </p>
         </div>
 
@@ -162,7 +169,7 @@ def _build_html(jobs: list) -> str:
         <div style="background:#ffffff;border:1px solid #e8e8e8;border-radius:0 0 12px 12px;
                     padding:16px 24px;text-align:center;">
           <p style="margin:0;font-size:12px;color:#aaa;line-height:1.6;">
-            Sent by <strong>hawkeye-jobs</strong> — running on GitHub Actions every 2 hours<br>
+            Sent by <strong>hawkeye-jobs</strong><br>
             <a href="https://github.com" style="color:#4285F4;text-decoration:none;">View on GitHub</a>
           </p>
         </div>
@@ -192,15 +199,17 @@ def send_email(jobs: list):
     Args:
         jobs : list of new job dicts to include in the digest
     """
+    _load_credentials()
     if not jobs:
         print("[email] No new jobs — skipping email")
         return
 
     if not GMAIL_USER or not GMAIL_PASS:
         print("[email] ERROR: GMAIL_USER or GMAIL_PASS not set")
+        print("[email] Jobs were still printed above. Copy .env.example to .env to enable email.")
         return
 
-    subject = f"🦅 hawkeye-jobs — {len(jobs)} new Flutter job{'s' if len(jobs)>1 else ''} found"
+    subject = f"🦅 hawkeye-jobs — {len(jobs)} new job{'s' if len(jobs)>1 else ''} found"
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject

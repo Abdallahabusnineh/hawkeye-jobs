@@ -1,7 +1,7 @@
 """
 google_jobs.py — Google Jobs scraper via Selenium
 ===================================================
-Scrapes the Google Jobs panel for Flutter / Mobile job listings.
+Scrapes the Google Jobs panel for the user's search terms.
 
 Why Selenium (not JobSpy's Google scraper)?
     JobSpy's built-in Google Jobs scraper returns 0 results in python-jobspy==1.1.80.
@@ -35,7 +35,7 @@ Date:
     already surfaces recent listings.
 
 Filtering:
-    - _is_flutter_job() from scraper.py (shared title filter)
+    - is_relevant_job() from filters.py (user keywords)
     - seen_urls set (cross-source URL deduplication within the run)
     - SKIP_DOMAINS: Google-owned domains are excluded from apply links
 """
@@ -43,32 +43,9 @@ Filtering:
 import time
 from datetime import datetime
 from bs4 import BeautifulSoup
-from scraper import _is_flutter_job
+from filters import is_relevant_job
 
 SKIP_DOMAINS = ["google.com", "google.jo", "google.ae", "google.co", "accounts.google", "goo.gl"]
-
-GOOGLE_SEARCHES = [
-    # Gulf
-    ("Flutter Developer",        "UAE"),
-    ("Flutter Developer",        "Saudi Arabia"),
-    ("Flutter Developer",        "Kuwait"),
-    ("Flutter Developer",        "Qatar"),
-    ("Flutter Developer",        "Jordan"),
-    ("Flutter Engineer",         "UAE"),
-    ("Flutter Engineer",         "Saudi Arabia"),
-    ("Mobile Developer Flutter", "UAE"),
-    # Europe
-    ("Flutter Developer",        "United Kingdom"),
-    ("Flutter Developer",        "Germany"),
-    ("Flutter Developer",        "Netherlands"),
-    # Americas
-    ("Flutter Developer",        "United States"),
-    ("Flutter Developer",        "Canada"),
-    # Remote / worldwide
-    ("Flutter Developer remote", ""),
-    ("Flutter Engineer remote",  ""),
-    ("Cross Platform Developer", ""),
-]
 
 
 def _build_url(term: str, location: str) -> str:
@@ -87,7 +64,7 @@ def _build_url(term: str, location: str) -> str:
     return f"https://www.google.com/search?q={q}&ibp=htl;jobs&hl=en"
 
 
-def _parse_google_page(html: str, seen_urls: set, location: str) -> list:
+def _parse_google_page(html: str, seen_urls: set, location: str, keywords: list) -> list:
     """
     Parse a Google Jobs results page and return matching job dicts.
 
@@ -99,7 +76,7 @@ def _parse_google_page(html: str, seen_urls: set, location: str) -> list:
 
     Skips the job if:
         - titles and link_grps have different lengths (page didn't render properly)
-        - _is_flutter_job() returns False
+        - is_relevant_job() returns False
         - All apply links in the group are Google-owned domains (SKIP_DOMAINS)
         - URL is already in seen_urls
 
@@ -125,7 +102,7 @@ def _parse_google_page(html: str, seen_urls: set, location: str) -> list:
     for i, (t_el, lg) in enumerate(zip(titles, link_grps)):
         try:
             title = t_el.get_text(strip=True)
-            if not _is_flutter_job(title):
+            if not is_relevant_job(title, keywords):
                 continue
 
             urls = [
@@ -162,41 +139,27 @@ def _parse_google_page(html: str, seen_urls: set, location: str) -> list:
     return result
 
 
-def scrape_google_jobs(seen_urls: set, driver) -> list:
-    """
-    Scrape all GOOGLE_SEARCHES and return a combined list of job dicts.
-
-    For each search:
-        1. Builds the URL via _build_url() and navigates to it.
-        2. Waits 7 seconds for the Google Jobs panel to render.
-        3. Closes any extra tabs opened by Google.
-        4. Passes driver.page_source to _parse_google_page() for extraction.
-
-    Args:
-        seen_urls : set of URLs already found in this run (shared with other scrapers)
-        driver    : Selenium WebDriver instance from browser.create_driver()
-
-    Returns:
-        list of job dicts
-    """
+def scrape_google_jobs(seen_urls: set, driver, searches=None, keywords=None) -> list:
+    """Scrape the given Google Jobs searches and return matching job dicts."""
+    searches = searches or []
+    keywords = keywords or []
     all_jobs = []
     print("\n[Google Jobs]")
 
-    for term, location in GOOGLE_SEARCHES:
+    for term, location in searches:
         url = _build_url(term, location)
         display = f"  '{term}' in {location or 'Worldwide'}"
         try:
             driver.get(url)
             time.sleep(7)
 
-            # Close any extra tabs opened by Google
             handles = driver.window_handles
             for h in handles[1:]:
                 driver.switch_to.window(h)
                 driver.close()
             driver.switch_to.window(driver.window_handles[0])
 
-            jobs = _parse_google_page(driver.page_source, seen_urls, location)
+            jobs = _parse_google_page(driver.page_source, seen_urls, location, keywords)
             all_jobs.extend(jobs)
             print(f"{display}: {len(jobs)} jobs")
         except Exception as e:

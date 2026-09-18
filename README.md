@@ -1,24 +1,24 @@
 # hawkeye-jobs
 
-Automated Flutter job hunter. Scrapes LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts, then emails only new listings.
+Terminal job hunter. You choose the search keywords, countries, and sources; it scrapes LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts, then emails only new listings.
 
-Runs every 2 hours on macOS via LaunchAgent. Deduplicates across sources and across runs.
+Deduplicates across sources and across runs. Nothing runs in the background — you start it when you want results.
 
 ## Features
 
+- Interactive terminal setup: keywords, locations, sources
+- Remembers your last choices in `config.json` (`Y` to reuse, `n` to change)
 - Searches LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts
-- Covers Jordan, Gulf, Europe, North America, and remote
-- Keeps Flutter / Dart / mobile titles only
+- Keeps titles that match your keywords
 - Only includes jobs posted in the last 48 hours
-- Sends an HTML email when there are new jobs
+- Prints new jobs in the terminal and emails an HTML digest
 - Remembers seen jobs so you are not notified twice
 
 ## Requirements
 
-- macOS (LaunchAgent scheduling)
 - Python 3.11+
 - Google Chrome (required for Bayt, NaukriGulf, Google Jobs, LinkedIn posts)
-- A Gmail account with an [App Password](https://myaccount.google.com/apppasswords)
+- A Gmail account with an [App Password](https://myaccount.google.com/apppasswords) if you want email
 
 ## Setup
 
@@ -40,57 +40,50 @@ RECIPIENT_EMAIL=you@gmail.com
 
 Create the App Password at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) (2-Step Verification must be on).
 
-Run once:
+## Run
 
 ```bash
 bash run.sh
 ```
 
-Or install the every-2-hours schedule:
+Or:
 
 ```bash
-bash install_cron.sh
+source venv/bin/activate
+python src/main.py
 ```
 
-Check status:
+You will be asked for:
 
-```bash
-launchctl list | grep hawkeye
-tail -f hawkeye.log
-```
+1. Search keywords (comma-separated), e.g. `Python Developer, Django`
+2. Locations (numbers or `all`)
+3. Sources (numbers or `all`)
+
+The next run shows those settings and asks `Use these? [Y/n]`.
+
+Bayt.com and NaukriGulf only cover Jordan/Gulf. Choosing UK or Remote for those sources is skipped automatically.
 
 ### LinkedIn hiring posts (optional)
 
-LinkedIn blocks anonymous content search. To enable hiring-post scraping, log in once in the profile Chrome uses:
+LinkedIn blocks anonymous content search. Log in once in the profile Chrome uses:
 
 ```bash
 open -a "Google Chrome" --args --user-data-dir="$HOME/.hawkeye-linkedin-profile"
 ```
 
-Sign in, close Chrome, then run hawkeye-jobs as usual.
+Sign in, close Chrome, then run hawkeye-jobs and include **LinkedIn hiring posts**.
 
-## Uninstall
+## Reset
+
+```bash
+rm -f seen_jobs.json    # notify about listings again
+rm -f config.json       # re-enter keywords / locations / sources
+```
+
+If an older version installed a macOS LaunchAgent:
 
 ```bash
 bash uninstall_cron.sh
-```
-
-## Customize
-
-| What | Where |
-|------|--------|
-| LinkedIn / Indeed searches | `src/scraper.py` — `LINKEDIN_SEARCHES`, `INDEED_SEARCHES` |
-| Bayt searches | `src/bayt.py` — `BAYT_SEARCHES` |
-| NaukriGulf searches | `src/naukrigulf.py` — `NAUKRIGULF_SEARCHES` |
-| Google Jobs searches | `src/google_jobs.py` — `GOOGLE_SEARCHES` |
-| LinkedIn hiring-post phrases | `src/linkedin_posts.py` — `LINKEDIN_POST_SEARCHES` |
-| Title exclusions | `src/scraper.py` — `_HARD_EXCLUDE` |
-| Schedule interval | `StartInterval` in `~/Library/LaunchAgents/com.hawkeye-jobs.plist` (seconds) |
-
-Reset seen jobs:
-
-```bash
-rm -f seen_jobs.json
 ```
 
 ## Project structure
@@ -98,7 +91,10 @@ rm -f seen_jobs.json
 ```
 hawkeye-jobs/
 ├── src/
-│   ├── main.py            # Pipeline orchestrator
+│   ├── main.py            # Prompts, then runs the pipeline
+│   ├── settings.py        # Terminal prompts + config.json
+│   ├── catalog.py         # Location/source → per-site queries
+│   ├── filters.py         # Title / hiring-post matching
 │   ├── scraper.py         # LinkedIn + Indeed (JobSpy)
 │   ├── bayt.py            # Bayt.com
 │   ├── naukrigulf.py      # NaukriGulf
@@ -109,18 +105,17 @@ hawkeye-jobs/
 │   ├── utils.py           # URL cleaning, date parsing
 │   └── email_sender.py    # HTML email + Gmail SMTP
 ├── docs/ARCHITECTURE.md   # Technical reference
+├── config.example.json    # Sample search settings
 ├── .env.example           # Credential template
-├── run.sh                 # Loads .env and runs the pipeline
-├── install_cron.sh        # macOS LaunchAgent installer
-└── uninstall_cron.sh      # Remove the LaunchAgent
+└── run.sh                 # Loads .env and runs the pipeline
 ```
 
 ## Troubleshooting
 
 | Problem | What to try |
 |---------|-------------|
-| No email | Check `hawkeye.log` and that `.env` is filled in |
-| 0 jobs from Bayt / NaukriGulf | Chrome must be installed and up to date |
+| No email | Jobs still print in the terminal. Fill in `.env` |
+| 0 jobs from Bayt / NaukriGulf | Chrome must be installed; those sites are Gulf/Jordan only |
 | Chrome version error | Set `version_main` in `src/browser.py` to match Chrome |
 | Gmail auth error | Generate a new App Password |
 | LinkedIn posts empty | Log in once using the persistent Chrome profile above |

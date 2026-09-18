@@ -25,7 +25,7 @@ Window management:
     returns focus to the main tab to prevent "no such window" Selenium errors.
 
 Filtering:
-    - _is_flutter_job() from scraper.py (shared title filter)
+    - is_relevant_job() from filters.py (user keywords)
     - is_within_48h() from utils.py (date filter)
     - seen_urls set (cross-source URL deduplication within the run)
 """
@@ -33,28 +33,11 @@ Filtering:
 import time
 from datetime import datetime
 from bs4 import BeautifulSoup
-from scraper import _is_flutter_job
+from filters import is_relevant_job
 from utils import is_within_48h
 
-BAYT_SEARCHES = [
-    ("flutter-developer", "jordan"),
-    ("flutter-developer", "uae"),
-    ("flutter-developer", "saudi-arabia"),
-    ("flutter-developer", "kuwait"),
-    ("flutter-developer", "qatar"),
-    ("flutter-developer", "oman"),
-    ("flutter-developer", "bahrain"),
-    ("flutter-engineer",  "uae"),
-    ("flutter-engineer",  "saudi-arabia"),
-    ("mobile-developer",  "jordan"),
-    ("mobile-developer",  "uae"),
-    ("mobile-developer",  "saudi-arabia"),
-    ("dart-developer",    "jordan"),
-    ("dart-developer",    "uae"),
-]
 
-
-def _parse_bayt_page(html: str, seen_urls: set, location: str) -> list:
+def _parse_bayt_page(html: str, seen_urls: set, location: str, keywords: list) -> list:
     """
     Parse a Bayt.com search results page and return matching job dicts.
 
@@ -77,7 +60,7 @@ def _parse_bayt_page(html: str, seen_urls: set, location: str) -> list:
                 continue
 
             title = title_tag.get_text(strip=True)
-            if not _is_flutter_job(title):
+            if not is_relevant_job(title, keywords):
                 continue
 
             href = title_tag.get("href", "")
@@ -135,37 +118,23 @@ def _ensure_window(driver):
         pass
 
 
-def scrape_bayt(seen_urls: set, driver) -> list:
-    """
-    Scrape all BAYT_SEARCHES and return a combined list of job dicts.
-
-    For each search:
-        1. Calls _ensure_window() to reset the tab state.
-        2. Navigates to the Bayt.com search URL.
-        3. Waits 8 seconds for Cloudflare JS challenge to resolve and page to render.
-        4. Calls _ensure_window() again in case new tabs were opened.
-        5. Passes driver.page_source to _parse_bayt_page() for extraction.
-
-    Args:
-        seen_urls : set of URLs already found in this run (shared with other scrapers)
-        driver    : Selenium WebDriver instance from browser.create_driver()
-
-    Returns:
-        list of job dicts
-    """
+def scrape_bayt(seen_urls: set, driver, searches=None, keywords=None) -> list:
+    """Scrape the given Bayt.com searches and return matching job dicts."""
+    searches = searches or []
+    keywords = keywords or []
     all_jobs = []
     print("\n[Bayt.com]")
 
-    for term_slug, country_slug in BAYT_SEARCHES:
+    for term_slug, country_slug in searches:
         url = f"https://www.bayt.com/en/{country_slug}/jobs/{term_slug}-jobs/"
         display = f"  '{term_slug}' in {country_slug}"
         try:
             _ensure_window(driver)
             driver.get(url)
-            time.sleep(8)  # wait for Cloudflare challenge + JS render
+            time.sleep(8)
             _ensure_window(driver)
 
-            jobs = _parse_bayt_page(driver.page_source, seen_urls, country_slug)
+            jobs = _parse_bayt_page(driver.page_source, seen_urls, country_slug, keywords)
             all_jobs.extend(jobs)
             print(f"{display}: {len(jobs)} jobs")
         except Exception as e:
