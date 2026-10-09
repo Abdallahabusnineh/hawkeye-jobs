@@ -59,9 +59,9 @@ class Throttle:
                 slot = max(now, self._last_start + gap)
             self._last_start = slot
         while True:
+            if cancel is not None and cancel.is_set():
+                return False
             remaining = slot - self._clock()
             if remaining <= 0:
                 return True
-            if cancel is not None and cancel.is_set():
-                return False
             self._sleep(min(_SLICE_SECONDS, remaining))

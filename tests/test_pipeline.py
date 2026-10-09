@@ -463,6 +463,18 @@ class ThrottleTests(PipelineTestCase):
         gaps = [b - a for a, b in zip(starts, starts[1:])]
         self.assertTrue(all(g >= 0.1 - 0.01 for g in gaps), gaps)
 
+    def test_group_gap_is_per_field_maximum(self):
+        built = []
+
+        class RecordingThrottle:
+            def __init__(self, low, high, *args, **kwargs):
+                built.append((low, high))
+
+        with mock.patch.object(pipeline, "Throttle", RecordingThrottle):
+            throttles = pipeline._make_throttles({"linkedin": (6, 7), "linkedin_posts": (5, 30)})
+        self.assertEqual(built, [(6, 30)])
+        self.assertIs(throttles["linkedin"], throttles["linkedin_posts"])
+
     def test_gap_doubles_after_a_failed_query(self):
         starts = []
 

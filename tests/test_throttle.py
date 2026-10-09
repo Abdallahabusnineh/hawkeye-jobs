@@ -85,6 +85,14 @@ class ThrottleTests(unittest.TestCase):
         self.assertFalse(throttle.wait(cancel))
         self.assertEqual(len(self.time.sleeps), 3)
 
+    def test_cancel_during_final_slice_still_returns_false(self):
+        throttle = self.make(1, 1)
+        cancel = threading.Event()
+        throttle.wait(cancel)
+        self.time.on_sleep = lambda n: cancel.set() if n == 2 else None
+        self.assertFalse(throttle.wait(cancel))
+        self.assertEqual(len(self.time.sleeps), 2)
+
     def test_already_cancelled_does_not_sleep(self):
         throttle = self.make(30, 30)
         throttle.wait()

@@ -123,7 +123,8 @@ def _make_throttles(delays) -> dict:
     groups = {}
     for source, gap in delays.items():
         group = SITE_GROUPS.get(source, source)
-        groups[group] = max(groups.get(group, (0, 0)), tuple(gap))
+        low, high = groups.get(group, (0, 0))
+        groups[group] = (max(low, gap[0]), max(high, gap[1]))
     built = {group: Throttle(*gap) for group, gap in groups.items()}
     return {source: built[SITE_GROUPS.get(source, source)] for source in delays}
 
