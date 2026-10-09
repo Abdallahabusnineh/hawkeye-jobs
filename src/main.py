@@ -98,25 +98,27 @@ def main():
     if migrate_legacy_config(ROOT):
         print("Copied your saved search settings into the data folder.")
     store = Store()
-    store.recover_interrupted_runs()
-    if store.import_legacy_seen_file(ROOT / "seen_jobs.json"):
-        print("Imported your previously seen jobs into the data folder.")
-    print(f"Data folder: {data_dir()}")
-
-    chosen = collect_settings()
     try:
-        countries = load_countries()
-    except CountryFetchError:
-        countries = []
-    country_labels = {c["id"]: c["label"] for c in countries}
+        store.recover_interrupted_runs()
+        if store.import_legacy_seen_file(ROOT / "seen_jobs.json"):
+            print("Imported your previously seen jobs into the data folder.")
+        print(f"Data folder: {data_dir()}")
 
-    def print_event(event):
-        line = format_event(event, country_labels)
-        if line:
-            print(line)
+        chosen = collect_settings()
+        try:
+            countries = load_countries()
+        except CountryFetchError:
+            countries = []
+        country_labels = {c["id"]: c["label"] for c in countries}
 
-    summary = run_search(chosen, on_event=print_event, country_labels=country_labels, store=store)
-    store.close()
+        def print_event(event):
+            line = format_event(event, country_labels)
+            if line:
+                print(line)
+
+        summary = run_search(chosen, on_event=print_event, country_labels=country_labels, store=store)
+    finally:
+        store.close()
 
     if summary.state == "failed":
         print("[main] The search stopped because of an error — see hawkeye.log in the data folder.")

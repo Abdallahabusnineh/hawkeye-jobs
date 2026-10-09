@@ -1,3 +1,4 @@
+import io
 import json
 import os
 import sys
@@ -55,6 +56,7 @@ class MainTests(unittest.TestCase):
             patch("main.setup_logging"),
             patch("main.collect_settings", return_value=SETTINGS),
             patch("main.load_countries", return_value=COUNTRIES),
+            patch("sys.stdout", new_callable=io.StringIO),
         ]
         for p in self.patches:
             p.start()
