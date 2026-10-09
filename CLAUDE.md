@@ -72,4 +72,6 @@ Set in `.env` (gitignored): `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`. Copy 
 ```bash
 # macOS — Linux: ~/.local/share/hawkeye-jobs — Windows: %LOCALAPPDATA%\hawkeye-jobs
 rm -f ~/Library/Application\ Support/hawkeye-jobs/hawkeye.db
+# also, if you used an older version (it is re-imported on every start otherwise):
+rm -f seen_jobs.json
 ```

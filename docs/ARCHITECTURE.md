@@ -34,7 +34,7 @@ hawkeye-jobs/
 └── CLAUDE.md
 ```
 
-Runtime files live in the per-OS data directory (see src/paths.py), never in the repo: hawkeye.db, config.json, countries_cache.json, hawkeye.log, linkedin-profile/.
+Runtime files live in the per-OS data directory (see src/paths.py), never in the repo: `hawkeye.db`, `config.json`, `countries_cache.json`, `hawkeye.log`, `linkedin-profile/`.
 
 ---
 
@@ -343,7 +343,7 @@ Replaces the old `tracker.py` / `seen_jobs.json`. Keeps every job found, so hist
 
 **Threading:** one `Store` per thread (sqlite3 connections are not shared). WAL mode lets a reader work while a search writes. In a run only the thread calling `run_search` uses the Store. `recover_interrupted_runs()` marks leftover `running` runs as `failed`; call it once at process start, never during a search.
 
-**Resetting:** delete `hawkeye.db` from the data directory to be notified about everything again.
+**Resetting:** delete `hawkeye.db` from the data directory. If a repo-root `seen_jobs.json` exists, delete it too: `main.py` re-imports it into `legacy_seen` on every start, so its jobs would stay suppressed.
 
 ---
 
