@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from browser import ChromeNotFound
 from linkedin_posts import LinkedInLoginRequired
+import pipeline
 from pipeline import run_search
 from store import Store
 
@@ -105,6 +106,7 @@ class PipelineTestCase(unittest.TestCase):
         kwargs.setdefault("fetchers", self.rec.fetchers())
         kwargs.setdefault("driver_factory", self.rec.driver_factory)
         kwargs.setdefault("on_event", self.events.append)
+        kwargs.setdefault("delays", {})  # no throttling unless a test asks for it
         return run_search(cfg, **kwargs)
 
     def types(self):
@@ -362,6 +364,74 @@ class CancelTests(PipelineTestCase):
         summary = self.run_search(settings(keywords=("Java", "Kotlin", "Go"), sources=("linkedin",)),
                                   on_event=interrupt)
         self.assertEqual(summary.state, "cancelled")
+
+
+class ThrottleTests(PipelineTestCase):
+    def test_consecutive_requests_to_one_site_are_spaced(self):
+        starts = []
+
+        def stamp(driver, args):
+            starts.append(time.monotonic())
+            return [job_for("bayt", args)]
+
+        self.rec.behaviour["bayt"] = stamp
+        summary = self.run_search(settings(keywords=("Java", "Kotlin", "Go"), sources=("bayt",)),
+                                  delays={"bayt": (0.05, 0.05)})
+        self.assertEqual(summary.state, "done")
+        self.assertEqual(len(starts), 3)
+        gaps = [b - a for a, b in zip(starts, starts[1:])]
+        self.assertTrue(all(gap >= 0.05 for gap in gaps), gaps)
+
+    def test_cancel_while_waiting_on_throttle_ends_run_quickly(self):
+        cancel = threading.Event()
+
+        def cancel_on_first(driver, args):
+            cancel.set()
+            return [job_for("linkedin", args)]
+
+        self.rec.behaviour["linkedin"] = cancel_on_first
+        started = time.monotonic()
+        summary = self.run_search(settings(keywords=("Java", "Kotlin"), sources=("linkedin",)),
+                                  cancel=cancel, delays={"linkedin": (30, 30)})
+        self.assertLess(time.monotonic() - started, 3)
+        self.assertEqual(len(self.rec.calls), 1)
+        self.assertEqual(summary.state, "cancelled")
+        self.assertEqual(len(self.of_type("query_started")), 1)
+
+    def test_cancel_during_throttle_wait_in_browser_lane(self):
+        cancel = threading.Event()
+        threading.Timer(0.3, cancel.set).start()
+        started = time.monotonic()
+        summary = self.run_search(settings(keywords=("Java", "Kotlin"), sources=("bayt",)),
+                                  cancel=cancel, delays={"bayt": (30, 30)})
+        self.assertLess(time.monotonic() - started, 3)
+        self.assertEqual(len(self.rec.calls), 1)
+        self.assertEqual(summary.state, "cancelled")
+        self.assertTrue(self.rec.drivers[0].quit_called)
+
+    def test_default_delays_are_the_polite_table(self):
+        built = []
+
+        class RecordingThrottle:
+            def __init__(self, low, high, *args, **kwargs):
+                built.append((low, high))
+
+            def wait(self, cancel=None):
+                return True
+
+        with mock.patch.object(pipeline, "Throttle", RecordingThrottle):
+            kwargs = {"store": self.store, "fetchers": self.rec.fetchers(),
+                      "driver_factory": self.rec.driver_factory}
+            run_search(settings(sources=("bayt",)), **kwargs)
+        self.assertIn((6, 10), built)
+        self.assertEqual(sorted(built), sorted(pipeline.POLITE_DELAYS.values()))
+
+    def test_source_missing_from_delays_is_not_throttled(self):
+        started = time.monotonic()
+        self.run_search(settings(keywords=("Java", "Kotlin"), sources=("linkedin",)),
+                        delays={"bayt": (30, 30)})
+        self.assertLess(time.monotonic() - started, 3)
+        self.assertEqual(len(self.rec.calls), 2)
 
 
 if __name__ == "__main__":

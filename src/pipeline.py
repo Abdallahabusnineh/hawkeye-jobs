@@ -9,6 +9,10 @@ Lanes (one thread each, queries run one after another inside a lane):
     HTTP lane    : linkedin, indeed          (JobSpy, no browser)
     Browser lane : bayt, naukrigulf, google_jobs, linkedin_posts (one Chrome)
 
+Politeness: before each query a lane waits on that site's Throttle (random
+minimum gap between request starts, see throttle.py and POLITE_DELAYS), so users
+are not flagged as bots. The wait sleeps in short slices and honours `cancel`.
+
 Lanes never touch the Store and never call on_event: they push messages onto a
 queue, and the thread that called run_search() does all saving and reporting.
 So on_event always runs on the caller's thread, in order.
@@ -26,11 +30,21 @@ from browser import ChromeNotFound
 from catalog import BROWSER_SOURCES, SOURCE_ORDER, plan_queries
 from linkedin_posts import LinkedInLoginRequired
 from store import Store
+from throttle import Throttle
 
 log = logging.getLogger(__name__)
 
 HTTP_SOURCES = ("linkedin", "indeed")
 _QUEUE_POLL_SECONDS = 0.2
+
+POLITE_DELAYS = {  # (min, max) seconds between requests to the same site
+    "linkedin": (3, 6),
+    "indeed": (3, 6),
+    "bayt": (6, 10),
+    "naukrigulf": (4, 7),
+    "google_jobs": (8, 12),
+    "linkedin_posts": (10, 20),  # the user's own LinkedIn account: slowest
+}
 
 
 @dataclass
@@ -91,15 +105,28 @@ def _quit(driver) -> None:
         log.debug("driver.quit() failed", exc_info=True)
 
 
+def _make_throttles(delays) -> dict:
+    return {source: Throttle(*gap) for source, gap in delays.items()}
+
+
+def _may_proceed(throttles, source, cancel) -> bool:
+    """Wait out the polite gap for `source`; False means cancelled while waiting."""
+    throttle = throttles.get(source)
+    return True if throttle is None else throttle.wait(cancel)
+
+
 def _skip_all(queries, reason, out) -> None:
     for query in queries:
         out.put(("skipped", query, reason))
 
 
-def _http_lane(queries, fetchers, keywords, cancel, out) -> None:
+def _http_lane(queries, fetchers, keywords, cancel, out, delays) -> None:
     seen_urls = set()
+    throttles = _make_throttles(delays)
     for query in queries:
         if cancel.is_set():
+            return
+        if not _may_proceed(throttles, query["source"], cancel):
             return
         out.put(("started", query))
         try:
@@ -111,8 +138,9 @@ def _http_lane(queries, fetchers, keywords, cancel, out) -> None:
         out.put(("done", query, jobs))
 
 
-def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out) -> None:
+def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out, delays) -> None:
     seen_urls = set()
+    throttles = _make_throttles(delays)
     driver = None
     restarts_left = 1
     login_blocked = False
@@ -138,6 +166,8 @@ def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out) -> N
             if query["source"] == "linkedin_posts" and login_blocked:
                 out.put(("skipped", query, "login_required"))
                 continue
+            if not _may_proceed(throttles, query["source"], cancel):
+                return
             out.put(("started", query))
             try:
                 jobs = fetchers[query["source"]](driver, query["args"], seen_urls, keywords)
@@ -199,7 +229,7 @@ def _make_emitter(on_event):
 
 
 def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=None,
-               store=None, fetchers=None, driver_factory=None) -> RunSummary:
+               store=None, fetchers=None, driver_factory=None, delays=None) -> RunSummary:
     """
     Run one search. settings = {"keywords", "locations", "sources"}.
 
@@ -207,12 +237,17 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
     After `run_started` it never raises: failures become events and the
     returned state is 'failed'. A KeyboardInterrupt on the calling thread
     cancels the run instead of aborting it.
+
+    delays = {source: (min_seconds, max_seconds)} is the polite gap between
+    requests to one site; None uses POLITE_DELAYS, and a source missing from it
+    is not throttled.
     """
     cancel = cancel or threading.Event()
     owns_store = store is None
     store = store or Store()
     fetchers = fetchers or _default_fetchers()
     driver_factory = driver_factory or _default_driver_factory
+    delays = POLITE_DELAYS if delays is None else delays
     emit = _make_emitter(on_event)
     keywords = list(settings["keywords"])
 
@@ -231,11 +266,11 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
     lanes = []
     if http_queries:
         lanes.append(threading.Thread(
-            target=_http_lane, args=(http_queries, fetchers, keywords, cancel, out),
+            target=_http_lane, args=(http_queries, fetchers, keywords, cancel, out, delays),
             name="hawkeye-http-lane", daemon=True))
     if browser_queries:
         lanes.append(threading.Thread(
-            target=_browser_lane, args=(browser_queries, fetchers, driver_factory, keywords, cancel, out),
+            target=_browser_lane, args=(browser_queries, fetchers, driver_factory, keywords, cancel, out, delays),
             name="hawkeye-browser-lane", daemon=True))
     for lane in lanes:
         lane.start()

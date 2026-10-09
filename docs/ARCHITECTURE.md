@@ -79,6 +79,21 @@ Guarantees: `run_started` is first and `run_finished` last. A query's `query_sta
 - Chrome dying mid-run: the driver is restarted once; a second crash emits `browser_failed` (`crashed`) and skips the rest.
 - Errors before `run_started` (e.g. the database cannot be written) raise. After it, `run_search` never raises: an unexpected error gives state `failed`.
 
+### Polite throttling
+
+Each lane waits on a per-site `Throttle` (`src/throttle.py`) before every query: a random minimum gap between the **start** of consecutive requests to the same site (page-load time counts toward the gap). This protects users' accounts and IPs from bot detection (LinkedIn account restrictions, Google CAPTCHAs, Bayt/Cloudflare challenges, HTTP 429). Slower is acceptable; harm is not. The first request to a site never waits; the wait sleeps in slices of at most 0.5 s and stops as soon as `cancel` is set (the lane then ends as on its pre-query cancel check, with no events for that query).
+
+| Source | Gap (seconds, min-max) |
+|---|---|
+| linkedin | 3-6 |
+| indeed | 3-6 |
+| bayt | 6-10 |
+| naukrigulf | 4-7 |
+| google_jobs | 8-12 |
+| linkedin_posts | 10-20 (the user's own LinkedIn account) |
+
+Values live in `pipeline.POLITE_DELAYS`. `run_search(..., delays={...})` overrides them (tests pass `{}`); a source missing from `delays` is not throttled.
+
 ### Cancel
 
 Pass a `threading.Event` as `cancel`, or press Ctrl+C: a `KeyboardInterrupt` on the calling thread sets the event instead of aborting. Each lane checks it before its next query, so cancel takes at most one in-flight query. Lanes are always joined (the Chrome driver is quit), the run is recorded as `cancelled`, and `run_finished` is still emitted. Jobs saved so far are kept, and `main.py` prints and emails them.

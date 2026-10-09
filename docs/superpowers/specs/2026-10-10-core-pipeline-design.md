@@ -342,6 +342,21 @@ Every event is a dict with a `type` key. Field values are data only.
 - If `on_event` raises, the exception is logged and ignored.
 - On cancel, lanes stop without emitting skip events.
 
+### Polite throttling
+
+Each lane waits on a per-site `Throttle` (`src/throttle.py`) before every query: a random minimum gap between the **start** of consecutive requests to the same site (page-load time counts toward the gap). This protects users' accounts and IPs from bot detection (LinkedIn account restrictions, Google CAPTCHAs, Bayt/Cloudflare challenges, HTTP 429). Slower is acceptable; harm is not. The first request to a site never waits; the wait sleeps in slices of at most 0.5 s and stops as soon as `cancel` is set (the lane then ends as on its pre-query cancel check, with no events for that query).
+
+| Source | Gap (seconds, min-max) |
+|---|---|
+| linkedin | 3-6 |
+| indeed | 3-6 |
+| bayt | 6-10 |
+| naukrigulf | 4-7 |
+| google_jobs | 8-12 |
+| linkedin_posts | 10-20 (the user's own LinkedIn account) |
+
+Values live in `pipeline.POLITE_DELAYS`. `run_search(..., delays={...})` overrides them (tests pass `{}`); a source missing from `delays` is not throttled.
+
 ### Failure handling
 
 | Situation | Behaviour |

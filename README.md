@@ -14,6 +14,7 @@ Deduplicates across sources and across runs. Nothing runs in the background — 
 - Only includes jobs posted in the last 48 hours
 - Prints new jobs in the terminal and emails an HTML digest
 - Remembers every job it has found (with a status: new / saved / applied / dismissed) so you are not notified twice
+- Waits politely between requests to each site so your accounts and connection are not flagged
 - Ctrl+C stops a search cleanly; jobs found so far are kept
 
 ## Requirements
