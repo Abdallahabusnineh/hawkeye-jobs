@@ -49,6 +49,7 @@ Job dict schema (same shape as every other scraper):
     published   -> relative time string as shown on the post (e.g. "5h")
 """
 
+import logging
 import re
 import time
 from datetime import datetime
@@ -58,6 +59,8 @@ from bs4 import BeautifulSoup
 
 from browser import wait_for
 from filters import is_hiring_post
+
+log = logging.getLogger(__name__)
 
 _MAX_SCROLLS = 4          # how many times to scroll to lazy-load more posts
 _SCROLL_PAUSE = 2.0       # seconds to wait after each scroll
@@ -182,10 +185,12 @@ def _parse_posts_page(html: str, seen_urls: set, keyword: str, keywords: list) -
 def fetch_linkedin_posts(driver, args, seen_urls: set, keywords: list) -> list:
     """One LinkedIn content search. args = phrase, e.g. "hiring Java Developer". Raises LinkedInLoginRequired."""
     phrase = args
-    driver.get(_build_url(phrase))
+    url = _build_url(phrase)
+    driver.get(url)
     if _is_logged_out(driver):
         raise LinkedInLoginRequired(driver.current_url)
-    wait_for(driver, CARD_SELECTOR, POSTS_WAIT_SECONDS)
+    loaded = wait_for(driver, CARD_SELECTOR, POSTS_WAIT_SECONDS)
+    # Second check: catches a redirect that happens after the page starts loading.
     if _is_logged_out(driver):
         raise LinkedInLoginRequired(driver.current_url)
 
@@ -193,4 +198,7 @@ def fetch_linkedin_posts(driver, args, seen_urls: set, keywords: list) -> list:
         driver.execute_script("window.scrollBy(0, document.body.scrollHeight);")
         time.sleep(_SCROLL_PAUSE)
 
-    return _parse_posts_page(driver.page_source, seen_urls, phrase, keywords)
+    jobs = _parse_posts_page(driver.page_source, seen_urls, phrase, keywords)
+    if not jobs and not loaded:
+        log.warning("LinkedIn posts: no post cards after %ss at %s (page title: %r)", POSTS_WAIT_SECONDS, url, driver.title)
+    return jobs

@@ -114,7 +114,25 @@ class GoogleJobsTests(unittest.TestCase):
         self.assertEqual(switched, ["popup", "main"])
 
 
+    def test_warns_when_nothing_loaded(self):
+        driver = FakeDriver("<html></html>", title="Just a moment...")
+        with patch("google_jobs.wait_for", return_value=False), self.assertLogs("google_jobs", "WARNING") as logs:
+            self.assertEqual(google_jobs.fetch_google_jobs(driver, ("Java Developer", "UAE"), set(), KEYWORDS), [])
+        self.assertIn("Just a moment", logs.output[0])
+        self.assertIn(driver.visited[0], logs.output[0])
+
+
 class LinkedInPostsTests(unittest.TestCase):
+    def test_warns_when_nothing_loaded(self):
+        driver = FakeDriver("<html></html>", title="Just a moment...",
+                            current_url="https://www.linkedin.com/search/results/content/")
+        with patch("linkedin_posts.wait_for", return_value=False), \
+             patch("linkedin_posts.time.sleep"), \
+             self.assertLogs("linkedin_posts", "WARNING") as logs:
+            self.assertEqual(linkedin_posts.fetch_linkedin_posts(driver, "hiring Java", set(), KEYWORDS), [])
+        self.assertIn("Just a moment", logs.output[0])
+        self.assertIn(driver.visited[0], logs.output[0])
+
     def test_fetch_keeps_recent_hiring_posts(self):
         driver = FakeDriver(fixture("linkedin_posts.html"), current_url="https://www.linkedin.com/search/results/content/")
         with patch("linkedin_posts.wait_for", return_value=True) as wait, \
