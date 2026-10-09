@@ -33,11 +33,19 @@ Filtering:
     - seen_urls set (cross-source URL deduplication within the run)
 """
 
-import time
+import logging
 from datetime import datetime
+
 from bs4 import BeautifulSoup
+
+from browser import wait_for
 from filters import is_relevant_job
 from utils import is_within_48h
+
+log = logging.getLogger(__name__)
+
+NAUKRI_WAIT_SECONDS = 15  # Angular SPA render
+CARD_SELECTOR = ".ng-box.srp-tuple"
 
 BASE = "https://www.naukrigulf.com"
 
@@ -144,26 +152,15 @@ def _ensure_main_window(driver):
         pass
 
 
-def scrape_naukrigulf(seen_urls: set, driver, searches=None, keywords=None) -> list:
-    """Scrape the given NaukriGulf searches and return matching job dicts."""
-    searches = searches or []
-    keywords = keywords or []
-    all_jobs = []
-    print("\n[NaukriGulf]")
-
-    for keyword, location_slug in searches:
-        url = _build_url(keyword, location_slug)
-        display = f"  '{keyword}' in {location_slug}"
-        try:
-            _ensure_main_window(driver)
-            driver.get(url)
-            time.sleep(6)
-            _ensure_main_window(driver)
-
-            jobs = _parse_naukrigulf_page(driver.page_source, seen_urls, location_slug, keywords)
-            all_jobs.extend(jobs)
-            print(f"{display}: {len(jobs)} jobs")
-        except Exception as e:
-            print(f"{display}: Error - {e}")
-
-    return all_jobs
+def fetch_naukrigulf(driver, args, seen_urls: set, keywords: list) -> list:
+    """One NaukriGulf search. args = (keyword, location_slug). Raises on navigation errors."""
+    keyword, location_slug = args
+    url = _build_url(keyword, location_slug)
+    _ensure_main_window(driver)
+    driver.get(url)
+    loaded = wait_for(driver, CARD_SELECTOR, NAUKRI_WAIT_SECONDS)
+    _ensure_main_window(driver)
+    jobs = _parse_naukrigulf_page(driver.page_source, seen_urls, location_slug, keywords)
+    if not jobs and not loaded:
+        log.warning("NaukriGulf: no job cards after %ss at %s (page title: %r)", NAUKRI_WAIT_SECONDS, url, driver.title)
+    return jobs

@@ -5,7 +5,8 @@ Scrapes job listings from Bayt.com for Jordan and Gulf countries.
 
 Why Selenium (not requests)?
     Bayt.com is protected by Cloudflare. Plain HTTP requests return a 403.
-    A visible Chrome window (headless=False) passes the JS challenge after ~8 seconds.
+    A visible Chrome window (headless=False) passes the JS challenge; fetch_bayt()
+    waits up to BAYT_WAIT_SECONDS for job cards to appear.
 
 URL pattern:
     https://www.bayt.com/en/{country_slug}/jobs/{term_slug}-jobs/
@@ -30,11 +31,19 @@ Filtering:
     - seen_urls set (cross-source URL deduplication within the run)
 """
 
-import time
+import logging
 from datetime import datetime
+
 from bs4 import BeautifulSoup
+
+from browser import wait_for
 from filters import is_relevant_job
 from utils import is_within_48h
+
+log = logging.getLogger(__name__)
+
+BAYT_WAIT_SECONDS = 20  # Cloudflare challenge + render
+CARD_SELECTOR = "li[data-job-id]"
 
 
 def _parse_bayt_page(html: str, seen_urls: set, location: str, keywords: list) -> list:
@@ -118,26 +127,19 @@ def _ensure_window(driver):
         pass
 
 
-def scrape_bayt(seen_urls: set, driver, searches=None, keywords=None) -> list:
-    """Scrape the given Bayt.com searches and return matching job dicts."""
-    searches = searches or []
-    keywords = keywords or []
-    all_jobs = []
-    print("\n[Bayt.com]")
+def _build_url(term_slug: str, country_slug: str) -> str:
+    return f"https://www.bayt.com/en/{country_slug}/jobs/{term_slug}-jobs/"
 
-    for term_slug, country_slug in searches:
-        url = f"https://www.bayt.com/en/{country_slug}/jobs/{term_slug}-jobs/"
-        display = f"  '{term_slug}' in {country_slug}"
-        try:
-            _ensure_window(driver)
-            driver.get(url)
-            time.sleep(8)
-            _ensure_window(driver)
 
-            jobs = _parse_bayt_page(driver.page_source, seen_urls, country_slug, keywords)
-            all_jobs.extend(jobs)
-            print(f"{display}: {len(jobs)} jobs")
-        except Exception as e:
-            print(f"{display}: Error - {e}"[:120])
-
-    return all_jobs
+def fetch_bayt(driver, args, seen_urls: set, keywords: list) -> list:
+    """One Bayt search. args = (term_slug, country_slug). Raises on navigation errors."""
+    term_slug, country_slug = args
+    url = _build_url(term_slug, country_slug)
+    _ensure_window(driver)
+    driver.get(url)
+    loaded = wait_for(driver, CARD_SELECTOR, BAYT_WAIT_SECONDS)
+    _ensure_window(driver)
+    jobs = _parse_bayt_page(driver.page_source, seen_urls, country_slug, keywords)
+    if not jobs and not loaded:
+        log.warning("Bayt: no job cards after %ss at %s (page title: %r)", BAYT_WAIT_SECONDS, url, driver.title)
+    return jobs
