@@ -33,6 +33,30 @@ class FindChromeTests(unittest.TestCase):
              patch("browser.shutil.which", side_effect=which):
             self.assertEqual(browser.find_chrome(), "/usr/bin/google-chrome-stable")
 
+    def test_finds_chromium_on_path(self):
+        def which(name):
+            return "/usr/bin/chromium" if name == "chromium" else None
+        with patch("browser.os.path.exists", side_effect=lambda p: p == "/usr/bin/chromium"), \
+             patch("browser.shutil.which", side_effect=which):
+            self.assertEqual(browser.find_chrome(), "/usr/bin/chromium")
+
+    def test_finds_per_user_macos_install(self):
+        expected = os.path.expanduser(browser.MAC_CHROME_USER)
+        with patch("browser.os.path.exists", side_effect=lambda p: p == expected), \
+             patch("browser.shutil.which", return_value=None):
+            self.assertEqual(browser.find_chrome(), expected)
+
+    def test_finds_applications_chromium(self):
+        with patch("browser.os.path.exists", side_effect=lambda p: p == browser.MAC_CHROMIUM), \
+             patch("browser.shutil.which", return_value=None):
+            self.assertEqual(browser.find_chrome(), browser.MAC_CHROMIUM)
+
+    def test_prefers_google_chrome_over_chromium(self):
+        which = lambda name: {"chromium": "/usr/bin/chromium", "google-chrome": "/usr/bin/google-chrome"}.get(name)
+        with patch("browser.os.path.exists", return_value=True), \
+             patch("browser.shutil.which", side_effect=which):
+            self.assertEqual(browser.find_chrome(), browser.MAC_CHROME)
+
     def test_returns_none_when_missing(self):
         with patch("browser.os.path.exists", return_value=False), \
              patch("browser.shutil.which", return_value=None):

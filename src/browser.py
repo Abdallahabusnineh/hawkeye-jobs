@@ -14,8 +14,8 @@ Why headless=False?
     Running with a visible window passes the bot detection challenge.
 
 Chrome discovery and version:
-    find_chrome() looks in the standard macOS / Windows install folders, then on
-    PATH. The Chrome major version is detected at runtime (Windows: registry,
+    find_chrome() looks in the standard macOS / Windows install folders (Google
+    Chrome first, then Chromium), then on PATH. The Chrome major version is detected at runtime (Windows: registry,
     elsewhere: `chrome --version`) so ChromeDriver always matches; there is no
     hardcoded version. Override with HAWKEYE_CHROME_MAJOR if detection is wrong.
     create_driver() raises ChromeNotFound when Chrome is not installed.
@@ -38,16 +38,18 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-_PATH_NAMES = ("google-chrome", "google-chrome-stable", "chrome")
+MAC_CHROME_USER = "~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+MAC_CHROMIUM = "/Applications/Chromium.app/Contents/MacOS/Chromium"
+_PATH_NAMES = ("google-chrome", "google-chrome-stable", "chrome", "chromium", "chromium-browser")
 
 
 class ChromeNotFound(RuntimeError):
-    """Google Chrome is not installed (or not in any place we look)."""
+    """Google Chrome / Chromium is not installed (or not in any place we look)."""
 
 
 def _windows_candidates() -> list:
     paths = []
-    for var in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
+    for var in ("PROGRAMFILES", "PROGRAMW6432", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
         base = os.environ.get(var)
         if base:
             paths.append(os.path.join(base, "Google", "Chrome", "Application", "chrome.exe"))
@@ -55,8 +57,8 @@ def _windows_candidates() -> list:
 
 
 def find_chrome():
-    """Return the path to the installed Google Chrome binary, or None."""
-    candidates = [MAC_CHROME, *_windows_candidates()]
+    """Return the path to the installed Google Chrome (or Chromium) binary, or None."""
+    candidates = [MAC_CHROME, os.path.expanduser(MAC_CHROME_USER), MAC_CHROMIUM, *_windows_candidates()]
     candidates += [shutil.which(name) for name in _PATH_NAMES]
     for path in candidates:
         if path and os.path.exists(path):
@@ -136,11 +138,11 @@ def create_driver(headless=False, user_data_dir=None):
                                             automated software" flag from the browser
 
     Raises:
-        ChromeNotFound: Google Chrome is not installed.
+        ChromeNotFound: neither Google Chrome nor Chromium is installed.
     """
     chrome = find_chrome()
     if not chrome:
-        raise ChromeNotFound("Google Chrome is not installed")
+        raise ChromeNotFound("Google Chrome (or Chromium) is not installed")
 
     opts = uc.ChromeOptions()
     if headless:
