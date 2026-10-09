@@ -142,12 +142,16 @@ def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out) -> N
             try:
                 jobs = fetchers[query["source"]](driver, query["args"], seen_urls, keywords)
             except LinkedInLoginRequired as exc:
+                if cancel.is_set():
+                    return  # Ctrl+C killed Chrome too; the failure is spurious
                 log.warning("LinkedIn login required (%s); skipping post searches", exc)
                 login_blocked = True
                 out.put(("failed", query, "LinkedInLoginRequired"))
                 out.put(("event", {"type": "login_required", "source": query["source"]}))
                 continue
             except Exception as exc:
+                if cancel.is_set():
+                    return  # interrupted by cancel, not a real failure: no restart, no event
                 log.exception("Query failed: %s %r", query["source"], query["args"])
                 out.put(("failed", query, type(exc).__name__))
                 if _driver_alive(driver):

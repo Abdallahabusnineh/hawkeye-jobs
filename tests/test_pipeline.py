@@ -274,11 +274,18 @@ class CancelTests(PipelineTestCase):
     def test_ctrl_c_during_failure_join_still_finishes_run(self):
         class BrokenStore(Store):
             def add_jobs(self, run_id, jobs):
+                second_started.wait(5)  # fail only once the lane is inside its 2nd query
                 raise sqlite3.OperationalError("database is locked")
 
         broken = BrokenStore(Path(self.tmp.name) / "broken2.db")
 
+        second_started = threading.Event()
+        calls = []
+
         def slow(driver, args):  # keep the lane busy while the caller is in join()
+            calls.append(args)
+            if len(calls) == 2:
+                second_started.set()
             time.sleep(0.5)
             return [job_for("bayt", args)]
 
@@ -303,6 +310,35 @@ class CancelTests(PipelineTestCase):
             self.assertEqual(len(self.rec.drivers), 1)
         finally:
             broken.close()
+
+    def test_cancel_with_crashed_driver_does_not_restart_chrome(self):
+        cancel = threading.Event()
+
+        def die_with_cancel(driver, args):
+            cancel.set()
+            driver.alive = False
+            raise RuntimeError("chrome died with the process group")
+
+        self.rec.behaviour["bayt"] = die_with_cancel
+        summary = self.run_search(settings(keywords=("Java", "Kotlin"), sources=("bayt",)), cancel=cancel)
+        self.assertEqual(len(self.rec.drivers), 1)
+        self.assertEqual(self.of_type("browser_failed"), [])
+        self.assertEqual(self.of_type("query_failed"), [])
+        self.assertEqual(summary.state, "cancelled")
+        self.assertTrue(self.rec.drivers[0].quit_called)
+
+    def test_cancel_with_login_required_emits_no_login_event(self):
+        cancel = threading.Event()
+
+        def login_with_cancel(driver, args):
+            cancel.set()
+            raise LinkedInLoginRequired("https://www.linkedin.com/authwall")
+
+        self.rec.behaviour["linkedin_posts"] = login_with_cancel
+        summary = self.run_search(settings(keywords=("Java", "Kotlin"), sources=("linkedin_posts",)), cancel=cancel)
+        self.assertEqual(self.of_type("login_required"), [])
+        self.assertEqual(self.of_type("query_failed"), [])
+        self.assertEqual(summary.state, "cancelled")
 
     def test_cancel_stops_after_in_flight_query(self):
         cancel = threading.Event()
