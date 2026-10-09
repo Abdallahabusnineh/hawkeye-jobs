@@ -9,9 +9,11 @@ Lanes (one thread each, queries run one after another inside a lane):
     HTTP lane    : linkedin, indeed          (JobSpy, no browser)
     Browser lane : bayt, naukrigulf, google_jobs, linkedin_posts (one Chrome)
 
-Politeness: before each query a lane waits on that site's Throttle (random
-minimum gap between request starts, see throttle.py and POLITE_DELAYS), so users
-are not flagged as bots. The wait sleeps in short slices and honours `cancel`.
+Politeness: before each query a lane waits on its host group's Throttle (random
+minimum gap between request starts, see throttle.py, POLITE_DELAYS and
+SITE_GROUPS), so users are not flagged as bots. Throttles are shared by both
+lanes (linkedin and linkedin_posts both hit linkedin.com), back off after a
+failed query, and the wait sleeps in short slices that honour `cancel`.
 
 Lanes never touch the Store and never call on_event: they push messages onto a
 queue, and the thread that called run_search() does all saving and reporting.
@@ -44,6 +46,17 @@ POLITE_DELAYS = {  # (min, max) seconds between requests to the same site
     "naukrigulf": (4, 7),
     "google_jobs": (8, 12),
     "linkedin_posts": (10, 20),  # the user's own LinkedIn account: slowest
+}
+
+# Sources that hit the same host share one Throttle, whichever lane they run on
+# (e.g. linkedin via JobSpy and linkedin_posts via the user's logged-in Chrome).
+SITE_GROUPS = {
+    "linkedin": "linkedin.com",
+    "linkedin_posts": "linkedin.com",
+    "indeed": "indeed.com",
+    "bayt": "bayt.com",
+    "naukrigulf": "naukrigulf.com",
+    "google_jobs": "google.com",
 }
 
 
@@ -106,7 +119,19 @@ def _quit(driver) -> None:
 
 
 def _make_throttles(delays) -> dict:
-    return {source: Throttle(*gap) for source, gap in delays.items()}
+    """One shared Throttle per host group; a group uses the largest gap among its sources."""
+    groups = {}
+    for source, gap in delays.items():
+        group = SITE_GROUPS.get(source, source)
+        groups[group] = max(groups.get(group, (0, 0)), tuple(gap))
+    built = {group: Throttle(*gap) for group, gap in groups.items()}
+    return {source: built[SITE_GROUPS.get(source, source)] for source in delays}
+
+
+def _back_off(throttles, source) -> None:
+    throttle = throttles.get(source)
+    if throttle is not None:
+        throttle.back_off()
 
 
 def _may_proceed(throttles, source, cancel) -> bool:
@@ -120,9 +145,8 @@ def _skip_all(queries, reason, out) -> None:
         out.put(("skipped", query, reason))
 
 
-def _http_lane(queries, fetchers, keywords, cancel, out, delays) -> None:
+def _http_lane(queries, fetchers, keywords, cancel, out, throttles) -> None:
     seen_urls = set()
-    throttles = _make_throttles(delays)
     for query in queries:
         if cancel.is_set():
             return
@@ -133,14 +157,15 @@ def _http_lane(queries, fetchers, keywords, cancel, out, delays) -> None:
             jobs = fetchers[query["source"]](query["args"], seen_urls, keywords)
         except Exception as exc:
             log.exception("Query failed: %s %r", query["source"], query["args"])
+            if not cancel.is_set():
+                _back_off(throttles, query["source"])
             out.put(("failed", query, type(exc).__name__))
             continue
         out.put(("done", query, jobs))
 
 
-def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out, delays) -> None:
+def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out, throttles) -> None:
     seen_urls = set()
-    throttles = _make_throttles(delays)
     driver = None
     restarts_left = 1
     login_blocked = False
@@ -176,6 +201,7 @@ def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out, dela
                     return  # Ctrl+C killed Chrome too; the failure is spurious
                 log.warning("LinkedIn login required (%s); skipping post searches", exc)
                 login_blocked = True
+                _back_off(throttles, query["source"])
                 out.put(("failed", query, "LinkedInLoginRequired"))
                 out.put(("event", {"type": "login_required", "source": query["source"]}))
                 continue
@@ -183,6 +209,7 @@ def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out, dela
                 if cancel.is_set():
                     return  # interrupted by cancel, not a real failure: no restart, no event
                 log.exception("Query failed: %s %r", query["source"], query["args"])
+                _back_off(throttles, query["source"])
                 out.put(("failed", query, type(exc).__name__))
                 if _driver_alive(driver):
                     continue
@@ -240,14 +267,15 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
 
     delays = {source: (min_seconds, max_seconds)} is the polite gap between
     requests to one site; None uses POLITE_DELAYS, and a source missing from it
-    is not throttled.
+    is not throttled. Sources sharing a host (SITE_GROUPS) share one throttle at
+    the largest of their gaps.
     """
     cancel = cancel or threading.Event()
     owns_store = store is None
     store = store or Store()
     fetchers = fetchers or _default_fetchers()
     driver_factory = driver_factory or _default_driver_factory
-    delays = POLITE_DELAYS if delays is None else delays
+    throttles = _make_throttles(POLITE_DELAYS if delays is None else delays)
     emit = _make_emitter(on_event)
     keywords = list(settings["keywords"])
 
@@ -266,11 +294,11 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
     lanes = []
     if http_queries:
         lanes.append(threading.Thread(
-            target=_http_lane, args=(http_queries, fetchers, keywords, cancel, out, delays),
+            target=_http_lane, args=(http_queries, fetchers, keywords, cancel, out, throttles),
             name="hawkeye-http-lane", daemon=True))
     if browser_queries:
         lanes.append(threading.Thread(
-            target=_browser_lane, args=(browser_queries, fetchers, driver_factory, keywords, cancel, out, delays),
+            target=_browser_lane, args=(browser_queries, fetchers, driver_factory, keywords, cancel, out, throttles),
             name="hawkeye-browser-lane", daemon=True))
     for lane in lanes:
         lane.start()

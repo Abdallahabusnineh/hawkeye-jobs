@@ -1,5 +1,6 @@
 import sys
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -112,6 +113,50 @@ class ThrottleTests(unittest.TestCase):
         throttle.wait()
         throttle.wait()
         self.assertAlmostEqual(sum(self.time.sleeps), 6)
+
+    def test_back_off_doubles_the_gap_up_to_four_times(self):
+        throttle = self.make(5, 5)
+        throttle.wait()
+        throttle.back_off()
+        throttle.wait()
+        self.assertAlmostEqual(sum(self.time.sleeps), 10)
+        throttle.back_off()
+        throttle.back_off()   # would be 8x; capped at 4x
+        before = sum(self.time.sleeps)
+        throttle.wait()
+        self.assertAlmostEqual(sum(self.time.sleeps) - before, 20)
+
+    def test_back_off_still_draws_from_min_and_max(self):
+        throttle = self.make(3, 6)
+        throttle.back_off()
+        throttle.wait()
+        throttle.wait()
+        self.assertEqual(self.rand_calls, [(3, 6)])
+        self.assertAlmostEqual(sum(self.time.sleeps), 12)
+
+
+class ThrottleThreadTests(unittest.TestCase):
+    def test_concurrent_waits_get_slots_at_least_a_gap_apart(self):
+        gap = 0.05
+        throttle = Throttle(gap, gap)
+        starts = []
+        lock = threading.Lock()
+
+        def worker():
+            for _ in range(3):
+                throttle.wait()
+                with lock:
+                    starts.append(time.monotonic())
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        starts.sort()
+        self.assertEqual(len(starts), 6)
+        gaps = [b - a for a, b in zip(starts, starts[1:])]
+        self.assertTrue(all(g >= gap - 0.01 for g in gaps), gaps)
 
 
 if __name__ == "__main__":

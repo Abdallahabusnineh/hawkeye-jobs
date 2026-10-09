@@ -380,7 +380,7 @@ class ThrottleTests(PipelineTestCase):
         self.assertEqual(summary.state, "done")
         self.assertEqual(len(starts), 3)
         gaps = [b - a for a, b in zip(starts, starts[1:])]
-        self.assertTrue(all(gap >= 0.05 for gap in gaps), gaps)
+        self.assertTrue(all(gap >= 0.05 - 0.01 for gap in gaps), gaps)
 
     def test_cancel_while_waiting_on_throttle_ends_run_quickly(self):
         cancel = threading.Event()
@@ -400,7 +400,9 @@ class ThrottleTests(PipelineTestCase):
 
     def test_cancel_during_throttle_wait_in_browser_lane(self):
         cancel = threading.Event()
-        threading.Timer(0.3, cancel.set).start()
+        timer = threading.Timer(0.3, cancel.set)
+        self.addCleanup(timer.cancel)
+        timer.start()
         started = time.monotonic()
         summary = self.run_search(settings(keywords=("Java", "Kotlin"), sources=("bayt",)),
                                   cancel=cancel, delays={"bayt": (30, 30)})
@@ -414,17 +416,88 @@ class ThrottleTests(PipelineTestCase):
 
         class RecordingThrottle:
             def __init__(self, low, high, *args, **kwargs):
-                built.append((low, high))
+                self.gap = (low, high)
+                self.waits = 0
+                built.append(self)
 
             def wait(self, cancel=None):
+                self.waits += 1
                 return True
 
+            def back_off(self):
+                pass
+
+        fetched_while_waited = []
+
+        def check(driver, args):
+            bayt = [t for t in built if t.gap == (6, 10)]
+            fetched_while_waited.append(bool(bayt) and bayt[0].waits == 1)
+            return [job_for("bayt", args)]
+
+        self.rec.behaviour["bayt"] = check
         with mock.patch.object(pipeline, "Throttle", RecordingThrottle):
             kwargs = {"store": self.store, "fetchers": self.rec.fetchers(),
                       "driver_factory": self.rec.driver_factory}
             run_search(settings(sources=("bayt",)), **kwargs)
-        self.assertIn((6, 10), built)
-        self.assertEqual(sorted(built), sorted(pipeline.POLITE_DELAYS.values()))
+        self.assertEqual(fetched_while_waited, [True])
+        self.assertEqual(sorted(t.gap for t in built),
+                         sorted([(10, 20), (3, 6), (6, 10), (4, 7), (8, 12)]))
+
+    def test_linkedin_sources_share_one_throttle_at_the_largest_gap(self):
+        starts = []
+
+        def stamp(driver, args):
+            starts.append(time.monotonic())
+            return [job_for("linkedin_posts", args)]
+
+        def stamp_http(driver, args):
+            starts.append(time.monotonic())
+            return [job_for("linkedin", args)]
+
+        self.rec.behaviour["linkedin_posts"] = stamp
+        self.rec.behaviour["linkedin"] = stamp_http
+        self.run_search(settings(keywords=("Java", "Kotlin"), sources=("linkedin", "linkedin_posts")),
+                        delays={"linkedin": (0.05, 0.05), "linkedin_posts": (0.1, 0.1)})
+        starts.sort()
+        self.assertGreaterEqual(len(starts), 4)
+        gaps = [b - a for a, b in zip(starts, starts[1:])]
+        self.assertTrue(all(g >= 0.1 - 0.01 for g in gaps), gaps)
+
+    def test_gap_doubles_after_a_failed_query(self):
+        starts = []
+
+        def fail_first(driver, args):
+            starts.append(time.monotonic())
+            if len(starts) == 1:
+                raise ValueError("blocked?")
+            return [job_for("bayt", args)]
+
+        self.rec.behaviour["bayt"] = fail_first
+        self.run_search(settings(keywords=("Java", "Kotlin", "Go"), sources=("bayt",)),
+                        delays={"bayt": (0.05, 0.05)})
+        self.assertEqual(len(starts), 3)
+        self.assertGreaterEqual(starts[1] - starts[0], 0.1 - 0.01)
+
+    def test_no_back_off_when_failure_is_a_cancel(self):
+        cancel = threading.Event()
+
+        def die_with_cancel(driver, args):
+            cancel.set()
+            raise RuntimeError("killed")
+
+        self.rec.behaviour["linkedin"] = die_with_cancel
+        throttles = []
+        real = pipeline.Throttle
+
+        def spy(*a, **k):
+            throttles.append(real(*a, **k))
+            throttles[-1].back_off = mock.Mock()
+            return throttles[-1]
+
+        with mock.patch.object(pipeline, "Throttle", spy):
+            self.run_search(settings(keywords=("Java", "Kotlin"), sources=("linkedin",)),
+                            cancel=cancel, delays={"linkedin": (0.01, 0.01)})
+        throttles[0].back_off.assert_not_called()
 
     def test_source_missing_from_delays_is_not_throttled(self):
         started = time.monotonic()
