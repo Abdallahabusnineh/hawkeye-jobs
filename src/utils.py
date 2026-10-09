@@ -10,7 +10,7 @@ Contains two functions used by every scraper:
                       the last 48 hours. Handles multiple real-world date formats
                       found across LinkedIn, Indeed, Bayt, NaukriGulf, and Google Jobs.
 
-Imported by: scraper.py, bayt.py, naukrigulf.py, tracker.py
+Imported by: scraper.py, bayt.py, naukrigulf.py, store.py
 """
 
 from datetime import datetime, timezone
@@ -26,7 +26,7 @@ def clean_url(url: str) -> str:
 
     This produces a canonical form so the same job linked from multiple platforms
     (e.g. Google Jobs → Indeed, LinkedIn → Google Jobs) maps to one identical URL
-    and therefore one identical MD5 hash in tracker.py.
+    and therefore one identical MD5 hash in store.py.
 
     Parameters stripped:
         utm_source, utm_medium, utm_campaign, utm_content, utm_term,

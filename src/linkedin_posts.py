@@ -23,7 +23,7 @@ URL pattern:
     https://www.linkedin.com/search/results/content/?keywords=<enc>
         &datePosted=%22past-24h%22&sortBy=%22date_posted%22
     - datePosted=past-24h keeps posts fresh; cross-run
-      dedup in tracker.py prevents re-emailing the same post.
+      dedup in store.py prevents re-emailing the same post.
     - sortBy=date_posted surfaces the newest posts first.
 
 HTML selectors (last verified 2026 — LinkedIn obfuscates/changes its DOM often):
