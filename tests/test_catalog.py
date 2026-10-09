@@ -4,7 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from catalog import expand_searches, source_choice_label
+from catalog import expand_searches, plan_queries, source_choice_label
 
 
 class ExpandSearchesTests(unittest.TestCase):
@@ -136,6 +136,41 @@ class ExpandSearchesTests(unittest.TestCase):
     def test_site_menu_mentions_coverage(self):
         self.assertIn("Gulf only", source_choice_label("naukrigulf"))
         self.assertIn("LinkedIn jobs", source_choice_label("linkedin"))
+
+
+class PlanQueriesTests(unittest.TestCase):
+    def test_carries_location_id_keyword_and_args(self):
+        plan = plan_queries(["Java"], ["jordan", "remote"], ["linkedin", "bayt"])
+        self.assertEqual(plan, [
+            {"source": "linkedin", "keyword": "Java", "location_id": "jo",
+             "args": {"term": "Java", "location": "Jordan"}},
+            {"source": "bayt", "keyword": "Java", "location_id": "jo",
+             "args": ("java", "jordan")},
+            {"source": "linkedin", "keyword": "Java", "location_id": "remote",
+             "args": {"term": "Java", "location": "Remote"}},
+        ])
+
+    def test_linkedin_posts_have_no_location(self):
+        plan = plan_queries(["Java"], ["jo", "ae"], ["linkedin_posts"])
+        self.assertEqual(plan, [
+            {"source": "linkedin_posts", "keyword": "Java", "location_id": None, "args": "hiring Java"},
+            {"source": "linkedin_posts", "keyword": "Java", "location_id": None, "args": "looking for Java"},
+        ])
+
+    def test_unsupported_combination_plans_nothing(self):
+        self.assertEqual(plan_queries(["Java"], ["jo"], ["naukrigulf"]), [])
+
+    def test_expand_searches_is_plan_grouped_by_source(self):
+        args = (["Java", "Kotlin"], ["jo", "ae", "remote"], list(SOURCE_IDS))
+        grouped = {}
+        for query in plan_queries(*args):
+            grouped.setdefault(query["source"], []).append(query["args"])
+        searches = expand_searches(*args)
+        for source in SOURCE_IDS:
+            self.assertEqual(searches[source], grouped.get(source, []))
+
+
+SOURCE_IDS = ("linkedin", "indeed", "bayt", "naukrigulf", "google_jobs", "linkedin_posts")
 
 
 if __name__ == "__main__":

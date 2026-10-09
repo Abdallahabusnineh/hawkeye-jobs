@@ -193,12 +193,21 @@ def _slug(keyword: str) -> str:
     return "-".join(keyword.strip().lower().split())
 
 
-def expand_searches(keywords: list, location_ids: list, source_ids: list, country_labels=None) -> dict:
-    """Build per-source query lists from the user's keywords, locations, and sources."""
-    searches = _empty_searches()
+def plan_queries(keywords: list, location_ids: list, source_ids: list, country_labels=None) -> list:
+    """
+    Every query to run, in order, as {"source", "keyword", "location_id", "args"}.
+
+    `args` is exactly what that source's fetch function takes. `location_id` is the
+    normalised country id ('jo', 'remote', ...), or None for LinkedIn posts, which
+    are not location-scoped. The UI uses location_id to show a translated country name.
+    """
     selected = set(source_ids)
     keywords = [kw.strip() for kw in keywords if str(kw).strip()]
     country_labels = country_labels or {}
+    queries = []
+
+    def add(source, keyword, location_id, args):
+        queries.append({"source": source, "keyword": keyword, "location_id": location_id, "args": args})
 
     for loc_id in location_ids:
         nid = normalize_location_id(loc_id)
@@ -207,32 +216,31 @@ def expand_searches(keywords: list, location_ids: list, source_ids: list, countr
             continue
         for keyword in keywords:
             if "linkedin" in selected and loc.get("linkedin"):
-                searches["linkedin"].append({
-                    "term": keyword,
-                    "location": loc["linkedin"],
-                })
+                add("linkedin", keyword, nid, {"term": keyword, "location": loc["linkedin"]})
             if "indeed" in selected and loc.get("indeed"):
                 city, country = loc["indeed"]
-                searches["indeed"].append({
-                    "term": keyword,
-                    "location": city,
-                    "country": country,
-                })
+                add("indeed", keyword, nid, {"term": keyword, "location": city, "country": country})
             if "bayt" in selected and loc.get("bayt"):
-                searches["bayt"].append((_slug(keyword), loc["bayt"]))
+                add("bayt", keyword, nid, (_slug(keyword), loc["bayt"]))
             if "naukrigulf" in selected and loc.get("naukrigulf"):
-                searches["naukrigulf"].append((keyword.lower(), loc["naukrigulf"]))
+                add("naukrigulf", keyword, nid, (keyword.lower(), loc["naukrigulf"]))
             if "google_jobs" in selected:
                 if nid == "remote":
-                    searches["google_jobs"].append((f"{keyword} remote", ""))
+                    add("google_jobs", keyword, nid, (f"{keyword} remote", ""))
                 elif loc.get("google") is not None:
-                    searches["google_jobs"].append((keyword, loc["google"]))
+                    add("google_jobs", keyword, nid, (keyword, loc["google"]))
 
     if "linkedin_posts" in selected:
         for keyword in keywords:
-            searches["linkedin_posts"].extend([
-                f"hiring {keyword}",
-                f"looking for {keyword}",
-            ])
+            add("linkedin_posts", keyword, None, f"hiring {keyword}")
+            add("linkedin_posts", keyword, None, f"looking for {keyword}")
 
+    return queries
+
+
+def expand_searches(keywords: list, location_ids: list, source_ids: list, country_labels=None) -> dict:
+    """Build per-source query lists from the user's keywords, locations, and sources."""
+    searches = _empty_searches()
+    for query in plan_queries(keywords, location_ids, source_ids, country_labels):
+        searches[query["source"]].append(query["args"])
     return searches
