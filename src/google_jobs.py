@@ -40,10 +40,18 @@ Filtering:
     - SKIP_DOMAINS: Google-owned domains are excluded from apply links
 """
 
-import time
+import logging
 from datetime import datetime
+
 from bs4 import BeautifulSoup
+
+from browser import wait_for
 from filters import is_relevant_job
+
+log = logging.getLogger(__name__)
+
+GOOGLE_WAIT_SECONDS = 15
+CARD_SELECTOR = ".PUpOsf"
 
 SKIP_DOMAINS = ["google.com", "google.jo", "google.ae", "google.co", "accounts.google", "goo.gl"]
 
@@ -139,30 +147,22 @@ def _parse_google_page(html: str, seen_urls: set, location: str, keywords: list)
     return result
 
 
-def scrape_google_jobs(seen_urls: set, driver, searches=None, keywords=None) -> list:
-    """Scrape the given Google Jobs searches and return matching job dicts."""
-    searches = searches or []
-    keywords = keywords or []
-    all_jobs = []
-    print("\n[Google Jobs]")
+def _close_extra_tabs(driver):
+    handles = driver.window_handles
+    for handle in handles[1:]:
+        driver.switch_to.window(handle)
+        driver.close()
+    driver.switch_to.window(driver.window_handles[0])
 
-    for term, location in searches:
-        url = _build_url(term, location)
-        display = f"  '{term}' in {location or 'Worldwide'}"
-        try:
-            driver.get(url)
-            time.sleep(7)
 
-            handles = driver.window_handles
-            for h in handles[1:]:
-                driver.switch_to.window(h)
-                driver.close()
-            driver.switch_to.window(driver.window_handles[0])
-
-            jobs = _parse_google_page(driver.page_source, seen_urls, location, keywords)
-            all_jobs.extend(jobs)
-            print(f"{display}: {len(jobs)} jobs")
-        except Exception as e:
-            print(f"{display}: Error - {e}"[:120])
-
-    return all_jobs
+def fetch_google_jobs(driver, args, seen_urls: set, keywords: list) -> list:
+    """One Google Jobs search. args = (term, location). Raises on navigation errors."""
+    term, location = args
+    url = _build_url(term, location)
+    driver.get(url)
+    loaded = wait_for(driver, CARD_SELECTOR, GOOGLE_WAIT_SECONDS)
+    _close_extra_tabs(driver)
+    jobs = _parse_google_page(driver.page_source, seen_urls, location, keywords)
+    if not jobs and not loaded:
+        log.warning("Google Jobs: no job cards after %ss at %s (page title: %r)", GOOGLE_WAIT_SECONDS, url, driver.title)
+    return jobs

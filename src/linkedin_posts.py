@@ -13,11 +13,11 @@ Why this is separate from scraper.py:
 
 Authentication (REQUIRED):
     LinkedIn shows an auth wall to anonymous visitors on content search. This
-    scraper reuses a persistent Chrome profile (browser.create_driver's
-    user_data_dir). Log into LinkedIn ONCE by hand in that profile; the session
-    cookie is then reused on later runs. If the session is missing or
-    expired, the scraper detects the login/authwall redirect, prints a clear
-    instruction, and returns [] without crashing the rest of the pipeline.
+    scraper reuses a persistent Chrome profile (paths.linkedin_profile_dir()).
+    Log into LinkedIn ONCE by hand in that profile; the session cookie is then
+    reused on later runs. If the session is missing or expired,
+    fetch_linkedin_posts() raises LinkedInLoginRequired and the pipeline skips
+    the remaining post searches.
 
 URL pattern:
     https://www.linkedin.com/search/results/content/?keywords=<enc>
@@ -49,16 +49,24 @@ Job dict schema (same shape as every other scraper):
     published   -> relative time string as shown on the post (e.g. "5h")
 """
 
-import os
 import re
 import time
 from datetime import datetime
 from urllib.parse import quote
+
 from bs4 import BeautifulSoup
+
+from browser import wait_for
 from filters import is_hiring_post
 
 _MAX_SCROLLS = 4          # how many times to scroll to lazy-load more posts
 _SCROLL_PAUSE = 2.0       # seconds to wait after each scroll
+POSTS_WAIT_SECONDS = 15
+CARD_SELECTOR = 'div[data-urn*="urn:li:activity"]'
+
+
+class LinkedInLoginRequired(RuntimeError):
+    """LinkedIn redirected to a login / authwall page: the user must log in once in the Chrome profile."""
 
 
 def _post_within_48h(rel: str) -> bool:
@@ -171,35 +179,18 @@ def _parse_posts_page(html: str, seen_urls: set, keyword: str, keywords: list) -
     return result
 
 
-def scrape_linkedin_posts(seen_urls: set, driver, searches=None, keywords=None) -> list:
-    """Scrape LinkedIn hiring posts for the given phrases. Never aborts the pipeline."""
-    searches = searches or []
-    keywords = keywords or []
-    all_jobs = []
-    print("\n[LinkedIn Posts]")
+def fetch_linkedin_posts(driver, args, seen_urls: set, keywords: list) -> list:
+    """One LinkedIn content search. args = phrase, e.g. "hiring Java Developer". Raises LinkedInLoginRequired."""
+    phrase = args
+    driver.get(_build_url(phrase))
+    if _is_logged_out(driver):
+        raise LinkedInLoginRequired(driver.current_url)
+    wait_for(driver, CARD_SELECTOR, POSTS_WAIT_SECONDS)
+    if _is_logged_out(driver):
+        raise LinkedInLoginRequired(driver.current_url)
 
-    for keyword in searches:
-        display = f"  '{keyword}'"
-        try:
-            driver.get(_build_url(keyword))
-            time.sleep(5)
+    for _ in range(_MAX_SCROLLS):
+        driver.execute_script("window.scrollBy(0, document.body.scrollHeight);")
+        time.sleep(_SCROLL_PAUSE)
 
-            if _is_logged_out(driver):
-                profile = os.environ.get("LINKEDIN_PROFILE_DIR", "~/.hawkeye-linkedin-profile")
-                print("  ⚠ Not logged into LinkedIn — skipping post search.")
-                print(f"    Log in once manually in the profile at: {profile}")
-                print("    (open Chrome with that --user-data-dir, sign in to LinkedIn, close it)")
-                return all_jobs
-
-            for _ in range(_MAX_SCROLLS):
-                driver.execute_script("window.scrollBy(0, document.body.scrollHeight);")
-                time.sleep(_SCROLL_PAUSE)
-
-            jobs = _parse_posts_page(driver.page_source, seen_urls, keyword, keywords)
-            all_jobs.extend(jobs)
-            print(f"{display}: {len(jobs)} posts")
-        except Exception as e:
-            print(f"{display}: Error - {e}"[:120])
-
-    return all_jobs
-
+    return _parse_posts_page(driver.page_source, seen_urls, phrase, keywords)

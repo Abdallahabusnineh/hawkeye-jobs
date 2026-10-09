@@ -7,6 +7,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import bayt
+import google_jobs
+import linkedin_posts
 import naukrigulf
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -87,6 +89,52 @@ class NaukriGulfTests(unittest.TestCase):
         seen = {"https://www.naukrigulf.com/java-developer-jobs-in-riyadh-saudi-arabia-in-acme-gulf-5-to-8-years-n-cd-111"}
         with patch("naukrigulf.wait_for", return_value=True):
             self.assertEqual(naukrigulf.fetch_naukrigulf(driver, ("java developer", "saudi-arabia"), seen, KEYWORDS), [])
+
+
+class GoogleJobsTests(unittest.TestCase):
+    def test_fetch_takes_first_non_google_apply_link(self):
+        driver = FakeDriver(fixture("google_jobs.html"))
+        with patch("google_jobs.wait_for", return_value=True) as wait:
+            jobs = google_jobs.fetch_google_jobs(driver, ("Java Developer", "UAE"), set(), KEYWORDS)
+        self.assertEqual(driver.visited, ["https://www.google.com/search?q=Java+Developer+jobs+UAE&ibp=htl;jobs&hl=en"])
+        wait.assert_called_once_with(driver, ".PUpOsf", 15)
+        self.assertEqual(len(jobs), 1)
+        job = jobs[0]
+        self.assertEqual(job["url"], "https://ae.linkedin.com/jobs/view/java-developer-at-acme-cloud-123")
+        self.assertEqual(job["description"], "Acme Cloud - Dubai")
+        self.assertEqual((job["source"], job["location"], job["published"]), ("Google Jobs", "UAE", ""))
+
+    def test_closes_extra_tabs(self):
+        driver = FakeDriver(fixture("google_jobs.html"))
+        driver.window_handles = ["main", "popup"]
+        switched = []
+        driver.switch_to = SimpleNamespace(window=switched.append)
+        with patch("google_jobs.wait_for", return_value=True):
+            google_jobs.fetch_google_jobs(driver, ("Java Developer", "UAE"), set(), KEYWORDS)
+        self.assertEqual(switched, ["popup", "main"])
+
+
+class LinkedInPostsTests(unittest.TestCase):
+    def test_fetch_keeps_recent_hiring_posts(self):
+        driver = FakeDriver(fixture("linkedin_posts.html"), current_url="https://www.linkedin.com/search/results/content/")
+        with patch("linkedin_posts.wait_for", return_value=True) as wait, \
+             patch("linkedin_posts.time.sleep"):
+            jobs = linkedin_posts.fetch_linkedin_posts(driver, "hiring Java Developer", set(), KEYWORDS)
+        wait.assert_called_once_with(driver, 'div[data-urn*="urn:li:activity"]', 15)
+        self.assertEqual(len(driver.scripts), linkedin_posts._MAX_SCROLLS)
+        self.assertEqual(len(jobs), 1)
+        job = jobs[0]
+        self.assertEqual(job["url"], "https://www.linkedin.com/feed/update/urn:li:activity:7300000000000000001/")
+        self.assertEqual(job["description"], "Sample Recruiter · LinkedIn hiring post")
+        self.assertEqual((job["source"], job["published"]), ("LinkedIn Post", "5h"))
+
+    def test_raises_when_logged_out(self):
+        driver = FakeDriver("<html></html>", current_url="https://www.linkedin.com/authwall?trk=x")
+        with patch("linkedin_posts.wait_for", return_value=False), \
+             patch("linkedin_posts.time.sleep"):
+            with self.assertRaises(linkedin_posts.LinkedInLoginRequired):
+                linkedin_posts.fetch_linkedin_posts(driver, "hiring Java", set(), KEYWORDS)
+        self.assertEqual(driver.scripts, [])
 
 
 if __name__ == "__main__":
