@@ -9,6 +9,8 @@ hawkeye.log
 seen_jobs.json
 config.json
 countries_cache.json
+hawkeye.db
+hawkeye.db-*
 
 # Python
 __pycache__/

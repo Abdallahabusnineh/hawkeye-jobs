@@ -9,7 +9,11 @@ Terminal job hunter. The user picks keywords, locations, and sources; it scrapes
 ```
 hawkeye-jobs/
 ├── src/
-│   ├── main.py          # Prompts, then runs the pipeline
+│   ├── main.py          # Terminal front-end: prompts, prints events, emails new jobs
+│   ├── pipeline.py      # run_search(): plans queries, two lanes, saves per query, events, cancel
+│   ├── store.py         # SQLite store: runs, jobs, statuses, legacy dedup import
+│   ├── paths.py         # Per-OS data directory and the files inside it
+│   ├── logs.py          # Rotating log file (hawkeye.log)
 │   ├── settings.py      # Terminal prompts + config.json
 │   ├── picker.py        # Arrow/space checkbox, searchable country list, yes/no
 │   ├── catalog.py       # Country/source → per-site queries
@@ -20,8 +24,7 @@ hawkeye-jobs/
 │   ├── naukrigulf.py    # NaukriGulf via Selenium
 │   ├── google_jobs.py   # Google Jobs via Selenium
 │   ├── linkedin_posts.py # LinkedIn content/post search via Selenium (needs login)
-│   ├── browser.py       # Shared Chrome driver factory
-│   ├── tracker.py       # Cross-run deduplication (seen_jobs.json)
+│   ├── browser.py       # Chrome discovery, version detection, driver factory, wait_for()
 │   ├── utils.py         # Shared: clean_url(), is_within_48h()
 │   └── email_sender.py  # HTML email builder + Gmail SMTP sender
 ├── config.example.json  # Sample search settings
@@ -31,28 +34,54 @@ hawkeye-jobs/
 └── CLAUDE.md
 ```
 
-`config.json`, `seen_jobs.json`, `countries_cache.json`, and `hawkeye.log` are created at runtime and gitignored.
+Runtime files live in the per-OS data directory (see src/paths.py), never in the repo: hawkeye.db, config.json, countries_cache.json, hawkeye.log, linkedin-profile/.
 
 ---
 
-## Pipeline Flow (`src/main.py`)
+## Pipeline Flow (`src/main.py` → `src/pipeline.py`)
 
-```
-collect_settings()              → reuse config.json or prompt in the terminal
-expand_searches()               → per-site queries from keywords × locations
-    ↓
-scrape_all()                    → LinkedIn + Indeed (JobSpy, no browser)
-    ↓
-create_driver()                 → Chrome only if a browser source is selected
-scrape_bayt / naukrigulf / google_jobs / linkedin_posts
-driver.quit()
-    ↓
-filter_new_jobs(all_jobs)       → Remove already-seen jobs (seen_jobs.json)
-    ↓
-print jobs + send_email()       → Terminal list + Gmail HTML digest
-```
+`main.py` does: `setup_logging()` → `migrate_legacy_config()` → open `Store` → `recover_interrupted_runs()` → `import_legacy_seen_file()` → print `Data folder: ...` → `collect_settings()` → `run_search(settings, on_event=print, store=store)` → print and email `summary.new_jobs`. The store is closed in a `finally`. Ctrl+C is handled inside `run_search` (see Cancel).
 
-`seen_urls` is a Python `set` built from all JobSpy results before Selenium scrapers run. Each Selenium scraper receives and mutates the same set — preventing cross-source duplicates within a single run (e.g. the same job appearing on both Bayt and Google Jobs).
+`run_search(settings, on_event, cancel, *, country_labels, store, fetchers, driver_factory) -> RunSummary(run_id, state, found, new_jobs)`:
+
+1. `catalog.plan_queries()` lists every query (`source`, `keyword`, `location_id`, `args`), sorted in `SOURCE_ORDER`. Each gets an `index`.
+2. The run is recorded (`store.start_run`) and `run_started` is emitted.
+3. Two lanes, one thread each, run in parallel; queries inside a lane run one after another:
+   - **HTTP lane** — `linkedin`, `indeed` (JobSpy, no browser).
+   - **Browser lane** — `bayt`, `naukrigulf`, `google_jobs`, `linkedin_posts` (one Chrome driver for the whole lane).
+4. Lanes never touch the Store and never call `on_event`. They push messages on a queue. The thread that called `run_search` drains it: it sets each job's `keyword` and `location_id`, calls `store.add_jobs()` for that query (so a crash or Ctrl+C keeps everything saved so far), and emits events. `on_event` therefore always runs on the caller's thread. If `on_event` raises, the error is logged and ignored.
+5. `store.finish_run()` records the final state, then `run_finished` is emitted. If `run_search` created its own Store, it closes it.
+
+Each lane keeps its own `seen_urls` set (cross-source duplicates within a lane); cross-run dedup is the Store's job.
+
+### Events
+
+Every event is a dict with a `type` key. Values are data only (never English sentences); `main.format_event()` turns them into terminal lines.
+
+| type | fields |
+|---|---|
+| `run_started` | `run_id`, `total` |
+| `query_started` | `index`, `source`, `keyword`, `location_id` |
+| `query_done` | `index`, `source`, `keyword`, `location_id`, `found`, `new` |
+| `query_failed` | `index`, `source`, `keyword`, `location_id`, `error` (exception class name) |
+| `query_skipped` | `index`, `source`, `keyword`, `location_id`, `reason` in `login_required`, `browser_unavailable` |
+| `login_required` | `source` |
+| `browser_failed` | `reason` in `chrome_not_found`, `start_failed`, `crashed` |
+| `run_finished` | `run_id`, `state`, `found`, `new` |
+
+Guarantees: `run_started` is first and `run_finished` last. A query's `query_started` precedes its `query_done` / `query_failed`; skipped queries have no `query_started`. Events from the two lanes may interleave. On cancel, lanes stop without emitting skip events.
+
+### Failure handling
+
+- One failed query emits `query_failed` and the lane continues.
+- `ChromeNotFound` or a failed Chrome start: `browser_failed` and every browser query is skipped (`browser_unavailable`); the HTTP lane is unaffected.
+- `LinkedInLoginRequired`: `query_failed`, then `login_required`; the remaining `linkedin_posts` queries are skipped (`login_required`).
+- Chrome dying mid-run: the driver is restarted once; a second crash emits `browser_failed` (`crashed`) and skips the rest.
+- Errors before `run_started` (e.g. the database cannot be written) raise. After it, `run_search` never raises: an unexpected error gives state `failed`.
+
+### Cancel
+
+Pass a `threading.Event` as `cancel`, or press Ctrl+C: a `KeyboardInterrupt` on the calling thread sets the event instead of aborting. Each lane checks it before its next query, so cancel takes at most one in-flight query. Lanes are always joined (the Chrome driver is quit), the run is recorded as `cancelled`, and `run_finished` is still emitted. Jobs saved so far are kept, and `main.py` prints and emails them.
 
 ---
 
@@ -80,7 +109,7 @@ Older configs that stored `jordan` / `uae` still work (`LEGACY_IDS` in `catalog.
 
 `get_location(id)` maps a country id (`jo`, `gb`, `remote`, …) to per-site strings/slugs. `OVERRIDES` holds Indeed/Bayt/NaukriGulf aliases. Sources that do not support a country (Bayt/NaukriGulf outside the Gulf, Indeed for Remote) are skipped. Unknown ISO codes still search LinkedIn, Indeed, and Google Jobs.
 
-`expand_searches(keywords, location_ids, source_ids, country_labels=None)` returns:
+`plan_queries(keywords, location_ids, source_ids, country_labels=None)` is what the pipeline uses: a flat list of `{source, keyword, location_id, args}` (`location_id` is `None` for LinkedIn posts), where `args` is exactly what that source's `fetch_*` takes. `expand_searches(...)` groups the same `args` per source:
 
 ```python
 {
@@ -99,7 +128,7 @@ Older configs that stored `jordan` / `uae` still work (`LEGACY_IDS` in `catalog.
 
 ### `src/scraper.py` — LinkedIn + Indeed
 
-Uses the `python-jobspy` library. No browser required. Search lists are passed in from `expand_searches()`, not hardcoded.
+Uses the `python-jobspy` library. No browser required. Queries come from `catalog.plan_queries()`, not hardcoded.
 
 **`_parse_jobs(jobs, seen_urls, location, keywords) -> list`**
 
@@ -107,26 +136,28 @@ Uses the `python-jobspy` library. No browser required. Search lists are passed i
 - `is_relevant_job()` for title filtering
 - `is_within_48h()` for date filtering
 
-**`scrape_all(linkedin_searches, indeed_searches, keywords) -> list`**
+**`fetch_linkedin(args, seen_urls, keywords)` / `fetch_indeed(...)`**
 
-Calls `scrape_jobs()` with `hours_old=48`. One failed search does not abort the run.
+Each runs ONE JobSpy search (`hours_old=48`) and raises on error. `pipeline.py` loops over the queries, so one failed search does not abort the run.
 
 ---
 
-### `src/browser.py` — Shared Chrome Driver
+### `src/browser.py` — Chrome discovery + shared driver
 
 ```python
-def create_driver(headless=False, user_data_dir=None) -> uc.Chrome
+def find_chrome() -> str | None
+def wait_for(driver, css, timeout) -> bool
+def create_driver(headless=False, user_data_dir=None) -> uc.Chrome   # raises ChromeNotFound
 ```
 
-Creates a `undetected-chromedriver` instance. `user_data_dir` (when set) points Chrome at a persistent profile directory (`--user-data-dir`) so a logged-in session survives across runs — used by `linkedin_posts.py` for the LinkedIn content search. Key options:
-- `--disable-blink-features=AutomationControlled` — hides Selenium signature
-- `version_main=149` — must match the installed Chrome version (check with `google-chrome --version`)
-- `headless=False` is **required** — Bayt.com uses Cloudflare which blocks headless Chrome
+- **`find_chrome()`** checks the macOS app path, the Windows `Program Files` / `LOCALAPPDATA` folders, then `google-chrome`, `google-chrome-stable`, `chrome` on `PATH`.
+- **Version:** the installed Chrome major version is detected at runtime (Windows: registry `BLBeacon`; elsewhere: `chrome --version`) and passed as `version_main`, so there is no hardcoded version. Set `HAWKEYE_CHROME_MAJOR` only if detection is wrong. If nothing is detected, undetected-chromedriver resolves it itself.
+- **`ChromeNotFound`** is raised by `create_driver()` when Chrome is missing; the pipeline turns it into a `browser_failed` event.
+- **`wait_for(driver, css, timeout)`** polls (0.25 s) until an element matching `css` exists. Returns `False` on timeout; the caller parses whatever loaded. Scrapers use it instead of fixed sleeps.
+- `user_data_dir` points Chrome at a persistent profile (`--user-data-dir`), used for the LinkedIn login.
+- `--disable-blink-features=AutomationControlled` hides the Selenium signature. `headless=False` is **required**: Bayt.com's Cloudflare blocks headless Chrome.
 
-Called once in `main.py`, the same driver instance is passed to all three Selenium scrapers, then `.quit()` is called in the `finally` block.
-
-**To update Chrome version:** change `version_main=149` to match your Chrome version.
+`pipeline.py` creates one driver per run (browser lane) and quits it in a `finally`.
 
 ---
 
@@ -149,7 +180,9 @@ Example: `https://www.bayt.com/en/uae/jobs/flutter-developer-jobs/`
 | Location | `.job-company-location-wrapper .t-mute span` |
 | Date posted | `[data-automation-id='job-active-date']` |
 
-**Cloudflare bypass:** navigates to URL, then `time.sleep(8)` to let the Cloudflare JS challenge resolve. Must use `headless=False`.
+**Cloudflare bypass:** `wait_for(driver, CARD_SELECTOR, 20)` waits up to 20 s for job cards while the Cloudflare JS challenge resolves. Must use `headless=False`. If no cards appear it logs a warning (with the page title) and parses what loaded.
+
+**Entry point:** `fetch_bayt(driver, args, seen_urls, keywords)` runs ONE query (`args = (term_slug, country_slug)`) and raises on error; the pipeline decides what to do.
 
 **`_ensure_window(driver)`** — closes any extra browser tabs opened during navigation, switches back to tab 0. Called before and after each `driver.get()`.
 
@@ -181,7 +214,9 @@ Example: `https://www.naukrigulf.com/flutter-developer-jobs-in-uae`
 | Location | `li.info-loc span:last-child` |
 | Date posted | `span.time` |
 
-**Wait:** `time.sleep(6)` per page — NaukriGulf is an Angular SPA; needs time to render.
+**Wait:** `wait_for(driver, CARD_SELECTOR, 15)` — NaukriGulf is an Angular SPA and needs time to render. A timeout logs a warning.
+
+**Entry point:** `fetch_naukrigulf(driver, args, seen_urls, keywords)` runs ONE query (`args = (keyword, location_slug)`) and raises on error.
 
 **`_ensure_main_window(driver)`** — NaukriGulf opens extra tabs on some navigations. This helper closes all tabs except the first and switches back to it. Called before and after each `driver.get()`.
 
@@ -219,7 +254,9 @@ SKIP_DOMAINS = ["google.com", "google.jo", "google.ae", "google.co", "accounts.g
 
 **Note:** Google Jobs doesn't expose a `date_posted` field in its HTML, so `published` is set to `""`. Jobs are included regardless of age (no 48h filter here — Google Jobs already surfaces recent jobs).
 
-**Wait:** `time.sleep(7)` per search for the jobs panel to render.
+**Wait:** `wait_for(driver, CARD_SELECTOR, 15)` (`.PUpOsf`) for the jobs panel to render. A timeout logs a warning.
+
+**Entry point:** `fetch_google_jobs(driver, args, seen_urls, keywords)` runs ONE query (`args = (term, location)`) and raises on error.
 
 ---
 
@@ -227,19 +264,19 @@ SKIP_DOMAINS = ["google.com", "google.jo", "google.ae", "google.co", "accounts.g
 
 Scrapes LinkedIn's **global content search** (feed posts) — *not* the Jobs board that `scraper.py`/JobSpy reads. Targets hiring posts like "We're hiring a Flutter developer!".
 
-**Authentication (required):** LinkedIn shows an auth wall to anonymous visitors. The scraper reuses a **persistent Chrome profile** created by `create_driver(user_data_dir=...)`. `main.py` sets this from `LINKEDIN_PROFILE_DIR` (default `~/.hawkeye-linkedin-profile`). Log into LinkedIn **once by hand** in that profile; the session cookie is reused every run. If logged out, the scraper detects the login/authwall redirect, prints instructions, and returns `[]` without aborting the pipeline.
+**Authentication (required):** LinkedIn shows an auth wall to anonymous visitors. The scraper reuses a **persistent Chrome profile** created by `create_driver(user_data_dir=...)`. The pipeline passes `paths.linkedin_profile_dir()`, resolved in this order: `LINKEDIN_PROFILE_DIR` if set; else the old `~/.hawkeye-linkedin-profile` if it exists (so existing users stay logged in); else `<data dir>/linkedin-profile`. Log into LinkedIn **once by hand** in that profile; the session cookie is reused every run. If logged out, `fetch_linkedin_posts()` raises `LinkedInLoginRequired` (checked before and after the wait); the pipeline emits `login_required`, skips the remaining post queries, and carries on with the other sources.
 
 **First-time setup:**
 ```bash
 # Open Chrome with the same profile the automation uses, sign into LinkedIn, then close it.
-open -a "Google Chrome" --args --user-data-dir="$HOME/.hawkeye-linkedin-profile"
+open -a "Google Chrome" --args --user-data-dir="<paths.linkedin_profile_dir()>"
 ```
 
 **URL pattern:**
 ```
 https://www.linkedin.com/search/results/content/?keywords=<enc>&datePosted=%22past-24h%22&sortBy=%22date_posted%22
 ```
-`datePosted=past-24h` keeps posts fresh; `sortBy=date_posted` surfaces newest first. Cross-run dedup (`seen_jobs.json`) prevents re-emailing the same post.
+`datePosted=past-24h` keeps posts fresh; `sortBy=date_posted` surfaces newest first. Cross-run dedup (`store.py`) prevents re-emailing the same post.
 
 **Search phrases:** built from the user's keywords, e.g. `hiring Flutter Developer`, `looking for Flutter Developer`.
 
@@ -254,7 +291,7 @@ https://www.linkedin.com/search/results/content/?keywords=<enc>&datePosted=%22pa
 | Author | `.update-components-actor__title, .update-components-actor__name` |
 | Relative time | `.update-components-actor__sub-description` |
 
-**Wait / scroll:** 5s initial render, then 4 scrolls × 2s to lazy-load more posts.
+**Wait / scroll:** `wait_for(driver, CARD_SELECTOR, 15)`, then 4 scrolls × 2s to lazy-load more posts. If no cards load and nothing is parsed it logs a timeout warning (page title included).
 
 **Note:** `source` is `"LinkedIn Post"`; `title` is the post's opening hook (truncated to ~90 chars); `description` is `"{author} · LinkedIn hiring post"`.
 
@@ -289,32 +326,24 @@ Handles multiple formats:
 
 ---
 
-### `src/tracker.py` — Cross-Run Deduplication
+### `src/store.py` — SQLite store (jobs, statuses, runs)
 
-Persists job IDs across runs in `seen_jobs.json` (root of the project).
+Replaces the old `tracker.py` / `seen_jobs.json`. Keeps every job found, so history and statuses can be shown. The database is `paths.db_path()` (`hawkeye.db`).
 
-**`seen_jobs.json` format:**
-```json
-{
-  "seen": ["md5hash1", "md5hash2", ...],
-  "count": 1234
-}
-```
+**Tables** (`PRAGMA user_version` = `SCHEMA_VERSION`, created on first open):
+- `runs` — one row per search: `started_at`, `finished_at`, `state`, `settings_json`, `found_count`, `new_count`. States: `running`, `done`, `cancelled`, `failed`.
+- `jobs` — one row per unique URL. `id` = `job_id(url)` = MD5 of `clean_url(url).strip().rstrip("/")` (same as the old tracker). Columns: `title`, `url`, `description`, `source`, `location`, `location_id`, `keyword`, `published`, `status`, `status_changed_at`, `first_seen_at`, `last_seen_at`, `first_run_id`.
+- `legacy_seen` — hashes imported from the old `seen_jobs.json`; used for dedup only.
 
-**`_job_id(job: dict) -> str`**
+**Statuses:** `new`, `saved`, `applied`, `dismissed` (`set_status`; `list_jobs` hides dismissed unless asked).
 
-Canonical ID = MD5 of the cleaned URL (after stripping UTM params and trailing slash). This means:
-- Same job URL from two different scrapers → same ID → deduplicated
-- UTM-param variant of same URL → same ID
+**`add_jobs(run_id, jobs) -> list`** is called once per query. A job whose id is in `legacy_seen` is skipped. A job already in `jobs` only gets `last_seen_at` updated. Otherwise it is inserted with status `new`. It returns only the genuinely new jobs (each with an `id`), which are what the terminal prints and emails.
 
-**`filter_new_jobs(jobs: list) -> list`**
+**Legacy import:** `import_legacy_seen_file(path)` reads `seen_jobs.json` into `legacy_seen`; it is safe to call every start and never modifies or deletes the file. `settings.migrate_legacy_config()` likewise copies the repo-root `config.json` into the data dir once.
 
-1. Loads `seen_jobs.json` (treats a missing file as an empty set)
-2. For each job, computes its ID; keeps only jobs whose ID is not in the seen set
-3. Adds new IDs to the seen set and saves back to `seen_jobs.json`
-4. Returns only the new jobs
+**Threading:** one `Store` per thread (sqlite3 connections are not shared). WAL mode lets a reader work while a search writes. In a run only the thread calling `run_search` uses the Store. `recover_interrupted_runs()` marks leftover `running` runs as `failed`; call it once at process start, never during a search.
 
-**Resetting:** `rm -f seen_jobs.json` — forces re-notification of all current listings on next run.
+**Resetting:** delete `hawkeye.db` from the data directory to be notified about everything again.
 
 ---
 
@@ -362,7 +391,8 @@ All scrapers produce job dicts with this shape:
     "url":         str,   # Direct apply URL (UTM-cleaned before dedup)
     "description": str,   # "{company} - {location}" or just location
     "source":      str,   # "Linkedin", "Indeed", "Bayt", "NaukriGulf", "Google Jobs"
-    "keyword":     str,   # Search term used (currently always "")
+    "keyword":     str,   # The user keyword that found the job (set by the pipeline)
+    "location_id": str,   # Normalised country id of the query (e.g. "jo"); None for LinkedIn posts
     "location":    str,   # Search location (e.g. "United Arab Emirates")
     "published":   str,   # Raw date string from the source
     "date_found":  str,   # UTC timestamp when the scraper ran
@@ -388,11 +418,6 @@ Locations are chosen from the world list in the terminal. Per-source support:
 
 ## Common Maintenance Tasks
 
-### Update Chrome version
-If `undetected-chromedriver` fails with version mismatch:
-1. Check Chrome version: `google-chrome --version` (or check in Chrome → About)
-2. Update `version_main=149` in `src/browser.py` to match
-
 ### Add a country or source mapping
 Country names come from REST Countries. Site-specific slugs (Bayt/NaukriGulf/Indeed aliases) live in `OVERRIDES` in `src/catalog.py`. Add a source in `SOURCES` / `SOURCE_ORDER`.
 
@@ -404,6 +429,7 @@ Bayt and NaukriGulf change their HTML periodically. If a scraper returns 0 jobs:
 1. Open the site in a browser
 2. Inspect a job card's HTML
 3. Update the `soup.select(...)` calls in the relevant `_parse_*_page()` function
+4. The `CARD_SELECTOR` constant in each scraper must match the job-card selector the parser uses (it is what `wait_for` waits on).
 
 ### Google Jobs returns 0
 If `.PUpOsf` or `[role="list"].EDblX` selectors stop working:
@@ -416,6 +442,7 @@ If `.PUpOsf` or `[role="list"].EDblX` selectors stop working:
 ## Dependencies
 
 ```
+platformdirs             # Per-OS data directory
 python-jobspy==1.1.80    # LinkedIn + Indeed scraper
 pandas                   # Required by jobspy
 requests                 # HTTP utilities
@@ -435,4 +462,4 @@ cp .env.example .env   # fill in GMAIL_USER / GMAIL_PASS / RECIPIENT_EMAIL
 bash run.sh            # prompts for keywords, locations, sources
 ```
 
-To change saved searches: pick **No** on the reuse menu, or `rm -f config.json`.
+To change saved searches: pick **No** on the reuse menu, or delete `config.json` from the data directory. Tests: `venv/bin/python3 -m unittest discover -s tests -v`.

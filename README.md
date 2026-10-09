@@ -8,12 +8,13 @@ Deduplicates across sources and across runs. Nothing runs in the background — 
 
 - Interactive checkboxes: arrows move, space selects, enter confirms
 - Country list from a public API on every `bash run.sh` run — type to search, space to select
-- Remembers your last choices in `config.json`
+- Remembers your last choices
 - Searches LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts
 - Keeps titles that match your keywords
 - Only includes jobs posted in the last 48 hours
 - Prints new jobs in the terminal and emails an HTML digest
-- Remembers seen jobs so you are not notified twice
+- Remembers every job it has found (with a status: new / saved / applied / dismissed) so you are not notified twice
+- Ctrl+C stops a search cleanly; jobs found so far are kept
 
 ## Requirements
 
@@ -63,25 +64,33 @@ You will be asked for:
 
 Bayt.com and NaukriGulf only cover Jordan/Gulf. Other countries still search LinkedIn, Indeed, and Google Jobs.
 
-Delete `countries_cache.json` only if a previous failed run saved a bad list; each `bash run.sh` already calls the API again.
+## Where your data lives
 
-### LinkedIn hiring posts (optional)
+Everything hawkeye-jobs saves is kept in one folder on your computer:
 
-LinkedIn blocks anonymous content search. Log in once in the profile Chrome uses:
+| OS | Folder |
+|---|---|
+| macOS | `~/Library/Application Support/hawkeye-jobs` |
+| Windows | `C:\Users\<you>\AppData\Local\hawkeye-jobs` |
+| Linux | `~/.local/share/hawkeye-jobs` |
 
-```bash
-open -a "Google Chrome" --args --user-data-dir="$HOME/.hawkeye-linkedin-profile"
-```
+It contains `hawkeye.db` (jobs and searches), `config.json` (your search settings), `hawkeye.log` (attach this when reporting a problem), and `linkedin-profile/` (the Chrome profile used for LinkedIn posts).
 
-Sign in, close Chrome, then run hawkeye-jobs and include **LinkedIn hiring posts**.
+Set `HAWKEYE_DATA_DIR` to use a different folder. If you used hawkeye-jobs before this change, your old `config.json` and `seen_jobs.json` are imported automatically the first time you run it. The old files are left in place.
+
+**Reset** (forget all jobs and get notified again): delete `hawkeye.db` from that folder.
+
+**LinkedIn posts** need a one-time login. Open Chrome with the profile the tool uses, sign in to LinkedIn, and close it:
+
+    open -a "Google Chrome" --args --user-data-dir="$HOME/Library/Application Support/hawkeye-jobs/linkedin-profile"
+
+If you already have `~/.hawkeye-linkedin-profile` from an older version, it keeps being used.
+
+**Chrome** is found automatically on macOS, Windows, and Linux, and its version is detected for you. Set `HAWKEYE_CHROME_MAJOR` only if detection picks the wrong version.
 
 ## Reset
 
-```bash
-rm -f seen_jobs.json         # notify about listings again
-rm -f config.json            # re-enter keywords / countries / sources
-rm -f countries_cache.json   # re-download the world country list
-```
+See [Where your data lives](#where-your-data-lives) to forget all jobs.
 
 If an older version installed a macOS LaunchAgent:
 
@@ -105,8 +114,11 @@ hawkeye-jobs/
 │   ├── naukrigulf.py      # NaukriGulf
 │   ├── google_jobs.py     # Google Jobs
 │   ├── linkedin_posts.py  # LinkedIn hiring posts
-│   ├── browser.py         # Shared Chrome driver
-│   ├── tracker.py         # Deduplication
+│   ├── browser.py         # Chrome discovery + shared driver
+│   ├── pipeline.py        # One search run: lanes, events, cancel
+│   ├── store.py           # SQLite jobs, statuses, runs
+│   ├── paths.py           # Data directory and file locations
+│   ├── logs.py            # Rotating log file
 │   ├── utils.py           # URL cleaning, date parsing
 │   └── email_sender.py    # HTML email + Gmail SMTP
 ├── docs/ARCHITECTURE.md   # Technical reference
@@ -121,9 +133,9 @@ hawkeye-jobs/
 | ----------------------------- | ---------------------------------------------------------- |
 | No email                      | Jobs still print in the terminal. Fill in `.env`           |
 | 0 jobs from Bayt / NaukriGulf | Chrome must be installed; those sites are Gulf/Jordan only |
-| Chrome version error          | Set `version_main` in `src/browser.py` to match Chrome     |
+| Chrome version error          | Set `HAWKEYE_CHROME_MAJOR` to your Chrome major version    |
 | Gmail auth error              | Generate a new App Password                                |
-| LinkedIn posts empty          | Log in once using the persistent Chrome profile above      |
+| LinkedIn posts empty          | Log in once using the LinkedIn Chrome profile (see above)  |
 
 ## License
 
