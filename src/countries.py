@@ -6,14 +6,14 @@ import json
 import re
 from pathlib import Path
 
+from paths import countries_cache_path
+
 API_URLS = [
     "https://api.first.org/data/v1/countries?limit=300",
     "https://raw.githubusercontent.com/mledoze/countries/master/countries.json",
     "https://countriesnow.space/api/v0.1/countries/iso",
 ]
 API_URL = API_URLS[0]
-ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CACHE = ROOT / "countries_cache.json"
 
 REMOTE = {"id": "remote", "label": "Remote"}
 
@@ -136,7 +136,7 @@ def load_countries(fetcher=None, cache_path: Path | None = None) -> list:
     Every `bash run.sh` run calls the API. A local cache is only used if every
     live request fails.
     """
-    cache_path = cache_path or DEFAULT_CACHE
+    cache_path = cache_path or countries_cache_path()
     fetch = fetcher or _http_fetch
     for url in API_URLS:
         try:

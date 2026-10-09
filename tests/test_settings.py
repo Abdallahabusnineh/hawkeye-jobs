@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -141,6 +142,56 @@ class ConfirmChoicesTests(unittest.TestCase):
             settings.confirm_picker_title("countries"),
             "Are these countries correct?",
         )
+
+
+class DataDirConfigTests(unittest.TestCase):
+    def test_save_config_keeps_unknown_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            path.write_text(json.dumps({"keywords": ["Old"], "app": {"language": "ar"}}), encoding="utf-8")
+            settings.save_config({"keywords": ["Java"], "locations": ["jo"], "sources": ["bayt"]}, path)
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["app"], {"language": "ar"})
+            self.assertEqual(saved["keywords"], ["Java"])
+            self.assertEqual(saved["sources"], ["bayt"])
+
+    def test_save_config_overwrites_corrupt_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            path.write_text("{broken", encoding="utf-8")
+            data = {"keywords": ["Java"], "locations": ["jo"], "sources": ["bayt"]}
+            settings.save_config(data, path)
+            self.assertEqual(settings.load_config(path), data)
+
+    def test_default_path_is_in_data_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"HAWKEYE_DATA_DIR": tmp}):
+                data = {"keywords": ["Java"], "locations": ["jo"], "sources": ["bayt"]}
+                settings.save_config(data)
+                self.assertTrue((Path(tmp) / "config.json").exists())
+                self.assertEqual(settings.load_config(), data)
+
+    def test_migrate_legacy_config_copies_once_and_keeps_original(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "repo"
+            root.mkdir()
+            legacy = root / "config.json"
+            legacy.write_text(json.dumps({"keywords": ["Java"], "locations": ["jo"], "sources": ["bayt"]}), encoding="utf-8")
+            target = Path(tmp) / "data" / "config.json"
+            target.parent.mkdir()
+            self.assertTrue(settings.migrate_legacy_config(root, target))
+            self.assertTrue(legacy.exists())
+            self.assertEqual(target.read_text(encoding="utf-8"), legacy.read_text(encoding="utf-8"))
+            self.assertFalse(settings.migrate_legacy_config(root, target))
+
+    def test_migrate_never_overwrites_existing_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "config.json").write_text('{"keywords": ["Old"]}', encoding="utf-8")
+            target = root / "data-config.json"
+            target.write_text('{"keywords": ["New"]}', encoding="utf-8")
+            self.assertFalse(settings.migrate_legacy_config(root, target))
+            self.assertEqual(json.loads(target.read_text(encoding="utf-8")), {"keywords": ["New"]})
 
 
 if __name__ == "__main__":

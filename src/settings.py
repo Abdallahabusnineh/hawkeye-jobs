@@ -1,15 +1,20 @@
 """Interactive search settings: prompt once, reuse from config.json next time."""
 
 import json
+import logging
+import shutil
 import sys
 from pathlib import Path
 
 from catalog import SOURCE_ORDER, SOURCES, get_location, normalize_location_id, source_choice_label
 from countries import CountryFetchError, load_countries
+from paths import config_path
 from picker import color_error, color_hint, color_question, color_selected, confirmed_line, pick_many, pick_one, pick_searchable
 
+log = logging.getLogger(__name__)
+
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CONFIG_PATH = ROOT / "config.json"
+SEARCH_KEYS = ("keywords", "locations", "sources")
 
 
 def parse_selection(raw: str, count: int) -> list:
@@ -38,7 +43,8 @@ def parse_keywords(raw: str) -> list:
     return [part.strip() for part in (raw or "").split(",") if part.strip()]
 
 
-def load_config(path: Path = DEFAULT_CONFIG_PATH):
+def load_config(path=None):
+    path = Path(path) if path else config_path()
     if not path.exists():
         return None
     try:
@@ -59,8 +65,31 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH):
     }
 
 
-def save_config(data: dict, path: Path = DEFAULT_CONFIG_PATH) -> None:
-    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+def save_config(data: dict, path=None) -> None:
+    """Write keywords/locations/sources, keeping any other keys already in the file (e.g. the app's settings)."""
+    path = Path(path) if path else config_path()
+    existing = {}
+    if path.exists():
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                existing = loaded
+        except (OSError, json.JSONDecodeError):
+            existing = {}
+    for key in SEARCH_KEYS:
+        existing[key] = list(data[key])
+    path.write_text(json.dumps(existing, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def migrate_legacy_config(root: Path = ROOT, target=None) -> bool:
+    """Copy <repo>/config.json into the data directory once. The original stays where it is."""
+    target = Path(target) if target else config_path()
+    legacy = Path(root) / "config.json"
+    if target.exists() or not legacy.exists():
+        return False
+    shutil.copy2(legacy, target)
+    log.info("Copied legacy config %s to %s", legacy, target)
+    return True
 
 
 def _format_saved(data: dict, country_labels=None) -> str:
@@ -188,8 +217,9 @@ def prompt_new_settings(interactive: bool = True, countries=None) -> dict:
     }
 
 
-def collect_settings(path: Path = DEFAULT_CONFIG_PATH, interactive=None, countries=None) -> dict:
+def collect_settings(path=None, interactive=None, countries=None) -> dict:
     """Return settings from a reuse prompt, or ask and save a new config."""
+    path = Path(path) if path else config_path()
     if interactive is None:
         interactive = can_use_picker()
 

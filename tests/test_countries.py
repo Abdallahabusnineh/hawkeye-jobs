@@ -1,8 +1,10 @@
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -153,6 +155,14 @@ class SearchSelectTests(unittest.TestCase):
         state = apply_search_key(state, "enter")
         self.assertTrue(state.done)
         self.assertEqual(state.indexes(), [0])
+
+
+class CountryCachePathTests(unittest.TestCase):
+    def test_default_cache_lives_in_data_dir(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict(os.environ, {"HAWKEYE_DATA_DIR": tmp}):
+                load_countries(fetcher=lambda url: SAMPLE_API)
+            self.assertTrue((Path(tmp) / "countries_cache.json").exists())
 
 
 if __name__ == "__main__":
