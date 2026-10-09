@@ -1,18 +1,26 @@
 """
-scraper.py — LinkedIn + Indeed scraper via JobSpy
-===================================================
-Uses the python-jobspy library (no browser required) to search LinkedIn and Indeed.
+scraper.py — LinkedIn + Indeed via JobSpy
+==========================================
+Uses the python-jobspy library (no browser required). Each fetch_* function runs
+ONE search and raises on any error; pipeline.py loops over the queries and
+decides what to do with failures.
 
-Search queries come from catalog.expand_searches() based on the user's
-terminal choices. Titles are kept only if they match the user's keywords.
+Titles are kept only if they match the user's keywords (is_relevant_job) and
+were posted within 48 hours (is_within_48h).
 """
 
+import logging
 from datetime import datetime
 
 from jobspy import scrape_jobs
 
 from filters import is_relevant_job
-from utils import is_within_48h, clean_url
+from utils import clean_url, is_within_48h
+
+log = logging.getLogger(__name__)
+
+RESULTS_WANTED = 10
+HOURS_OLD = 48
 
 
 def _parse_jobs(jobs, seen_urls, location, keywords):
@@ -46,53 +54,30 @@ def _parse_jobs(jobs, seen_urls, location, keywords):
             "date_found": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
         })
     if skipped:
-        print(f"    (filtered {skipped} irrelevant)")
+        log.debug("Filtered %d irrelevant/old jobs for %s", skipped, location)
     return result
 
 
-def scrape_all(linkedin_searches=None, indeed_searches=None, keywords=None) -> list:
-    """Run the given LinkedIn and Indeed searches. One failure does not abort the run."""
-    linkedin_searches = linkedin_searches or []
-    indeed_searches = indeed_searches or []
-    keywords = keywords or []
-    all_jobs = []
-    seen_urls = set()
-    print(f"[hawkeye-jobs] Starting search at {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}")
+def fetch_linkedin(args: dict, seen_urls: set, keywords: list) -> list:
+    """One LinkedIn Jobs search. args = {"term", "location"}."""
+    jobs = scrape_jobs(
+        site_name=["linkedin"],
+        search_term=args["term"],
+        location=args["location"],
+        results_wanted=RESULTS_WANTED,
+        hours_old=HOURS_OLD,
+    )
+    return _parse_jobs(jobs, seen_urls, args["location"], keywords)
 
-    if linkedin_searches:
-        print("\n[LinkedIn]")
-        for s in linkedin_searches:
-            try:
-                jobs = scrape_jobs(
-                    site_name=["linkedin"],
-                    search_term=s["term"],
-                    location=s["location"],
-                    results_wanted=10,
-                    hours_old=48,
-                )
-                parsed = _parse_jobs(jobs, seen_urls, s["location"], keywords)
-                all_jobs.extend(parsed)
-                print(f"  '{s['term']}' in {s['location'] or 'Worldwide'}: {len(parsed)} jobs")
-            except Exception as e:
-                print(f"  '{s['term']}' in {s['location'] or 'Worldwide'}: Error - {e}")
 
-    if indeed_searches:
-        print("\n[Indeed]")
-        for s in indeed_searches:
-            try:
-                jobs = scrape_jobs(
-                    site_name=["indeed"],
-                    search_term=s["term"],
-                    location=s["location"],
-                    results_wanted=10,
-                    hours_old=48,
-                    country_indeed=s["country"],
-                )
-                parsed = _parse_jobs(jobs, seen_urls, s["location"], keywords)
-                all_jobs.extend(parsed)
-                print(f"  '{s['term']}' in {s['location']}: {len(parsed)} jobs")
-            except Exception as e:
-                print(f"  '{s['term']}' in {s['location']}: Error - {e}")
-
-    print(f"\n[hawkeye-jobs] Total unique jobs from job boards: {len(all_jobs)}")
-    return all_jobs
+def fetch_indeed(args: dict, seen_urls: set, keywords: list) -> list:
+    """One Indeed search. args = {"term", "location", "country"}."""
+    jobs = scrape_jobs(
+        site_name=["indeed"],
+        search_term=args["term"],
+        location=args["location"],
+        results_wanted=RESULTS_WANTED,
+        hours_old=HOURS_OLD,
+        country_indeed=args["country"],
+    )
+    return _parse_jobs(jobs, seen_urls, args["location"], keywords)
