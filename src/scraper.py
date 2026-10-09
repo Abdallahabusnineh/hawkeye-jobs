@@ -10,7 +10,7 @@ were posted within 48 hours (is_within_48h).
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from jobspy import scrape_jobs
 
@@ -51,7 +51,7 @@ def _parse_jobs(jobs, seen_urls, location, keywords):
             "keyword": "",
             "location": location,
             "published": date_p,
-            "date_found": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+            "date_found": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         })
     if skipped:
         log.debug("Filtered %d irrelevant/old jobs for %s", skipped, location)

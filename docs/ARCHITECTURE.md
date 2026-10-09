@@ -91,7 +91,7 @@ Pass a `threading.Event` as `cancel`, or press Ctrl+C: a `KeyboardInterrupt` on 
 
 `collect_settings()` loads `config.json` if present and shows a Yes/No picker (`↑↓` + enter). Yes reuses it. No (or no saved file) prompts for keywords (typed), then a searchable country list (`type` to filter, `↑↓` move, space select, `*` all visible, enter confirm), then **Confirm these countries: …?** (`Yes, continue` / `No, choose again`). Same confirm step after website checkboxes (`↑↓` move, space select, `a` all, `d` remove all, enter confirm). Writes `config.json`. If stdin is not a TTY, it falls back to numbered lists and `[Y/n]` confirms.
 
-Country names are fetched live from a public country API every `bash run.sh` run (`src/countries.py` tries FIRST.org, then a GitHub countries dump, then CountriesNow). If every request fails, `countries_cache.json` from a previous successful fetch is used. There is no hardcoded country picker list.
+Country names are fetched live from a public country API every `bash run.sh` run (`src/countries.py` tries FIRST.org, then a GitHub countries dump, then CountriesNow). If every request fails, `countries_cache.json` from a previous successful fetch is used. If the data-dir cache does not exist yet (first run after upgrading), the legacy repo-root `countries_cache.json` is read as a fallback (read-only: never copied or written; `countries.LEGACY_CACHE`). There is no hardcoded country picker list.
 
 `config.json` shape:
 
@@ -343,7 +343,7 @@ Replaces the old `tracker.py` / `seen_jobs.json`. Keeps every job found, so hist
 
 **Threading:** one `Store` per thread (sqlite3 connections are not shared). WAL mode lets a reader work while a search writes. In a run only the thread calling `run_search` uses the Store. `recover_interrupted_runs()` marks leftover `running` runs as `failed`; call it once at process start, never during a search.
 
-**Resetting:** delete `hawkeye.db` from the data directory. If a repo-root `seen_jobs.json` exists, delete it too: `main.py` re-imports it into `legacy_seen` on every start, so its jobs would stay suppressed.
+**Resetting:** delete `hawkeye.db*` (`hawkeye.db`, `hawkeye.db-wal`, `hawkeye.db-shm`; the last two remain after an unclean exit) from the data directory. If a repo-root `seen_jobs.json` exists, delete it too: `main.py` re-imports it into `legacy_seen` on every start, so its jobs would stay suppressed.
 
 ---
 

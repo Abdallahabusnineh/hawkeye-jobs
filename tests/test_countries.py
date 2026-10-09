@@ -114,8 +114,23 @@ class LoadCountriesTests(unittest.TestCase):
             def boom(url):
                 raise RuntimeError("offline")
 
-            with self.assertRaises(CountryFetchError):
+            with patch("countries.LEGACY_CACHE", Path(tmp) / "no-legacy.json"), \
+                 self.assertRaises(CountryFetchError):
                 load_countries(fetcher=boom, cache_path=cache)
+
+    def test_falls_back_to_legacy_repo_root_cache_without_copying(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            legacy = Path(tmp) / "legacy.json"
+            legacy.write_text(json.dumps([{"id": "jp", "label": "Japan"}]), encoding="utf-8")
+            cache = Path(tmp) / "data" / "cache.json"
+
+            def boom(url):
+                raise RuntimeError("offline")
+
+            with patch("countries.LEGACY_CACHE", legacy):
+                countries = load_countries(fetcher=boom, cache_path=cache)
+            self.assertTrue(any(c["id"] == "jp" for c in countries))
+            self.assertFalse(cache.exists())
 
 
 class SearchSelectTests(unittest.TestCase):

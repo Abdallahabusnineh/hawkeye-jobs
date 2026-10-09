@@ -157,11 +157,13 @@ class Store:
             return 0
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except (OSError, ValueError):  # ValueError: bad JSON or not UTF-8
             log.warning("Could not read legacy seen-jobs file %s", path)
             return 0
         seen = data.get("seen") if isinstance(data, dict) else None
-        hashes = [h for h in (seen or []) if isinstance(h, str) and h]
+        if not isinstance(seen, list):
+            return 0
+        hashes = [h for h in seen if isinstance(h, str) and h]
         with self.conn:
             before = self.conn.total_changes
             self.conn.executemany(

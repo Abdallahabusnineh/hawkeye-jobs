@@ -41,7 +41,7 @@ Filtering:
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
 
@@ -139,7 +139,7 @@ def _parse_google_page(html: str, seen_urls: set, location: str, keywords: list)
                 "keyword":     "",
                 "location":    location or "Remote/Worldwide",
                 "published":   "",
-                "date_found":  datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+                "date_found":  datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             })
         except Exception:
             continue

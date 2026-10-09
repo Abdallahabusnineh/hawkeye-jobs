@@ -52,7 +52,7 @@ Job dict schema (same shape as every other scraper):
 import logging
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 from bs4 import BeautifulSoup
@@ -174,7 +174,7 @@ def _parse_posts_page(html: str, seen_urls: set, keyword: str, keywords: list) -
                 "keyword": keyword,
                 "location": "",
                 "published": rel,
-                "date_found": datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+                "date_found": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             })
         except Exception:
             continue

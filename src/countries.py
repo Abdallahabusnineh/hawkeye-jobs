@@ -8,6 +8,9 @@ from pathlib import Path
 
 from paths import countries_cache_path
 
+# Pre-data-dir location of the cache; read-only fallback for the first run after upgrading.
+LEGACY_CACHE = Path(__file__).resolve().parent.parent / "countries_cache.json"
+
 API_URLS = [
     "https://api.first.org/data/v1/countries?limit=300",
     "https://raw.githubusercontent.com/mledoze/countries/master/countries.json",
@@ -152,6 +155,8 @@ def load_countries(fetcher=None, cache_path: Path | None = None) -> list:
             continue
 
     cached = _load_cache(cache_path)
+    if not cached and not cache_path.exists():
+        cached = _load_cache(LEGACY_CACHE)
     if cached:
         return _with_remote(cached)
     raise CountryFetchError(

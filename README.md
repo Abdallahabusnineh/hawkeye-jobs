@@ -78,7 +78,7 @@ It contains `hawkeye.db` (jobs and searches), `config.json` (your search setting
 
 Set `HAWKEYE_DATA_DIR` to use a different folder. If you used hawkeye-jobs before this change, your old `config.json` and `seen_jobs.json` are imported automatically the first time you run it. The old files are left in place.
 
-**Reset** (forget all jobs and get notified again): delete `hawkeye.db` from that folder. If you used an older version, also delete the old `seen_jobs.json` in the project folder, otherwise it is imported again on the next run and those jobs stay hidden.
+**Reset** (forget all jobs and get notified again): delete `hawkeye.db*` (all three files: `hawkeye.db`, `hawkeye.db-wal`, `hawkeye.db-shm`) from that folder. If you used an older version, also delete the old `seen_jobs.json` in the project folder, otherwise it is imported again on the next run and those jobs stay hidden.
 
 **LinkedIn posts** need a one-time login. Open Chrome with the profile the tool uses, sign in to LinkedIn, and close it:
 

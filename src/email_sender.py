@@ -35,7 +35,7 @@ import smtplib
 import os
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 GMAIL_USER = ""
@@ -81,7 +81,7 @@ def _build_html(jobs: list) -> str:
     Returns:
         HTML string ready to attach as text/html MIME part
     """
-    now = datetime.utcnow().strftime("%d %b %Y — %H:%M UTC")
+    now = datetime.now(timezone.utc).strftime("%d %b %Y — %H:%M UTC")
 
     # Group jobs by source
     by_source: dict = {}

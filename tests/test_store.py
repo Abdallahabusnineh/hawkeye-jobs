@@ -126,6 +126,18 @@ class LegacySeenTests(StoreTestCase):
         self.assertEqual(self.store.import_legacy_seen_file(Path(self.tmp.name) / "nope.json"), 0)
         bad = Path(self.tmp.name) / "bad.json"
         bad.write_text("{not json", encoding="utf-8")
+        with self.assertLogs("store", "WARNING"):
+            self.assertEqual(self.store.import_legacy_seen_file(bad), 0)
+
+    def test_non_utf8_file_imports_nothing(self):
+        bad = Path(self.tmp.name) / "latin.json"
+        bad.write_bytes(b'{"seen": ["\xff\xfe"]}')
+        with self.assertLogs("store", "WARNING"):
+            self.assertEqual(self.store.import_legacy_seen_file(bad), 0)
+
+    def test_seen_must_be_a_list(self):
+        bad = Path(self.tmp.name) / "str.json"
+        bad.write_text(json.dumps({"seen": "abc"}), encoding="utf-8")
         self.assertEqual(self.store.import_legacy_seen_file(bad), 0)
 
 
