@@ -170,6 +170,16 @@ def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out) -> N
         _quit(driver)
 
 
+def _join_lanes(lanes, cancel) -> None:
+    """Wait for every lane to finish; Ctrl+C here cancels but never abandons a lane."""
+    for lane in lanes:
+        while lane.is_alive():
+            try:
+                lane.join()
+            except KeyboardInterrupt:
+                cancel.set()
+
+
 def _make_emitter(on_event):
     def emit(event: dict) -> None:
         if on_event is None:
@@ -178,6 +188,9 @@ def _make_emitter(on_event):
             on_event(event)
         except Exception:
             log.exception("on_event raised for %s", event.get("type"))
+        except KeyboardInterrupt:
+            if event.get("type") != "run_finished":
+                raise
     return emit
 
 
@@ -192,6 +205,7 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
     cancels the run instead of aborting it.
     """
     cancel = cancel or threading.Event()
+    owns_store = store is None
     store = store or Store()
     fetchers = fetchers or _default_fetchers()
     driver_factory = driver_factory or _default_driver_factory
@@ -264,13 +278,20 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
         cancel.set()
         state = "failed"
     finally:
-        for lane in lanes:
-            lane.join()
+        _join_lanes(lanes, cancel)
 
-    try:
-        store.finish_run(run_id, state, totals["found"], len(totals["new_jobs"]))
-    except Exception:
-        log.exception("Could not record the end of run %s", run_id)
+    # Tail: a Ctrl+C here must not leave the run 'running' or skip run_finished.
+    for _ in range(3):
+        try:
+            store.finish_run(run_id, state, totals["found"], len(totals["new_jobs"]))
+            break
+        except KeyboardInterrupt:
+            cancel.set()
+        except Exception:
+            log.exception("Could not record the end of run %s", run_id)
+            break
     emit({"type": "run_finished", "run_id": run_id, "state": state,
           "found": totals["found"], "new": len(totals["new_jobs"])})
+    if owns_store:
+        store.close()
     return RunSummary(run_id=run_id, state=state, found=totals["found"], new_jobs=totals["new_jobs"])

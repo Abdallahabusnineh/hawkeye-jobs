@@ -1,8 +1,11 @@
+import logging
 import sqlite3
 import sys
 import tempfile
 import threading
+import time
 import unittest
+from unittest import mock
 from pathlib import Path
 from urllib.parse import quote
 
@@ -88,8 +91,12 @@ class PipelineTestCase(unittest.TestCase):
         self.store = Store(Path(self.tmp.name) / "test.db")
         self.rec = Recorder()
         self.events = []
+        # Expected failures log tracebacks; keep the test output clean.
+        self.null_handler = logging.NullHandler()
+        logging.getLogger("pipeline").addHandler(self.null_handler)
 
     def tearDown(self):
+        logging.getLogger("pipeline").removeHandler(self.null_handler)
         self.store.close()
         self.tmp.cleanup()
 
@@ -264,6 +271,39 @@ class FailureTests(PipelineTestCase):
 
 
 class CancelTests(PipelineTestCase):
+    def test_ctrl_c_during_failure_join_still_finishes_run(self):
+        class BrokenStore(Store):
+            def add_jobs(self, run_id, jobs):
+                raise sqlite3.OperationalError("database is locked")
+
+        broken = BrokenStore(Path(self.tmp.name) / "broken2.db")
+
+        def slow(driver, args):  # keep the lane busy while the caller is in join()
+            time.sleep(0.5)
+            return [job_for("bayt", args)]
+
+        self.rec.behaviour["bayt"] = slow
+        real_join = threading.Thread.join
+        interrupted = []
+
+        def join_once_interrupted(thread, *args, **kwargs):
+            if thread.name.startswith("hawkeye-") and not interrupted:
+                interrupted.append(True)
+                raise KeyboardInterrupt
+            return real_join(thread, *args, **kwargs)
+
+        try:
+            with mock.patch.object(threading.Thread, "join", join_once_interrupted):
+                summary = self.run_search(settings(keywords=("Java", "Kotlin"), sources=("bayt",)), store=broken)
+            self.assertEqual(interrupted, [True])
+            self.assertEqual(summary.state, "failed")
+            self.assertEqual(self.events[-1]["type"], "run_finished")
+            self.assertEqual(broken.list_runs()[0]["state"], "failed")
+            self.assertTrue(all(d.quit_called for d in self.rec.drivers))
+            self.assertEqual(len(self.rec.drivers), 1)
+        finally:
+            broken.close()
+
     def test_cancel_stops_after_in_flight_query(self):
         cancel = threading.Event()
 
