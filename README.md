@@ -11,7 +11,7 @@ Deduplicates across sources and across runs. Nothing runs in the background — 
 - Remembers your last choices
 - Searches LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts
 - Keeps titles that match your keywords
-- Only includes jobs posted in the last 48 hours
+- Only includes jobs posted in the last 7 days
 - Prints new jobs in the terminal and emails an HTML digest
 - Remembers every job it has found (with a status: new / saved / applied / dismissed) so you are not notified twice
 - Waits politely between requests to each site so your accounts and connection are not flagged

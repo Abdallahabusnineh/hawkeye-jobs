@@ -25,7 +25,7 @@ hawkeye-jobs/
 │   ├── google_jobs.py   # Google Jobs via Selenium
 │   ├── linkedin_posts.py # LinkedIn content/post search via Selenium (needs login)
 │   ├── browser.py       # Chrome discovery, version detection, driver factory, wait_for()
-│   ├── utils.py         # Shared: clean_url(), is_within_48h()
+│   ├── utils.py         # Shared: clean_url(), is_recent()
 │   └── email_sender.py  # HTML email builder + Gmail SMTP sender
 ├── config.example.json  # Sample search settings
 ├── .env.example         # Credential template
@@ -153,11 +153,11 @@ Uses the `python-jobspy` library. No browser required. Queries come from `catalo
 
 - `clean_url()` before dedup
 - `is_relevant_job()` for title filtering
-- `is_within_48h()` for date filtering
+- `is_recent()` for date filtering
 
 **`fetch_linkedin(args, seen_urls, keywords)` / `fetch_indeed(...)`**
 
-Each runs ONE JobSpy search (`hours_old=48`) and raises on error. `pipeline.py` loops over the queries, so one failed search does not abort the run.
+Each runs ONE JobSpy search (`hours_old=168`) and raises on error. `pipeline.py` loops over the queries, so one failed search does not abort the run.
 
 ---
 
@@ -205,7 +205,7 @@ Example: `https://www.bayt.com/en/uae/jobs/flutter-developer-jobs/`
 
 **`_ensure_window(driver)`** — closes any extra browser tabs opened during navigation, switches back to tab 0. Called before and after each `driver.get()`.
 
-**`_parse_bayt_page(html, seen_urls, location, keywords)`** — parses raw HTML with BeautifulSoup. Applies `is_relevant_job()` and `is_within_48h()`.
+**`_parse_bayt_page(html, seen_urls, location, keywords)`** — parses raw HTML with BeautifulSoup. Applies `is_relevant_job()` and `is_recent()`.
 
 ---
 
@@ -271,7 +271,7 @@ Each `link_grps[i]` contains multiple `<a>` tags (one per platform hosting the j
 SKIP_DOMAINS = ["google.com", "google.jo", "google.ae", "google.co", "accounts.google", "goo.gl"]
 ```
 
-**Note:** Google Jobs doesn't expose a `date_posted` field in its HTML, so `published` is set to `""`. Jobs are included regardless of age (no 48h filter here — Google Jobs already surfaces recent jobs).
+**Note:** Google Jobs doesn't expose a `date_posted` field in its HTML, so `published` is set to `""`. Jobs are included regardless of age (no age filter here — Google Jobs already surfaces recent jobs).
 
 **Wait:** `wait_for(driver, CARD_SELECTOR, 15)` (`.PUpOsf`) for the jobs panel to render. A timeout logs a warning.
 
@@ -293,13 +293,13 @@ open -a "Google Chrome" --args --user-data-dir="<paths.linkedin_profile_dir()>"
 
 **URL pattern:**
 ```
-https://www.linkedin.com/search/results/content/?keywords=<enc>&datePosted=%22past-24h%22&sortBy=%22date_posted%22
+https://www.linkedin.com/search/results/content/?keywords=<enc>&datePosted=%22past-week%22&sortBy=%22date_posted%22
 ```
-`datePosted=past-24h` keeps posts fresh; `sortBy=date_posted` surfaces newest first. Cross-run dedup (`store.py`) prevents re-emailing the same post.
+`datePosted=past-week` keeps posts to the last 7 days; `sortBy=date_posted` surfaces newest first. Cross-run dedup (`store.py`) prevents re-emailing the same post.
 
 **Search phrases:** built from the user's keywords, e.g. `hiring Flutter Developer`, `looking for Flutter Developer`.
 
-**Relevance filter (`is_hiring_post`):** does **not** use `is_relevant_job()` (post text is prose, not a title). A post is kept only if its text mentions a user keyword stem **and** contains a hiring signal (`hiring`, `looking for`, `wanted`, `vacancy`, `open position`, …). Recency is enforced by the URL filter plus `_post_within_48h()` for LinkedIn's compact times (`5h`, `1d`, `2w`).
+**Relevance filter (`is_hiring_post`):** does **not** use `is_relevant_job()` (post text is prose, not a title). A post is kept only if its text mentions a user keyword stem **and** contains a hiring signal (`hiring`, `looking for`, `wanted`, `vacancy`, `open position`, …). Recency is enforced by the URL filter plus `_post_is_recent()` for LinkedIn's compact times (`5h`, `1d`, `2w`).
 
 **HTML selectors (as of 2026 — LinkedIn changes its DOM often):**
 | Data | Selector |
@@ -326,21 +326,22 @@ Strips: `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `
 
 Example: `https://indeed.com/viewjob?jk=abc123&utm_source=google` → `https://indeed.com/viewjob?jk=abc123`
 
-**`is_within_48h(date_str: str) -> bool`**
+**`is_recent(date_str: str, today=None) -> bool`**
 
-Returns `True` if the job was posted within 48 hours. `MAX_AGE_HOURS = 48`.
+Returns `True` if the job was posted within 7 days. `MAX_AGE_DAYS = 7`. `today` (a date) is injectable for tests; dates are compared as UTC calendar dates.
 
 Handles multiple formats:
 | Input format | Example | Behavior |
 |---|---|---|
 | Empty / None / NaN | `""`, `"none"`, `"nan"` | `True` (benefit of the doubt) |
 | Immediate | `"just now"`, `"today"`, `"moments ago"` | `True` |
-| Hours ago | `"3 hours ago"` | `True` if ≤ 48 |
-| Days ago | `"1 day ago"`, `"2 days ago"` | `True` if ≤ 2 |
+| Hours ago | `"3 hours ago"` | `True` if ≤ 7 x 24 |
+| Days ago | `"1 day ago"`, `"7 days ago"` | `True` if ≤ 7 |
+| Weeks ago | `"1 week ago"` | `True` if ≤ 1 (`"2 weeks ago"` is `False`) |
 | Yesterday | `"yesterday"` | `True` |
-| Old markers | `"30+ days ago"`, `"3 weeks ago"`, `"1 month ago"` | `False` |
-| Day-month | `"29 Apr"`, `"1 May"` | Compare against now, `True` if ≤ 48h |
-| ISO date | `"2026-05-04"` | Compare against now, `True` if ≤ 48h |
+| Old markers | `"30+ days ago"`, `"1 month ago"`, `"1 year ago"` | `False` |
+| Day-month | `"29 Apr"`, `"1 May"` | Calendar dates, `True` if ≤ 7 days (future dates roll back a year) |
+| ISO date | `"2026-05-04"` | Calendar dates, `True` if ≤ 7 days (a time part is ignored) |
 | Unparseable | anything else | `True` |
 
 ---

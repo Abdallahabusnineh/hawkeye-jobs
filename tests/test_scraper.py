@@ -31,7 +31,7 @@ class FetchLinkedInTests(unittest.TestCase):
         kwargs = scrape_jobs.call_args.kwargs
         self.assertEqual(kwargs["site_name"], ["linkedin"])
         self.assertEqual((kwargs["search_term"], kwargs["location"]), ("Java", "Jordan"))
-        self.assertEqual((kwargs["results_wanted"], kwargs["hours_old"]), (10, 48))
+        self.assertEqual((kwargs["results_wanted"], kwargs["hours_old"]), (10, 168))
 
     def test_skips_urls_already_seen_in_this_lane(self):
         seen = {"https://www.linkedin.com/jobs/view/1"}

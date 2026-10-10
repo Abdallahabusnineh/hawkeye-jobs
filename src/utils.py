@@ -6,8 +6,8 @@ Contains two functions used by every scraper:
     clean_url()     — strips UTM and tracking query parameters from a URL so that
                       the same job linked from different platforms hashes to the same ID.
 
-    is_within_48h() — returns True if a date string represents a posting within
-                      the last 48 hours. Handles multiple real-world date formats
+    is_recent()     — returns True if a date string represents a posting within
+                      the last 7 days (MAX_AGE_DAYS). Handles multiple real-world date formats
                       found across LinkedIn, Indeed, Bayt, NaukriGulf, and Google Jobs.
 
 Imported by: scraper.py, bayt.py, naukrigulf.py, store.py
@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
 import re
 
-MAX_AGE_HOURS = 48  # jobs older than this are filtered out
+MAX_AGE_DAYS = 7  # jobs older than this are filtered out
 
 
 def clean_url(url: str) -> str:
@@ -53,70 +53,80 @@ def clean_url(url: str) -> str:
         return url
 
 
-def is_within_48h(date_str: str) -> bool:
+def is_recent(date_str: str, today=None) -> bool:
     """
-    Return True if the job was posted within the last 48 hours (MAX_AGE_HOURS).
+    Return True if the job was posted within the last MAX_AGE_DAYS (7) days.
 
     Handles the variety of date formats returned by different job boards:
 
         Format               Example              Result
-        ─────────────────────────────────────────────────────
+        ─────────────────────────────────────────────────────────────
         Empty / None / NaN   "", "none", "nan"    True  (benefit of the doubt)
         Immediate            "just now", "today"  True
-        Hours ago            "3 hours ago"        True if ≤ 48
-        Days ago             "1 day ago"          True if ≤ 2
         Yesterday            "yesterday"          True
-        Old markers          "30+ days ago"       False
-                             "3 weeks ago"        False
+        Hours ago            "3 hours ago"        True if ≤ 7 x 24
+        Days ago             "5 days ago"         True if ≤ 7
+        Weeks ago            "1 week ago"         True if ≤ 1 ("2 weeks ago" is False)
+        Old markers          "30+ days ago"       False (any "+")
                              "1 month ago"        False
-        Day-month string     "29 Apr", "1 May"    Compare against today (48h window)
-        ISO date             "2026-05-04"         Compare against now (48h window)
+                             "1 year ago"         False
+        Day-month string     "8 Oct", "8 October" Calendar dates: True if today - date ≤ 7 days
+        ISO date / datetime  "2026-10-08"         Calendar dates (a time part is ignored)
         Unparseable          anything else        True  (benefit of the doubt)
+
+    Dates are compared as calendar dates in UTC, so "2026-10-08" and
+    "2 days ago" agree. A day-month date in the future is from last year.
 
     Args:
         date_str : raw date string from the job board (any format above)
+        today    : the current UTC date (a date or datetime); defaults to now. For tests.
 
     Returns:
         bool — True means include the job, False means skip it
     """
-    if not date_str or date_str.lower() in ("none", "nan", "n/a", "-"):
+    if not date_str or str(date_str).lower() in ("none", "nan", "n/a", "-"):
         return True
 
-    s = date_str.lower().strip()
+    s = str(date_str).lower().strip()
+
+    if today is None:
+        today = datetime.now(timezone.utc).date()
+    elif isinstance(today, datetime):
+        today = today.date()
 
     # Relative patterns
     if any(w in s for w in ("just now", "today", "moments ago")):
         return True
-    m = re.search(r"(\d+)\s*hour", s)
+    if "yesterday" in s:
+        return True
+    if "+" in s:
+        return False                          # "30+ days ago"
+    m = re.search(r"(\d+)\s*(?:hour|hr)", s)
     if m:
-        return int(m.group(1)) <= MAX_AGE_HOURS
+        return int(m.group(1)) <= MAX_AGE_DAYS * 24
     m = re.search(r"(\d+)\s*day", s)
     if m:
-        return int(m.group(1)) <= 2          # 1 day ago or 2 days ago
-    if "yesterday" in s:
-        return True                           # ~24 h ago
-    if "+" in s or "week" in s or "month" in s:
-        return False                          # "30+ days ago", "3 weeks ago"
+        return int(m.group(1)) <= MAX_AGE_DAYS
+    if "week" in s:
+        m = re.search(r"(\d+)\s*week", s)
+        return (int(m.group(1)) if m else 1) <= 1
+    if "month" in s or "year" in s:
+        return False
 
-    # "29 Apr" / "1 May" pattern
-    for fmt in ("%d %b", "%d %B"):
+    # "8 Oct" / "8 October" pattern
+    for fmt in ("%d %b %Y", "%d %B %Y"):
         try:
-            now = datetime.now(timezone.utc)
-            parsed = datetime.strptime(date_str.strip(), fmt).replace(
-                year=now.year, tzinfo=timezone.utc
-            )
-            # If parsed date is in the future, it's from last year
-            if parsed > now:
-                parsed = parsed.replace(year=now.year - 1)
-            return (now - parsed).total_seconds() <= MAX_AGE_HOURS * 3600
+            parsed = datetime.strptime(f"{date_str.strip()} {today.year}", fmt).date()
         except ValueError:
-            pass
+            continue
+        if parsed > today:
+            parsed = parsed.replace(year=today.year - 1)
+        return (today - parsed).days <= MAX_AGE_DAYS
 
-    # ISO date "2026-05-04"
+    # ISO date "2026-10-08" (optionally with a time part)
     try:
-        now = datetime.now(timezone.utc)
-        parsed = datetime.fromisoformat(date_str.strip()).replace(tzinfo=timezone.utc)
-        return (now - parsed).total_seconds() <= MAX_AGE_HOURS * 3600
+        parsed = datetime.fromisoformat(date_str.strip()).date()
+        return (today - parsed).days <= MAX_AGE_DAYS
     except ValueError:
         pass
 

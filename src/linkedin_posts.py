@@ -21,8 +21,8 @@ Authentication (REQUIRED):
 
 URL pattern:
     https://www.linkedin.com/search/results/content/?keywords=<enc>
-        &datePosted=%22past-24h%22&sortBy=%22date_posted%22
-    - datePosted=past-24h keeps posts fresh; cross-run
+        &datePosted=%22past-week%22&sortBy=%22date_posted%22
+    - datePosted=past-week keeps posts to the last 7 days; cross-run
       dedup in store.py prevents re-emailing the same post.
     - sortBy=date_posted surfaces the newest posts first.
 
@@ -72,15 +72,16 @@ class LinkedInLoginRequired(RuntimeError):
     """LinkedIn redirected to a login / authwall page: the user must log in once in the Chrome profile."""
 
 
-def _post_within_48h(rel: str) -> bool:
+def _post_is_recent(rel: str) -> bool:
     """
     Best-effort recency check for LinkedIn's compact relative timestamps.
 
     LinkedIn shows post age as "34m", "5h", "1d", "2w", "3mo", "1yr". The URL
-    already filters to past-24h, so this is a safety net.
-        minutes / hours -> always within 48h
-        days            -> keep if <= 2
-        weeks/months/yrs-> reject
+    already filters to past-week, so this is a safety net.
+        minutes / hours -> always recent
+        days            -> keep if <= 7
+        1w              -> keep; 2w or more -> reject
+        months/yrs      -> reject
         unparseable     -> keep (benefit of the doubt)
     """
     if not rel:
@@ -93,8 +94,10 @@ def _post_within_48h(rel: str) -> bool:
     if unit in ("m", "min", "h", "hr", "hour"):
         return True
     if unit == "d":
-        return n <= 2
-    return False  # w, mo, yr, y
+        return n <= 7
+    if unit == "w":
+        return n <= 1
+    return False  # mo, yr, y
 
 
 def _build_url(keyword: str) -> str:
@@ -102,7 +105,7 @@ def _build_url(keyword: str) -> str:
     kw = quote(keyword)
     return (
         f"https://www.linkedin.com/search/results/content/?keywords={kw}"
-        f"&datePosted=%22past-24h%22&sortBy=%22date_posted%22"
+        f"&datePosted=%22past-week%22&sortBy=%22date_posted%22"
     )
 
 
@@ -156,7 +159,7 @@ def _parse_posts_page(html: str, seen_urls: set, keyword: str, keywords: list) -
             time_tag = card.select_one(".update-components-actor__sub-description")
             rel = time_tag.get_text(" ", strip=True) if time_tag else ""
             rel = rel.split("•")[0].strip() if rel else ""
-            if not _post_within_48h(rel):
+            if not _post_is_recent(rel):
                 continue
 
             seen_urls.add(url)

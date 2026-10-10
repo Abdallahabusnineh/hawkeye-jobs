@@ -27,7 +27,7 @@ Window management:
 
 Filtering:
     - is_relevant_job() from filters.py (user keywords)
-    - is_within_48h() from utils.py (date filter)
+    - is_recent() from utils.py (date filter)
     - seen_urls set (cross-source URL deduplication within the run)
 """
 
@@ -38,7 +38,7 @@ from bs4 import BeautifulSoup
 
 from browser import wait_for
 from filters import is_relevant_job
-from utils import is_within_48h
+from utils import is_recent
 
 log = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ def _parse_bayt_page(html: str, seen_urls: set, location: str, keywords: list) -
             date_tag = li.select_one("[data-automation-id='job-active-date']")
             date_str = date_tag.get_text(strip=True) if date_tag else ""
 
-            if not is_within_48h(date_str):
+            if not is_recent(date_str):
                 continue
 
             result.append({

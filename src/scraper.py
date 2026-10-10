@@ -6,7 +6,7 @@ ONE search and raises on any error; pipeline.py loops over the queries and
 decides what to do with failures.
 
 Titles are kept only if they match the user's keywords (is_relevant_job) and
-were posted within 48 hours (is_within_48h).
+were posted within 7 days (is_recent).
 """
 
 import logging
@@ -15,12 +15,12 @@ from datetime import datetime, timezone
 from jobspy import scrape_jobs
 
 from filters import is_relevant_job
-from utils import clean_url, is_within_48h
+from utils import MAX_AGE_DAYS, clean_url, is_recent
 
 log = logging.getLogger(__name__)
 
 RESULTS_WANTED = 10
-HOURS_OLD = 48
+HOURS_OLD = MAX_AGE_DAYS * 24
 
 
 def _parse_jobs(jobs, seen_urls, location, keywords):
@@ -36,7 +36,7 @@ def _parse_jobs(jobs, seen_urls, location, keywords):
             skipped += 1
             continue
         date_p = str(row.get("date_posted", "")).strip()
-        if not is_within_48h(date_p):
+        if not is_recent(date_p):
             skipped += 1
             continue
         seen_urls.add(url)

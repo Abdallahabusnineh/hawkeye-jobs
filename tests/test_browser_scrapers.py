@@ -147,6 +147,15 @@ class LinkedInPostsTests(unittest.TestCase):
         self.assertEqual(job["description"], "Sample Recruiter · LinkedIn hiring post")
         self.assertEqual((job["source"], job["published"]), ("LinkedIn Post", "5h"))
 
+    def test_search_url_covers_the_past_week(self):
+        self.assertIn("datePosted=%22past-week%22", linkedin_posts._build_url("hiring Java"))
+
+    def test_post_is_recent(self):
+        for rel in ("34m", "5h", "1d", "7d", "1w", "", "soon"):
+            self.assertTrue(linkedin_posts._post_is_recent(rel), rel)
+        for rel in ("8d", "2w", "3mo", "1yr"):
+            self.assertFalse(linkedin_posts._post_is_recent(rel), rel)
+
     def test_raises_when_logged_out(self):
         driver = FakeDriver("<html></html>", current_url="https://www.linkedin.com/authwall?trk=x")
         with patch("linkedin_posts.wait_for", return_value=False), \
