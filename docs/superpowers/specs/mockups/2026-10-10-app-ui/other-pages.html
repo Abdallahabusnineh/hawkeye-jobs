@@ -1,0 +1,111 @@
+<div dir="rtl" style="font-family: system-ui, 'Segoe UI', Tahoma, sans-serif;">
+<h2>بقية الصفحات — التصميم المقترح</h2>
+<p class="subtitle">التشغيل الأول، «السجل»، و«الإعدادات». راجعها، وأخبرني بما تريد تغييره.</p>
+
+<style>
+  .wf { border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#0f172a; font-size:12px; overflow:hidden; height:340px; display:flex; flex-direction:column; }
+  .wf .bar { background:#0f172a; color:#fff; padding:8px 10px; display:flex; align-items:center; justify-content:space-between; }
+  .btn { background:#2563eb; color:#fff; border-radius:6px; padding:3px 9px; font-weight:600; white-space:nowrap; font-size:11px; display:inline-block; }
+  .ghost { border:1px solid #cbd5e1; border-radius:6px; padding:2px 7px; color:#334155; background:#fff; font-size:11px; white-space:nowrap; display:inline-block; }
+  .danger { border:1px solid #fca5a5; color:#b91c1c; border-radius:6px; padding:2px 7px; font-size:11px; display:inline-block; }
+  .wf .side { width:80px; background:#f1f5f9; padding:8px 6px; display:flex; flex-direction:column; gap:5px; font-size:11px; }
+  .wf .side div { padding:5px 6px; border-radius:6px; }
+  .wf .side .on { background:#2563eb; color:#fff; font-weight:600; }
+  .wf .body { padding:8px 10px; flex:1; overflow:hidden; }
+  .m { color:#64748b; font-size:11px; }
+  .t { font-weight:700; }
+  .steps { display:flex; gap:4px; margin-bottom:8px; }
+  .steps span { flex:1; height:4px; border-radius:999px; background:#e2e8f0; }
+  .steps .on { background:#2563eb; }
+  .center { text-align:center; padding:10px 6px; }
+  .opt { border:1px solid #e2e8f0; border-radius:8px; padding:6px; margin:5px 0; }
+  .opt.on { border-color:#2563eb; background:#eff6ff; }
+  .runrow { display:flex; justify-content:space-between; border-bottom:1px solid #f1f5f9; padding:5px 0; }
+  .ok { color:#16a34a; } .warn { color:#b45309; } .bad { color:#b91c1c; }
+  .setrow { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9; padding:6px 0; gap:6px; }
+</style>
+
+<div class="cards">
+
+  <div class="card">
+    <div class="card-image">
+      <div class="wf">
+        <div class="bar"><b>Hawkeye Jobs</b><span class="m" style="color:#cbd5e1">الإعداد الأولي</span></div>
+        <div class="body">
+          <div class="steps"><span class="on"></span><span class="on"></span><span></span><span></span></div>
+          <div class="center">
+            <div class="t" style="font-size:14px">مرحبًا بك 👋</div>
+            <div class="m">ثلاث خطوات قصيرة ثم نبدأ البحث عن وظيفتك.</div>
+          </div>
+          <div class="t">الخطوة ٢ من ٤: التحقق من المتصفّح</div>
+          <div class="opt on"><span class="ok">✓</span> تم العثور على Google Chrome — جميع المواقع متاحة.</div>
+          <div class="opt"><span class="warn">!</span> إن لم يكن Chrome مثبّتًا: سنبحث في LinkedIn وIndeed فقط، مع رابط لتنزيل Chrome.</div>
+          <div class="m" style="margin:6px 0">الخطوات: ١ اللغة · ٢ المتصفّح · ٣ ما تبحث عنه · ٤ ابدأ</div>
+          <div><span class="btn">التالي</span> <span class="ghost">رجوع</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>١. التشغيل الأول (معالج قصير)</h3>
+      <p>أربع خطوات: اختيار اللغة، التحقق من Chrome، إعداد البحث (نفس صفحة «البحث»)، ثم أول بحث. لا يظهر إلا مرة واحدة.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-image">
+      <div class="wf">
+        <div class="bar"><b>Hawkeye Jobs</b><span class="btn">ابدأ البحث</span></div>
+        <div style="display:flex; flex:1;">
+          <div class="side"><div>الوظائف</div><div>البحث</div><div class="on">السجل</div><div>الإعدادات</div></div>
+          <div class="body">
+            <div class="t" style="margin-bottom:4px">عمليات البحث السابقة</div>
+            <div class="runrow"><span><span class="ok">●</span> اليوم 09:30 · تلقائي</span><span class="m">179 وُجدت · 12 جديدة</span></div>
+            <div class="runrow"><span><span class="ok">●</span> اليوم 03:30 · تلقائي</span><span class="m">150 وُجدت · 4 جديدة</span></div>
+            <div class="runrow"><span><span class="warn">●</span> أمس 21:10 · أُوقف يدويًا</span><span class="m">40 وُجدت · 2 جديدة</span></div>
+            <div style="margin-top:8px" class="t">تفاصيل: اليوم 09:30</div>
+            <div class="runrow"><span>Google Jobs</span><span class="ok">139 ✓</span></div>
+            <div class="runrow"><span>LinkedIn — الوظائف</span><span class="ok">39 ✓</span></div>
+            <div class="runrow"><span>LinkedIn — المنشورات</span><span class="warn">يلزم تسجيل الدخول</span></div>
+            <div class="runrow"><span>Bayt</span><span class="m">0 (لا وظائف حديثة)</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>٢. السجل</h3>
+      <p>كل عملية بحث: متى، تلقائية أم يدوية، كم وظيفة. وعند الضغط عليها: نتيجة كل موقع بلغة مفهومة.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-image">
+      <div class="wf">
+        <div class="bar"><b>Hawkeye Jobs</b><span class="btn">ابدأ البحث</span></div>
+        <div style="display:flex; flex:1;">
+          <div class="side"><div>الوظائف</div><div>البحث</div><div>السجل</div><div class="on">الإعدادات</div></div>
+          <div class="body">
+            <div class="setrow"><span>اللغة</span><span class="ghost">العربية ▾</span></div>
+            <div class="setrow"><span>المظهر</span><span class="ghost">تلقائي ▾</span></div>
+            <div class="setrow"><span>المتصفّح</span><span class="m"><span class="ok">✓</span> Chrome 130</span></div>
+            <div class="setrow"><span>حساب LinkedIn</span><span class="ghost">تسجيل الدخول</span></div>
+            <div class="setrow"><span>الإصدار 1.0.0</span><span class="ghost">التحقق من التحديثات</span></div>
+            <div class="setrow"><span>مشكلة؟</span><span class="ghost">الإبلاغ عن مشكلة</span></div>
+            <div class="setrow"><span>مجلّد البيانات</span><span class="ghost">فتح المجلّد</span></div>
+            <div class="setrow"><span>حذف جميع بياناتي</span><span class="danger">حذف…</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>٣. الإعدادات</h3>
+      <p>اللغة، المظهر (فاتح/داكن)، حالة Chrome، تسجيل الدخول إلى LinkedIn، التحديثات، الإبلاغ عن مشكلة، فتح مجلّد البيانات، وحذف البيانات (بتأكيد).</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="options" style="margin-top:14px">
+  <div class="option" data-choice="ok" onclick="toggleSelect(this)"><div class="letter">✓</div><div class="content"><h3>مناسبة كما هي</h3><p>انتقل للخطوة التالية (التصميم التقني)</p></div></div>
+  <div class="option" data-choice="change" onclick="toggleSelect(this)"><div class="letter">✎</div><div class="content"><h3>أريد تعديلات</h3><p>اكتبها في المحادثة</p></div></div>
+</div>
+</div>

@@ -1,0 +1,117 @@
+<div dir="rtl" style="font-family: system-ui, 'Segoe UI', Tahoma, sans-serif;">
+<h2>كيف تُعرض الوظائف في صفحة «الوظائف»؟</h2>
+<p class="subtitle">التخطيط: قائمة جانبية (كما اخترت). جميع النصوص بالفصحى. اختر طريقة عرض الوظيفة الواحدة وأزرار التعامل معها.</p>
+
+<style>
+  .wf { border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#0f172a; font-size:12px; overflow:hidden; height:330px; display:flex; flex-direction:column; }
+  .wf .bar { background:#0f172a; color:#fff; padding:8px 10px; display:flex; align-items:center; justify-content:space-between; }
+  .wf .btn { background:#2563eb; color:#fff; border-radius:6px; padding:3px 9px; font-weight:600; white-space:nowrap; font-size:11px; }
+  .wf .ghost { border:1px solid #cbd5e1; border-radius:6px; padding:2px 7px; color:#334155; background:#fff; font-size:11px; white-space:nowrap; }
+  .wf .side { width:84px; background:#f1f5f9; padding:8px 6px; display:flex; flex-direction:column; gap:5px; font-size:11px; }
+  .wf .side div { padding:5px 6px; border-radius:6px; }
+  .wf .side .on { background:#2563eb; color:#fff; font-weight:600; }
+  .wf .body { padding:8px 10px; flex:1; overflow:hidden; }
+  .wf .filters { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:6px; }
+  .wf .chip { font-size:10px; border-radius:999px; padding:1px 7px; background:#e2e8f0; color:#334155; white-space:nowrap; }
+  .wf .chip.on { background:#2563eb; color:#fff; }
+  .wf .t { font-weight:700; }
+  .wf .m { color:#64748b; font-size:11px; }
+  .wf .src { font-size:10px; border-radius:4px; padding:0 5px; background:#e0e7ff; color:#3730a3; }
+  .wf .dot { width:7px; height:7px; border-radius:50%; background:#16a34a; display:inline-block; margin-left:4px; }
+  .row { display:flex; justify-content:space-between; align-items:center; padding:5px 4px; border-bottom:1px solid #f1f5f9; gap:6px; }
+  .card2 { border:1px solid #e2e8f0; border-radius:8px; padding:7px 8px; margin:6px 0; }
+  .acts { display:flex; gap:4px; margin-top:5px; flex-wrap:wrap; }
+  .split { display:flex; gap:8px; height:100%; }
+  .split .list { width:50%; border-left:1px solid #e2e8f0; padding-left:6px; }
+  .split .sel { background:#eff6ff; border-radius:6px; }
+  .split .detail { flex:1; }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="wf">
+        <div class="bar"><b>Hawkeye Jobs</b><span class="btn">ابدأ البحث</span></div>
+        <div style="display:flex; flex:1;">
+          <div class="side"><div class="on">الوظائف</div><div>البحث</div><div>السجل</div><div>الإعدادات</div></div>
+          <div class="body">
+            <div class="filters"><span class="chip on">جديدة 12</span><span class="chip">محفوظة 3</span><span class="chip">تقدّمت 5</span><span class="chip">الكل</span></div>
+            <div class="row"><div><span class="dot"></span><span class="t">Senior Java Developer</span> <span class="m">· Acme · عمّان</span></div><span class="src">LinkedIn</span></div>
+            <div class="row"><div><span class="dot"></span><span class="t">Java Spring Boot Engineer</span> <span class="m">· Gulf Co · الرياض</span></div><span class="src">Bayt</span></div>
+            <div class="row"><div><span class="dot"></span><span class="t">Backend Developer (Java)</span> <span class="m">· عن بُعد</span></div><span class="src">Google</span></div>
+            <div class="row"><div><span class="t">Java Team Lead</span> <span class="m">· Tech Hub · مسقط</span></div><span class="src">NaukriGulf</span></div>
+            <div class="row"><div><span class="t">Full Stack (Java/React)</span> <span class="m">· عمّان</span></div><span class="src">LinkedIn</span></div>
+            <div class="m" style="margin-top:6px">مرّر المؤشر على الوظيفة لإظهار: فتح · حفظ · تقدّمت · غير مهتم</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>أ. قائمة مختصرة</h3>
+      <p>سطر واحد لكل وظيفة، يتّسع لعدد كبير على الشاشة. الأزرار تظهر عند تمرير المؤشر. سريعة للمستخدم المتمرّس، لكن الأزرار المخفية أصعب على المبتدئ.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="wf">
+        <div class="bar"><b>Hawkeye Jobs</b><span class="btn">ابدأ البحث</span></div>
+        <div style="display:flex; flex:1;">
+          <div class="side"><div class="on">الوظائف</div><div>البحث</div><div>السجل</div><div>الإعدادات</div></div>
+          <div class="body">
+            <div class="filters"><span class="chip on">جديدة 12</span><span class="chip">محفوظة 3</span><span class="chip">تقدّمت 5</span><span class="chip">الكل</span></div>
+            <div class="card2">
+              <div style="display:flex; justify-content:space-between"><span class="t">Senior Java Developer</span><span class="src">LinkedIn</span></div>
+              <div class="m">Acme Software · عمّان، الأردن · منذ ساعتين</div>
+              <div class="acts"><span class="btn">فتح الإعلان</span><span class="ghost">☆ حفظ</span><span class="ghost">✓ تقدّمت</span><span class="ghost">✕ غير مهتم</span></div>
+            </div>
+            <div class="card2">
+              <div style="display:flex; justify-content:space-between"><span class="t">Java Spring Boot Engineer</span><span class="src">Bayt</span></div>
+              <div class="m">Gulf Co · الرياض، السعودية · أمس</div>
+              <div class="acts"><span class="btn">فتح الإعلان</span><span class="ghost">☆ حفظ</span><span class="ghost">✓ تقدّمت</span><span class="ghost">✕ غير مهتم</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>ب. بطاقات بأزرار ظاهرة</h3>
+      <p>لكل وظيفة بطاقة فيها التفاصيل الأساسية وأزرار واضحة دائمًا. الأسهل لغير التقنيين، لكن عدد الوظائف الظاهرة أقل. <b>(نوصي به)</b></p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="wf">
+        <div class="bar"><b>Hawkeye Jobs</b><span class="btn">ابدأ البحث</span></div>
+        <div style="display:flex; flex:1;">
+          <div class="side"><div class="on">الوظائف</div><div>البحث</div><div>السجل</div><div>الإعدادات</div></div>
+          <div class="body">
+            <div class="filters"><span class="chip on">جديدة 12</span><span class="chip">محفوظة 3</span><span class="chip">الكل</span></div>
+            <div class="split">
+              <div class="list">
+                <div class="row sel"><span class="t">Senior Java Developer</span></div>
+                <div class="row"><span>Java Spring Boot Engineer</span></div>
+                <div class="row"><span>Backend Developer (Java)</span></div>
+                <div class="row"><span>Java Team Lead</span></div>
+              </div>
+              <div class="detail">
+                <div class="t">Senior Java Developer</div>
+                <div class="m">Acme Software · عمّان · منذ ساعتين</div>
+                <div style="margin:4px 0"><span class="src">LinkedIn</span></div>
+                <div class="acts" style="flex-direction:column; align-items:stretch"><span class="btn" style="text-align:center">فتح الإعلان</span><span class="ghost">☆ حفظ</span><span class="ghost">✓ تقدّمت</span><span class="ghost">✕ غير مهتم</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>ج. قائمة + لوحة تفاصيل</h3>
+      <p>قائمة العناوين في جهة، وتفاصيل الوظيفة المختارة مع الأزرار في الجهة الأخرى (مثل برامج البريد). مرتّبة، لكنها تحتاج نافذة عريضة.</p>
+    </div>
+  </div>
+
+</div>
+</div>

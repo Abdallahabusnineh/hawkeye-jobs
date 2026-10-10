@@ -1,0 +1,80 @@
+<div dir="rtl" style="font-family: system-ui, 'Segoe UI', Tahoma, sans-serif;">
+<h2>صفحة «البحث» — التصميم المقترح</h2>
+<p class="subtitle">هنا يحدّد المستخدم ما يبحث عنه. راجع المحتوى والترتيب، وأخبرني بما تريد تغييره.</p>
+
+<style>
+  .wf { border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#0f172a; font-size:13px; overflow:hidden; display:flex; flex-direction:column; max-width:860px; margin:0 auto; }
+  .wf .bar { background:#0f172a; color:#fff; padding:9px 12px; display:flex; align-items:center; justify-content:space-between; }
+  .wf .btn { background:#2563eb; color:#fff; border-radius:7px; padding:5px 12px; font-weight:600; white-space:nowrap; }
+  .wf .ghost { border:1px solid #cbd5e1; border-radius:7px; padding:4px 10px; color:#334155; background:#fff; white-space:nowrap; }
+  .wf .side { width:110px; background:#f1f5f9; padding:10px 8px; display:flex; flex-direction:column; gap:6px; }
+  .wf .side div { padding:6px 8px; border-radius:7px; }
+  .wf .side .on { background:#2563eb; color:#fff; font-weight:600; }
+  .wf .body { padding:12px 16px; flex:1; }
+  .sec { border:1px solid #e2e8f0; border-radius:10px; padding:10px 12px; margin-bottom:10px; }
+  .sec h4 { margin:0 0 4px; font-size:14px; }
+  .hint { color:#64748b; font-size:12px; margin-bottom:6px; }
+  .tags { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .tag { background:#e0e7ff; color:#3730a3; border-radius:999px; padding:2px 10px; }
+  .tag b { margin-right:6px; color:#6366f1; }
+  .input { border:1px solid #cbd5e1; border-radius:7px; padding:4px 10px; color:#94a3b8; min-width:180px; }
+  .src { display:grid; grid-template-columns: 1fr 1fr; gap:6px; }
+  .src label { border:1px solid #e2e8f0; border-radius:8px; padding:6px 8px; display:flex; gap:8px; align-items:flex-start; }
+  .box { width:14px; height:14px; border:1.5px solid #2563eb; border-radius:3px; margin-top:2px; flex:none; }
+  .box.on { background:#2563eb; }
+  .muted { color:#64748b; font-size:11px; }
+  .warnbox { background:#fffbeb; border:1px solid #fcd34d; border-radius:8px; padding:6px 8px; font-size:12px; color:#92400e; margin-top:6px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .sel { border:1px solid #cbd5e1; border-radius:7px; padding:3px 10px; }
+  .toggle { width:30px; height:16px; background:#2563eb; border-radius:999px; position:relative; display:inline-block; vertical-align:middle; }
+  .toggle::after { content:""; position:absolute; top:2px; left:2px; width:12px; height:12px; background:#fff; border-radius:50%; }
+</style>
+
+<div class="wf">
+  <div class="bar"><b>Hawkeye Jobs</b><span class="btn">ابدأ البحث</span></div>
+  <div style="display:flex;">
+    <div class="side"><div>الوظائف</div><div class="on">البحث</div><div>السجل</div><div>الإعدادات</div></div>
+    <div class="body">
+
+      <div class="sec">
+        <h4>١. ما الوظيفة التي تبحث عنها؟</h4>
+        <div class="hint">اكتب المسمّى الوظيفي واضغط Enter. يمكنك إضافة أكثر من مسمّى.</div>
+        <div class="tags"><span class="tag">Java Developer<b>×</b></span><span class="tag">Spring Boot<b>×</b></span><span class="tag">Backend Developer<b>×</b></span><span class="input">أضف مسمّى وظيفيًا…</span></div>
+        <div class="muted" style="margin-top:6px">نصيحة: مواقع التوظيف تستخدم المسمّيات بالإنجليزية غالبًا.</div>
+      </div>
+
+      <div class="sec">
+        <h4>٢. أين؟</h4>
+        <div class="hint">اختر الدول، أو «عن بُعد».</div>
+        <div class="tags"><span class="tag">الأردن<b>×</b></span><span class="tag">السعودية<b>×</b></span><span class="tag">عُمان<b>×</b></span><span class="tag">عن بُعد<b>×</b></span><span class="input">ابحث عن دولة…</span></div>
+      </div>
+
+      <div class="sec">
+        <h4>٣. في أي المواقع؟</h4>
+        <div class="src">
+          <label><span class="box on"></span><span><b>LinkedIn — الوظائف</b><br><span class="muted">جميع الدول</span></span></label>
+          <label><span class="box on"></span><span><b>Google Jobs</b><br><span class="muted">يجمع وظائف من مواقع كثيرة</span></span></label>
+          <label><span class="box on"></span><span><b>Bayt</b><br><span class="muted">الأردن ودول الخليج فقط</span></span></label>
+          <label><span class="box on"></span><span><b>NaukriGulf</b><br><span class="muted">دول الخليج فقط</span></span></label>
+          <label><span class="box on"></span><span><b>Indeed</b><br><span class="muted">لا يشمل الأردن والعمل عن بُعد</span></span></label>
+          <label><span class="box"></span><span><b>LinkedIn — منشورات التوظيف</b><br><span class="muted">مرة واحدة يوميًا كحد أقصى · يتطلب تسجيل الدخول</span></span></label>
+        </div>
+        <div class="warnbox">⚠️ منشورات LinkedIn تستخدم حسابك الشخصي. البحث المتكرر قد يدفع LinkedIn إلى تقييد الحساب، لذلك هذا الخيار معطّل افتراضيًا. <span class="ghost" style="font-size:11px">تسجيل الدخول إلى LinkedIn</span></div>
+      </div>
+
+      <div class="sec">
+        <h4>٤. البحث التلقائي</h4>
+        <div class="row"><span class="toggle"></span><span>ابحث تلقائيًا كل</span><span class="sel">6 ساعات ▾</span><span class="muted">(ما دام التطبيق مفتوحًا) · أرسل إشعارًا عند وجود وظائف جديدة</span></div>
+      </div>
+
+      <div class="row" style="justify-content:flex-start"><span class="btn">حفظ وابدأ البحث</span><span class="ghost">حفظ فقط</span><span class="muted">سيستغرق البحث نحو 6 دقائق</span></div>
+
+    </div>
+  </div>
+</div>
+
+<div class="options" style="margin-top:14px">
+  <div class="option" data-choice="ok" onclick="toggleSelect(this)"><div class="letter">✓</div><div class="content"><h3>مناسب كما هو</h3><p>انتقل للسؤال التالي</p></div></div>
+  <div class="option" data-choice="change" onclick="toggleSelect(this)"><div class="letter">✎</div><div class="content"><h3>أريد تعديلات</h3><p>اكتبها في المحادثة</p></div></div>
+</div>
+</div>

@@ -1,0 +1,91 @@
+<div dir="rtl" style="font-family: system-ui, 'Segoe UI', Tahoma, sans-serif;">
+<h2>شو الشكل العام للتطبيق اللي بتريحك؟</h2>
+<p class="subtitle">تخيّل حدا مش تقني بفتح التطبيق أول مرة. كبس على الخيار اللي بتفضّله (فيك تحكيلي ملاحظاتك بالتيرمنال كمان).</p>
+
+<style>
+  .wf { border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#0f172a; font-size:12px; overflow:hidden; height:300px; display:flex; flex-direction:column; }
+  .wf .bar { background:#0f172a; color:#fff; padding:8px 10px; display:flex; align-items:center; gap:8px; justify-content:space-between; }
+  .wf .btn { background:#2563eb; color:#fff; border-radius:6px; padding:4px 10px; font-weight:600; white-space:nowrap; }
+  .wf .ghost { border:1px solid #94a3b8; border-radius:6px; padding:3px 8px; color:#334155; background:#fff; }
+  .wf .job { border:1px solid #e2e8f0; border-radius:8px; padding:6px 8px; margin:6px 0; display:flex; justify-content:space-between; align-items:center; gap:6px; }
+  .wf .t { font-weight:700; }
+  .wf .m { color:#64748b; font-size:11px; }
+  .wf .chip { font-size:10px; border-radius:999px; padding:1px 7px; background:#e0e7ff; color:#3730a3; white-space:nowrap; }
+  .wf .new { background:#dcfce7; color:#166534; }
+  .wf .side { width:92px; background:#f1f5f9; padding:8px 6px; display:flex; flex-direction:column; gap:6px; }
+  .wf .side div { padding:5px 6px; border-radius:6px; }
+  .wf .side .on { background:#2563eb; color:#fff; font-weight:600; }
+  .wf .tabs { display:flex; gap:4px; padding:6px 8px 0; background:#f1f5f9; }
+  .wf .tabs div { padding:5px 10px; border-radius:6px 6px 0 0; }
+  .wf .tabs .on { background:#fff; font-weight:700; }
+  .wf .prog { height:6px; background:#e2e8f0; border-radius:999px; overflow:hidden; margin:4px 0 2px; }
+  .wf .prog i { display:block; height:100%; width:45%; background:#2563eb; }
+  .wf .body { padding:8px 10px; flex:1; overflow:hidden; }
+  .wf .filters { display:flex; gap:4px; flex-wrap:wrap; margin-bottom:4px; }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="wf">
+        <div class="bar"><b>🦅 صيّاد الوظايف</b><span class="btn">🔍 دوّر هلأ</span></div>
+        <div class="body">
+          <div class="m">عم بدوّر… 36 من 80 · Bayt · Java بالأردن</div>
+          <div class="prog"><i></i></div>
+          <div class="filters"><span class="chip new">جديدة 12</span><span class="chip">محفوظة 3</span><span class="chip">قدّمت 5</span><span class="ghost">⚙️ الإعدادات</span></div>
+          <div class="job"><div><div class="t">Senior Java Developer</div><div class="m">Acme · عمّان · LinkedIn · من ساعتين</div></div><span class="ghost">⭐ احفظ</span></div>
+          <div class="job"><div><div class="t">Java Spring Boot Engineer</div><div class="m">Gulf Co · الرياض · Bayt · أمس</div></div><span class="ghost">⭐ احفظ</span></div>
+          <div class="job"><div><div class="t">Backend Developer (Java)</div><div class="m">Remote · Google Jobs · من يومين</div></div><span class="ghost">⭐ احفظ</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>أ. شاشة وحدة، النتايج أولاً</h3>
+      <p>كل إشي بصفحة وحدة: زر "دوّر هلأ" فوق، شريط التقدم، فلاتر الحالة، وقائمة الوظايف. الإعدادات بلوحة بتنفتح من زر. <b>(بنصح فيه: أبسط إشي لغير التقنيين)</b></p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="wf">
+        <div class="bar"><b>🦅 صيّاد الوظايف</b><span class="btn">🔍 دوّر هلأ</span></div>
+        <div style="display:flex; flex:1;">
+          <div class="side"><div class="on">📋 الوظايف</div><div>🔍 البحث</div><div>📜 السجل</div><div>⚙️ الإعدادات</div></div>
+          <div class="body">
+            <div class="filters"><span class="chip new">جديدة 12</span><span class="chip">محفوظة 3</span><span class="chip">قدّمت 5</span></div>
+            <div class="job"><div><div class="t">Senior Java Developer</div><div class="m">Acme · عمّان · LinkedIn</div></div><span class="ghost">⭐</span></div>
+            <div class="job"><div><div class="t">Java Spring Boot Engineer</div><div class="m">Gulf Co · الرياض · Bayt</div></div><span class="ghost">⭐</span></div>
+            <div class="job"><div><div class="t">Backend Developer (Java)</div><div class="m">Remote · Google Jobs</div></div><span class="ghost">⭐</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>ب. قائمة جانبية</h3>
+      <p>شكل التطبيقات المكتبية: قائمة على الجنب (الوظايف، البحث، السجل، الإعدادات). منظّم وبيكبر مع الميزات الجاية، بس فيه تنقّل أكثر.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="wf">
+        <div class="bar"><b>🦅 صيّاد الوظايف</b><span class="m" style="color:#cbd5e1">آخر بحث: قبل 3 ساعات</span></div>
+        <div class="tabs"><div class="on">الوظايف</div><div>بحث جديد</div><div>الإعدادات</div></div>
+        <div class="body">
+          <div class="filters"><span class="chip new">جديدة 12</span><span class="chip">محفوظة 3</span><span class="chip">قدّمت 5</span></div>
+          <div class="job"><div><div class="t">Senior Java Developer</div><div class="m">Acme · عمّان · LinkedIn</div></div><span class="ghost">⭐</span></div>
+          <div class="job"><div><div class="t">Java Spring Boot Engineer</div><div class="m">Gulf Co · الرياض · Bayt</div></div><span class="ghost">⭐</span></div>
+          <div class="job"><div><div class="t">Backend Developer (Java)</div><div class="m">Remote · Google Jobs</div></div><span class="ghost">⭐</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>ج. تبويبات فوق</h3>
+      <p>ثلاث تبويبات (الوظايف، بحث جديد، الإعدادات). حل وسط بين الاثنين، بس زر البحث مش ظاهر دايماً.</p>
+    </div>
+  </div>
+
+</div>
+<p class="subtitle" style="margin-top:14px">ملاحظة: الاسم "صيّاد الوظايف" مجرد مثال للعرض — منقرر الاسم بالعربي بعدين.</p>
+</div>

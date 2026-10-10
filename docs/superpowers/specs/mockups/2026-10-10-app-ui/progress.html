@@ -1,0 +1,106 @@
+<div dir="rtl" style="font-family: system-ui, 'Segoe UI', Tahoma, sans-serif;">
+<h2>أين يظهر تقدّم البحث أثناء التشغيل؟</h2>
+<p class="subtitle">البحث يستغرق عدة دقائق (نتمهّل بين الطلبات حمايةً لحسابات المستخدم). اختر كيف يتابع المستخدم ما يحدث.</p>
+
+<style>
+  .wf { border:1px solid #cbd5e1; border-radius:10px; background:#fff; color:#0f172a; font-size:12px; overflow:hidden; height:330px; display:flex; flex-direction:column; position:relative; }
+  .wf .bar { background:#0f172a; color:#fff; padding:8px 10px; display:flex; align-items:center; justify-content:space-between; }
+  .wf .btn { background:#2563eb; color:#fff; border-radius:6px; padding:3px 9px; font-weight:600; white-space:nowrap; font-size:11px; }
+  .wf .stop { background:#fff; color:#b91c1c; border:1px solid #fca5a5; border-radius:6px; padding:2px 8px; font-size:11px; white-space:nowrap; }
+  .wf .ghost { border:1px solid #cbd5e1; border-radius:6px; padding:2px 7px; color:#334155; background:#fff; font-size:11px; white-space:nowrap; }
+  .wf .side { width:84px; background:#f1f5f9; padding:8px 6px; display:flex; flex-direction:column; gap:5px; font-size:11px; }
+  .wf .side div { padding:5px 6px; border-radius:6px; }
+  .wf .side .on { background:#2563eb; color:#fff; font-weight:600; }
+  .wf .body { padding:8px 10px; flex:1; overflow:hidden; }
+  .wf .t { font-weight:700; }
+  .wf .m { color:#64748b; font-size:11px; }
+  .wf .src { font-size:10px; border-radius:4px; padding:0 5px; background:#e0e7ff; color:#3730a3; }
+  .prog { height:6px; background:#e2e8f0; border-radius:999px; overflow:hidden; margin:4px 0; }
+  .prog i { display:block; height:100%; width:45%; background:#2563eb; }
+  .card2 { border:1px solid #e2e8f0; border-radius:8px; padding:6px 8px; margin:5px 0; }
+  .newpill { font-size:10px; background:#dcfce7; color:#166534; border-radius:999px; padding:0 6px; }
+  .banner { background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:6px 8px; margin-bottom:6px; }
+  .log div { padding:2px 0; border-bottom:1px dashed #f1f5f9; font-size:11px; }
+  .ok { color:#16a34a; } .warn { color:#b45309; }
+  .overlay { position:absolute; inset:0; background:rgba(15,23,42,.45); display:flex; align-items:center; justify-content:center; }
+  .modal { background:#fff; border-radius:10px; padding:12px; width:70%; }
+</style>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="wf">
+        <div class="bar"><b>Hawkeye Jobs</b><span class="stop">■ إيقاف البحث</span></div>
+        <div style="display:flex; flex:1;">
+          <div class="side"><div class="on">الوظائف</div><div>البحث</div><div>السجل</div><div>الإعدادات</div></div>
+          <div class="body">
+            <div class="banner">
+              <div style="display:flex; justify-content:space-between"><b>جارٍ البحث… 36 من 80</b><span class="m">وُجدت 14 وظيفة جديدة حتى الآن</span></div>
+              <div class="prog"><i></i></div>
+              <div class="m">الآن: Bayt · «Java» في الأردن</div>
+            </div>
+            <div class="card2"><span class="newpill">جديدة الآن</span> <span class="t">Senior Java Developer</span> <span class="src">LinkedIn</span><div class="m">Acme · عمّان</div></div>
+            <div class="card2"><span class="newpill">جديدة الآن</span> <span class="t">Java Spring Boot Engineer</span> <span class="src">Bayt</span><div class="m">Gulf Co · الرياض</div></div>
+            <div class="card2"><span class="t">Backend Developer (Java)</span> <span class="src">Google</span><div class="m">عن بُعد</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>أ. شريط أعلى صفحة الوظائف</h3>
+      <p>شريط صغير يوضّح التقدّم، والوظائف الجديدة تظهر في القائمة فور العثور عليها. يستطيع المستخدم التصفّح أثناء البحث. <b>(نوصي به)</b></p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="wf">
+        <div class="bar"><b>Hawkeye Jobs</b><span class="stop">■ إيقاف البحث</span></div>
+        <div style="display:flex; flex:1;">
+          <div class="side"><div>الوظائف</div><div class="on">البحث</div><div>السجل</div><div>الإعدادات</div></div>
+          <div class="body">
+            <b>جارٍ البحث… 36 من 80</b>
+            <div class="prog"><i></i></div>
+            <div class="log">
+              <div><span class="ok">✓</span> LinkedIn · «Java» في الأردن — 3 جديدة</div>
+              <div><span class="ok">✓</span> LinkedIn · «Java» في عُمان — 0</div>
+              <div><span class="ok">✓</span> Google · «Java» عن بُعد — 9 جديدة</div>
+              <div><span class="warn">!</span> LinkedIn (منشورات) — يلزم تسجيل الدخول <span class="ghost">تسجيل الدخول</span></div>
+              <div>… Bayt · «Java» في الأردن</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>ب. سجلّ تفصيلي في صفحة «البحث»</h3>
+      <p>قائمة بكل عملية بحث ونتيجتها (مثل التيرمنال لكن بشكل أوضح). مفيد لمعرفة أي موقع لم ينجح، لكنه تفصيل زائد لمعظم المستخدمين.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="wf">
+        <div class="bar"><b>Hawkeye Jobs</b><span class="btn">ابدأ البحث</span></div>
+        <div style="display:flex; flex:1;">
+          <div class="side"><div class="on">الوظائف</div><div>البحث</div><div>السجل</div><div>الإعدادات</div></div>
+          <div class="body"><div class="card2"><span class="t">Senior Java Developer</span></div><div class="card2"><span class="t">Java Spring Boot Engineer</span></div></div>
+        </div>
+        <div class="overlay"><div class="modal">
+          <b>جارٍ البحث… 36 من 80</b>
+          <div class="prog"><i></i></div>
+          <div class="m">وُجدت 14 وظيفة جديدة · الآن: Bayt في الأردن</div>
+          <div style="margin-top:8px; display:flex; gap:6px"><span class="stop">■ إيقاف</span><span class="ghost">إخفاء</span></div>
+        </div></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>ج. نافذة منبثقة</h3>
+      <p>نافذة في منتصف الشاشة تعرض التقدّم ويمكن إخفاؤها. واضحة جدًا، لكنها تحجب الصفحة أثناء البحث.</p>
+    </div>
+  </div>
+
+</div>
+<p class="subtitle" style="margin-top:12px">في جميع الحالات: زر «إيقاف البحث» متاح دائمًا، والتفاصيل الكاملة (أي موقع فشل ولماذا) محفوظة في صفحة «السجل».</p>
+</div>
