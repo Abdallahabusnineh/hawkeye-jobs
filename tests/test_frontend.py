@@ -36,8 +36,21 @@ PLURAL_FORMS = ("one", "two", "few", "many", "other")
 PLURAL_FAMILIES = ("age.minutes", "age.hours", "age.days", "estimate.minutes")
 # Levantine/Egyptian/Gulf words that must never appear in the formal Arabic UI.
 COLLOQUIAL = ("هلأ", "هلق", "هلّق", "بدك", "بدّك", "شو", "مش", "هيك", "منيح", "كتير", "عشان", "ليش", "لسا",
-              "لسّا", "بس", "هاد", "هاي", "تبعك", "اشي", "إشي", "يلا", "مو", "ايش", "إيش", "زي", "خلص")
-HTML_SINKS = ("x-html", "innerHTML", "outerHTML", "insertAdjacentHTML", "document.write")
+              "لسّا", "بس", "هاد", "هاي", "تبعك", "اشي", "إشي", "يلا", "مو", "ايش", "إيش", "زي", "خلص",
+              "وين", "ازاي", "كده", "دلوقتي", "هسا", "هلا", "بدنا", "ايه", "ليه", "شلون", "برضو", "كمان", "مين")
+ARABIC_LETTER = "؀-ۿ"
+ARABIC_DIACRITICS = re.compile("[ً-ْـ]")
+ARABIC_DIGITS = re.compile("[٠-٩۰-۹]")
+HTML_SINKS = ("x-html", "innerHTML", "outerHTML", "insertAdjacentHTML", "document.write",
+              "setHTMLUnsafe", "createContextualFragment", "DOMParser", "srcdoc", "javascript:",
+              "eval(", "new Function")
+ALPINE_SHA256 = "3ed1eed252488921df65e363d6715deb04d7f92aaedb9e52199fdf73cb1e0ad3"
+# The only outbound links the app may show. They are opened in the system browser through
+# POST /api/open-url; the app never fetches them itself.
+ALLOWED_LINKS = (
+    "https://www.google.com/chrome/",
+    "https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest",
+)
 
 
 def _load(lang):
@@ -47,6 +60,18 @@ def _load(lang):
 def _code(name):
     path = STATIC / name
     return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+def _normalise_arabic(text):
+    """Strip diacritics and tatweel, and unify alef forms and alef maqsura, so spelling variants match."""
+    text = ARABIC_DIACRITICS.sub("", text)
+    return text.translate(str.maketrans({"أ": "ا", "إ": "ا", "آ": "ا", "ى": "ي"}))
+
+
+def _front_end_files(suffixes):
+    """Every file under src/web/static with one of the suffixes, except the vendored third-party code."""
+    return sorted(p for p in STATIC.rglob("*")
+                  if p.is_file() and p.suffix in suffixes and "vendor" not in p.relative_to(STATIC).parts)
 
 
 class DictionaryTests(unittest.TestCase):
@@ -69,9 +94,16 @@ class DictionaryTests(unittest.TestCase):
 
     def test_arabic_is_formal(self):
         for key, value in self.ar.items():
+            normalised = _normalise_arabic(value)
             for word in COLLOQUIAL:
-                pattern = r"(?<![؀-ۿ])" + re.escape(word) + r"(?![؀-ۿ])"
-                self.assertIsNone(re.search(pattern, value), f"colloquial «{word}» in ar:{key}")
+                # An optional one-letter clitic prefix (و ف ب ل ك س) must not hide a colloquial word.
+                pattern = (r"(?<![" + ARABIC_LETTER + r"])[وفبلكس]?" + re.escape(_normalise_arabic(word))
+                           + r"(?![" + ARABIC_LETTER + r"])")
+                self.assertIsNone(re.search(pattern, normalised), f"colloquial «{word}» in ar:{key}")
+
+    def test_arabic_uses_latin_digits(self):
+        for key, value in self.ar.items():
+            self.assertIsNone(ARABIC_DIGITS.search(value), f"Arabic-Indic digit in ar:{key}")
 
     def test_dynamic_key_families_exist(self):
         families = []
@@ -106,10 +138,10 @@ class DictionaryTests(unittest.TestCase):
 
 class SafetyTests(unittest.TestCase):
     def test_untrusted_text_never_rendered_as_html(self):
-        for name in CODE_FILES:
-            text = _code(name)
+        for path in _front_end_files({".js", ".html"}):
+            text = path.read_text(encoding="utf-8")
             for sink in HTML_SINKS:
-                self.assertNotIn(sink, text, f"{sink} in {name}")
+                self.assertNotIn(sink, text, f"{sink} in {path.relative_to(STATIC)}")
 
     def test_only_local_scripts_and_styles(self):
         html = _code("index.html")
@@ -117,11 +149,24 @@ class SafetyTests(unittest.TestCase):
             target = match.group(1)
             self.assertFalse(re.match(r"^(?:[a-z]+:)?//", target, re.I), f"remote resource {target}")
 
+        css = _code("styles.css")
+        self.assertIsNone(re.search(r"@import[^;]*?(?:https?:)?//", css, re.I), "remote @import in styles.css")
+        self.assertIsNone(re.search(r"url\(\s*[\"']?(?:https?:)?//", css, re.I), "remote url() in styles.css")
+
+        for path in _front_end_files({".js"}):
+            text = path.read_text(encoding="utf-8")
+            for match in re.finditer(r"""(["'`])((?:https?://|//[^\s"'`/])[^"'`\s]*)\1""", text):
+                literal = match.group(2)
+                self.assertIn(literal, ALLOWED_LINKS, f"unexpected URL literal {literal} in {path.relative_to(STATIC)}")
+
     def test_vendored_alpine_matches_checksum(self):
         vendor = STATIC / "vendor"
         expected, name = (vendor / "SHA256SUMS").read_text().split()
         self.assertEqual(name, "alpine.min.js")
-        self.assertEqual(hashlib.sha256((vendor / name).read_bytes()).hexdigest(), expected)
+        digest = hashlib.sha256((vendor / name).read_bytes()).hexdigest()
+        self.assertEqual(digest, ALPINE_SHA256)
+        self.assertEqual(expected, ALPINE_SHA256)
+        self.assertIn("3.14.9", (vendor / name).read_text(encoding="utf-8"))
         self.assertIn("MIT License", (vendor / "LICENSE.md").read_text(encoding="utf-8"))
 
 
