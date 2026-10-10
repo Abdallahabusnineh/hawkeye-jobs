@@ -224,6 +224,45 @@ class HistoryFailureTests(RunnerTestCase):
         self.assertNotIn("run_error", types)
 
 
+class RobustnessTests(RunnerTestCase):
+    def test_lock_released_when_start_fails_after_acquire(self):
+        def bad_loader():
+            raise RuntimeError("settings unreadable")
+        manager = self.make(app_settings_loader=bad_loader)
+        with self.assertRaises(RuntimeError):
+            manager.start()
+        self.assertFalse(manager.is_running)
+        other = RunLock(self.lock_path)
+        self.assertTrue(other.acquire())
+        other.release()
+
+    def test_lock_released_and_current_cleared_when_store_close_fails(self):
+        class BadClose(Store):
+            def close(self):
+                super().close()
+                raise RuntimeError("close failed")
+        manager = self.make(store_factory=lambda: BadClose(self.db))
+        manager.start()
+        manager.wait(5)
+        self.assertIsNone(manager.current)
+        other = RunLock(self.lock_path)
+        self.assertTrue(other.acquire())
+        other.release()
+
+    def test_failed_posts_mark_still_blocks_second_run_within_24h(self):
+        def bad_saver(patch):
+            raise OSError("disk full")
+        manager = self.make(app_settings_saver=bad_saver, clock=lambda: 1_000_000.0)
+        with self.assertLogs("runner", "ERROR"):
+            manager.start()
+            manager.wait(5)
+        q = manager.subscribe()
+        manager.start()
+        manager.wait(5)
+        self.assertNotIn("linkedin_posts", self.search.calls[1]["settings"]["sources"])
+        self.assertIn({"type": "posts_skipped", "reason": "daily_limit"}, self.drain(q))
+
+
 class SubscriberTests(RunnerTestCase):
     def test_slow_subscriber_is_dropped_others_keep_receiving(self):
         manager = self.make()

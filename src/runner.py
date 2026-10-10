@@ -81,6 +81,7 @@ class RunManager:
         self._subscribers = set()
         self._worker = None
         self._cancel = None
+        self._last_posts_run = None
         self._current = None
 
     # ── subscribers ─────────────────────────────────────────────────────
@@ -153,17 +154,21 @@ class RunManager:
                 raise RunInProgress("a search is already running in the app")
             if not self._run_lock.acquire():
                 raise RunInProgress("a search is already running in another window or the terminal")
-            settings = self._settings_loader()
-            if not settings:
+            try:
+                settings = self._settings_loader()
+                if not settings:
+                    raise NoSearchSettings("no search settings saved")
+                settings, posts_skipped = self._apply_posts_gate(dict(settings))
+                self._cancel = threading.Event()
+                started = threading.Event()
+                holder = {}
+                self._worker = threading.Thread(target=self._run, args=(settings, trigger, started, holder),
+                                                name="hawkeye-run", daemon=True)
+                self._worker.start()
+            except BaseException:
+                self._worker = None
                 self._run_lock.release()
-                raise NoSearchSettings("no search settings saved")
-            settings, posts_skipped = self._apply_posts_gate(dict(settings))
-            self._cancel = threading.Event()
-            started = threading.Event()
-            holder = {}
-            self._worker = threading.Thread(target=self._run, args=(settings, trigger, started, holder),
-                                            name="hawkeye-run", daemon=True)
-            self._worker.start()
+                raise
         if posts_skipped:
             self._publish({"type": "posts_skipped", "reason": "daily_limit"})
         started.wait(timeout=10)
@@ -173,6 +178,8 @@ class RunManager:
         if POSTS_SOURCE not in settings.get("sources", []):
             return settings, False
         last = _parse_iso(self._app_settings_loader().get("last_posts_run"))
+        if self._last_posts_run is not None and (last is None or self._last_posts_run > last):
+            last = self._last_posts_run
         if last is not None and self._clock() - last < POSTS_INTERVAL_SECONDS:
             settings["sources"] = [s for s in settings["sources"] if s != POSTS_SOURCE]
             return settings, True
@@ -206,7 +213,12 @@ class RunManager:
                             self._current["new"] += int(event.get("new") or 0)
                 elif kind == "query_started" and event.get("source") == POSTS_SOURCE and not posts_marked:
                     posts_marked = True
-                    self._app_settings_saver({"last_posts_run": _iso(self._clock())})
+                    now = self._clock()
+                    self._last_posts_run = now
+                    try:
+                        self._app_settings_saver({"last_posts_run": _iso(now)})
+                    except Exception:
+                        log.exception("Could not save last_posts_run")
                 self._publish({**event, "trigger": trigger})
 
             self._run_search(settings, on_event=on_event, cancel=self._cancel, country_labels=labels,
@@ -218,11 +230,15 @@ class RunManager:
             self._publish({"type": "run_error"})
         finally:
             started.set()
-            if store is not None:
-                store.close()
-            with self._state_lock:
-                self._current = None
-            self._run_lock.release()
+            try:
+                if store is not None:
+                    store.close()
+            finally:
+                try:
+                    with self._state_lock:
+                        self._current = None
+                finally:
+                    self._run_lock.release()
 
     def report_pending_now(self) -> int:
         """Report jobs left unreported (e.g. the app was killed mid-run). Skipped while a search runs."""
