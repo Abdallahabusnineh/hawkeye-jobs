@@ -249,3 +249,63 @@ class RunManager:
         if result.jobs:
             self._publish({"type": "jobs_reported", "count": result.reported, "more_waiting": result.more_waiting})
         return result.reported
+
+
+class AutoSearch:
+    """Starts a search every N hours while the app is open, through the same RunManager.
+
+    Ticks every 60 s; due when enabled, onboarding is done, and `hours` have passed
+    since the last finished run of any kind."""
+
+    def __init__(self, manager, *, app_settings_loader=load_app_settings, store_factory=Store,
+                 clock=time.time, interval: float = 60):
+        self._manager = manager
+        self._app_settings_loader = app_settings_loader
+        self._store_factory = store_factory
+        self._clock = clock
+        self._interval = interval
+        self._stop = threading.Event()
+        self._thread = None
+
+    def due(self) -> bool:
+        app = self._app_settings_loader()
+        auto = app.get("auto_search") or {}
+        if not auto.get("enabled") or not app.get("onboarding_done"):
+            return False
+        with self._store_factory() as store:
+            last = store.last_finished_run()
+        finished = _parse_iso(last.get("finished_at")) if last else None
+        if finished is None:
+            return False
+        return self._clock() - finished >= auto["hours"] * 3600
+
+    def tick(self) -> bool:
+        if self._manager.is_running:
+            return False
+        try:
+            if not self.due():
+                return False
+            self._manager.start("auto")
+            return True
+        except (RunInProgress, NoSearchSettings):
+            return False
+        except Exception:
+            log.exception("Auto-search tick failed")
+            return False
+
+    def start(self) -> None:
+        if self._thread is not None:
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._loop, name="hawkeye-auto-search", daemon=True)
+        self._thread.start()
+
+    def _loop(self) -> None:
+        while not self._stop.wait(self._interval):
+            self.tick()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+            self._thread = None

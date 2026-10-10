@@ -10,7 +10,7 @@ import _bootstrap  # noqa: F401  — isolates data dirs, adds src/ to sys.path
 
 from run_lock import RunLock
 from pipeline import RunSummary
-from runner import NoSearchSettings, RunInProgress, RunManager
+from runner import AutoSearch, NoSearchSettings, RunInProgress, RunManager
 from store import Store
 
 SETTINGS = {"keywords": ["Java"], "locations": ["jo"], "sources": ["bayt", "linkedin_posts"]}
@@ -300,6 +300,88 @@ class ReportNowTests(RunnerTestCase):
         manager.start()
         self.assertEqual(manager.report_pending_now(), 0)
         hold.set()
+        manager.wait(5)
+
+
+class AutoSearchTests(RunnerTestCase):
+    def finished_run_at(self, iso):
+        with Store(self.db) as store:
+            run_id = store.start_run(SETTINGS)
+            store.finish_run(run_id, "done", 0, 0)
+            store.conn.execute("UPDATE runs SET finished_at = ? WHERE id = ?", (iso, run_id))
+            store.conn.commit()
+
+    def auto(self, manager, now, enabled=True, hours=6, onboarded=True):
+        app = {"auto_search": {"enabled": enabled, "hours": hours}, "onboarding_done": onboarded}
+        return AutoSearch(manager, app_settings_loader=lambda: app, store_factory=lambda: Store(self.db),
+                          clock=lambda: now, interval=0.05)
+
+    def test_not_due_without_any_finished_run(self):
+        self.assertFalse(self.auto(self.make(), now=10_000_000).due())
+
+    def test_due_after_interval(self):
+        self.finished_run_at("1970-04-26T17:46:40Z")  # 10_000_000
+        manager = self.make()
+        self.assertFalse(self.auto(manager, now=10_000_000 + 6 * 3600 - 1).due())
+        self.assertTrue(self.auto(manager, now=10_000_000 + 6 * 3600).due())
+
+    def test_disabled_or_not_onboarded_is_never_due(self):
+        self.finished_run_at("1970-04-26T17:46:40Z")
+        manager = self.make()
+        self.assertFalse(self.auto(manager, now=20_000_000, enabled=False).due())
+        self.assertFalse(self.auto(manager, now=20_000_000, onboarded=False).due())
+
+    def test_tick_starts_auto_run(self):
+        self.finished_run_at("1970-04-26T17:46:40Z")
+        manager = self.make()
+        self.assertTrue(self.auto(manager, now=20_000_000).tick())
+        manager.wait(5)
+        self.assertEqual(self.search.calls[0]["trigger"], "auto")
+
+    def test_tick_skips_while_running(self):
+        self.finished_run_at("1970-04-26T17:46:40Z")
+        hold = threading.Event()
+        self.search = FakeSearch(hold=hold)
+        manager = self.make()
+        manager.start()
+        self.assertFalse(self.auto(manager, now=20_000_000).tick())
+        hold.set()
+        manager.wait(5)
+        self.assertEqual(len(self.search.calls), 1)
+
+    def test_tick_skips_when_terminal_holds_lock(self):
+        self.finished_run_at("1970-04-26T17:46:40Z")
+        other = RunLock(self.lock_path)
+        self.assertTrue(other.acquire())
+        try:
+            self.assertFalse(self.auto(self.make(), now=20_000_000).tick())
+        finally:
+            other.release()
+
+    def test_tick_survives_unexpected_errors(self):
+        def boom():
+            raise ValueError("broken settings")
+        auto = AutoSearch(self.make(), app_settings_loader=boom, store_factory=lambda: Store(self.db),
+                          clock=lambda: 20_000_000, interval=0.05)
+        with self.assertLogs("runner", level="ERROR"):
+            self.assertFalse(auto.tick())
+
+    def test_tick_skips_without_search_settings(self):
+        self.finished_run_at("1970-04-26T17:46:40Z")
+        self.settings = None
+        manager = self.make()
+        self.assertFalse(self.auto(manager, now=20_000_000).tick())
+
+    def test_background_thread_ticks_and_stops(self):
+        self.finished_run_at("1970-04-26T17:46:40Z")
+        manager = self.make()
+        auto = self.auto(manager, now=20_000_000)
+        auto.start()
+        deadline = time.monotonic() + 5
+        while not self.search.calls:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.01)
+        auto.stop()
         manager.wait(5)
 
 
