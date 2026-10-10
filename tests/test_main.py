@@ -209,23 +209,41 @@ class MainTests(unittest.TestCase):
         finally:
             holder.release()
 
-
-    def _assert_run_lock_free(self):
+    def _recording_run_lock(self):
+        """A RunLock that records every instance main() creates and counts release() calls."""
         import run_lock
-        probe = run_lock.RunLock()
-        self.assertTrue(probe.acquire())
-        probe.release()
+
+        created = []
+
+        class Recording(run_lock.RunLock):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.release_calls = 0
+                created.append(self)
+
+            def release(self):
+                self.release_calls += 1
+                super().release()
+
+        return created, patch("main.RunLock", Recording)
 
     def test_run_lock_released_after_normal_finish(self):
-        with patch("main.run_search", return_value=RunSummary(1, "done", 0, [])), patch("main.send_email"):
+        created, recording = self._recording_run_lock()
+        with recording, patch("main.run_search", return_value=RunSummary(1, "done", 0, [])), \
+             patch("main.send_email"):
             main.main()
-        self._assert_run_lock_free()
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0].release_calls, 1)
+        self.assertFalse(created[0].held)
 
     def test_run_lock_released_when_run_raises(self):
-        with patch("main.run_search", side_effect=RuntimeError("boom")), patch("main.send_email"):
+        created, recording = self._recording_run_lock()
+        with recording, patch("main.run_search", side_effect=RuntimeError("boom")), patch("main.send_email"):
             with self.assertRaises(RuntimeError):
                 main.main()
-        self._assert_run_lock_free()
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0].release_calls, 1)
+        self.assertFalse(created[0].held)
 
 
 if __name__ == "__main__":
