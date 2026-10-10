@@ -50,7 +50,7 @@ class BaytTests(unittest.TestCase):
         driver = FakeDriver(fixture("bayt.html"))
         with patch("bayt.wait_for", return_value=True) as wait:
             jobs = bayt.fetch_bayt(driver, ("java-developer", "jordan"), set(), KEYWORDS)
-        self.assertEqual(driver.visited, ["https://www.bayt.com/en/jordan/jobs/java-developer-jobs/"])
+        self.assertEqual(driver.visited, ["https://www.bayt.com/en/jordan/jobs/java-developer-jobs/?options%5Bsort%5D%5B%5D=d"])
         wait.assert_called_once_with(driver, "li[data-job-id]", 20)
         self.assertEqual(len(jobs), 1)
         job = jobs[0]

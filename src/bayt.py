@@ -9,8 +9,10 @@ Why Selenium (not requests)?
     waits up to BAYT_WAIT_SECONDS for job cards to appear.
 
 URL pattern:
-    https://www.bayt.com/en/{country_slug}/jobs/{term_slug}-jobs/
-    Example: https://www.bayt.com/en/uae/jobs/flutter-developer-jobs/
+    https://www.bayt.com/en/{country_slug}/jobs/{term_slug}-jobs/?options%5Bsort%5D%5B%5D=d
+    Example: https://www.bayt.com/en/uae/jobs/flutter-developer-jobs/?options%5Bsort%5D%5B%5D=d
+    The options[sort][]=d query sorts by date (newest first); the default sorts by
+    relevance, which puts weeks-old jobs on page 1 and the age filter drops them all.
 
 HTML selectors (last verified 2026):
     Job card     : li[data-job-id]
@@ -128,7 +130,7 @@ def _ensure_window(driver):
 
 
 def _build_url(term_slug: str, country_slug: str) -> str:
-    return f"https://www.bayt.com/en/{country_slug}/jobs/{term_slug}-jobs/"
+    return f"https://www.bayt.com/en/{country_slug}/jobs/{term_slug}-jobs/?options%5Bsort%5D%5B%5D=d"
 
 
 def fetch_bayt(driver, args, seen_urls: set, keywords: list) -> list:

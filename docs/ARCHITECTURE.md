@@ -186,9 +186,11 @@ Covers: Jordan, UAE, Saudi Arabia, Kuwait, Qatar, Oman, Bahrain.
 
 **URL pattern:**
 ```
-https://www.bayt.com/en/{country_slug}/jobs/{term_slug}-jobs/
+https://www.bayt.com/en/{country_slug}/jobs/{term_slug}-jobs/?options%5Bsort%5D%5B%5D=d
 ```
-Example: `https://www.bayt.com/en/uae/jobs/flutter-developer-jobs/`
+Example: `https://www.bayt.com/en/uae/jobs/flutter-developer-jobs/?options%5Bsort%5D%5B%5D=d`
+
+The `options[sort][]=d` query sorts by date, newest first. Without it Bayt sorts by relevance and page 1 is weeks old, so the age filter drops everything.
 
 **HTML selectors (as of 2026):**
 | Data | Selector |
