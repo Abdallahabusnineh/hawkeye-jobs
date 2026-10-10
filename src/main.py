@@ -118,7 +118,8 @@ def main():
             if line:
                 print(line)
 
-        summary = run_search(chosen, on_event=print_event, country_labels=country_labels, store=store)
+        summary = run_search(chosen, on_event=print_event, country_labels=country_labels, store=store,
+                             trigger="terminal")
 
         if summary.state == "failed":
             print("[main] The search stopped because of an error — see hawkeye.log in the data folder.")

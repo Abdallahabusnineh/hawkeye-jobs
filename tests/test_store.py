@@ -10,7 +10,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _bootstrap  # noqa: F401  — isolates data dirs, adds src/ to sys.path
 
-from store import Store, job_id
+from store import SCHEMA_VERSION, Store, job_id
 
 
 def make_job(url, title="Java Developer", source="Bayt", **extra):
@@ -56,7 +56,7 @@ class JobIdTests(unittest.TestCase):
 class SchemaTests(StoreTestCase):
     def test_schema_version_and_wal(self):
         conn = sqlite3.connect(self.db)
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], SCHEMA_VERSION)
         self.assertEqual(conn.execute("PRAGMA journal_mode").fetchone()[0], "wal")
         conn.close()
 
@@ -246,7 +246,7 @@ CREATE TABLE legacy_seen (id TEXT PRIMARY KEY);
 class SchemaV2Tests(StoreTestCase):
     def test_fresh_db_has_v2_objects(self):
         conn = sqlite3.connect(self.db)
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], SCHEMA_VERSION)
         cols = [r[1] for r in conn.execute("PRAGMA table_info(jobs)")]
         self.assertIn("notified_at", cols)
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -271,7 +271,7 @@ class SchemaV2Tests(StoreTestCase):
         conn.commit()
         conn.close()
         with Store(path) as store:
-            self.assertEqual(store.conn.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(store.conn.execute("PRAGMA user_version").fetchone()[0], SCHEMA_VERSION)
             row = store.conn.execute("SELECT * FROM jobs WHERE id = 'x1'").fetchone()
             self.assertEqual(row["notified_at"], row["first_seen_at"])
             self.assertEqual(row["title"], "Old Job")
@@ -306,7 +306,7 @@ class MigrationRaceTests(StoreTestCase):
             with patch.object(Store, "_read_version", stale_first):
                 with Store(path) as b:  # B's first read is stale (1)
                     self.assertFalse(b.conn.in_transaction)
-                    self.assertEqual(b.conn.execute("PRAGMA user_version").fetchone()[0], 2)
+                    self.assertEqual(b.conn.execute("PRAGMA user_version").fetchone()[0], SCHEMA_VERSION)
             self.assertEqual(a.conn.execute("SELECT title FROM jobs").fetchone()[0], "Old")
             self.assertEqual(a.unnotified_jobs(), [])
 
@@ -324,7 +324,7 @@ class MigrationRaceTests(StoreTestCase):
         conn.commit()
         conn.close()
         with Store(path) as store:
-            self.assertEqual(store.conn.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(store.conn.execute("PRAGMA user_version").fetchone()[0], SCHEMA_VERSION)
 
     def test_failed_step_rolls_back_and_reraises(self):
         path = self._make_v1()
@@ -445,6 +445,76 @@ class WalRetryTests(unittest.TestCase):
         store, conn, sleep = self._open(failures=99)
         self.assertIsNone(store)
         self.assertEqual(conn.wal_calls, 5)
+
+
+class SchemaV3Tests(StoreTestCase):
+    def test_fresh_db_is_version_3_with_run_queries(self):
+        conn = sqlite3.connect(self.db)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 3)
+        run_cols = [r[1] for r in conn.execute("PRAGMA table_info(runs)")]
+        self.assertIn("trigger", run_cols)
+        self.assertIn("search_id", run_cols)
+        self.assertTrue(conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='run_queries'").fetchone())
+        conn.close()
+
+    def test_v2_db_upgrades_keeping_runs(self):
+        self.store.close()
+        conn = sqlite3.connect(self.db)
+        conn.execute("ALTER TABLE runs DROP COLUMN trigger")
+        conn.execute("ALTER TABLE runs DROP COLUMN search_id")
+        conn.execute("DROP TABLE run_queries")
+        conn.execute("INSERT INTO runs (started_at, state, settings_json) VALUES ('2026-01-01T00:00:00Z','done','{}')")
+        conn.execute("PRAGMA user_version = 2")
+        conn.commit()
+        conn.close()
+        self.store = Store(self.db)
+        runs = self.store.list_runs()
+        self.assertEqual(len(runs), 1)
+        self.assertEqual((runs[0]["trigger"], runs[0]["search_id"]), ("manual", 1))
+
+    def test_start_run_records_trigger_and_rejects_unknown(self):
+        run_id = self.store.start_run(SETTINGS, trigger="auto")
+        self.assertEqual(self.store.list_runs()[0]["trigger"], "auto")
+        self.assertEqual(self.store.list_runs()[0]["id"], run_id)
+        with self.assertRaises(ValueError):
+            self.store.start_run(SETTINGS, trigger="cron")
+
+    def test_record_query_and_run_details(self):
+        run_id = self.store.start_run(SETTINGS)
+        base = {"source": "bayt", "keyword": "Java", "location_id": "jo"}
+        self.store.record_query(run_id, {"type": "query_done", "index": 1, **base, "found": 4, "new": 2})
+        self.store.record_query(run_id, {"type": "query_failed", "index": 0, **base, "error": "TimeoutException"})
+        self.store.record_query(run_id, {"type": "query_skipped", "index": 2, **base, "reason": "login_required"})
+        self.store.record_query(run_id, {"type": "query_started", "index": 3, **base})
+        details = self.store.run_details(run_id)
+        self.assertEqual([q["idx"] for q in details["queries"]], [0, 1, 2])
+        self.assertEqual([q["status"] for q in details["queries"]], ["failed", "done", "skipped"])
+        self.assertEqual(details["queries"][0]["detail"], "TimeoutException")
+        self.assertEqual((details["queries"][1]["found"], details["queries"][1]["new"]), (4, 2))
+        self.assertEqual(details["settings"], SETTINGS)
+        self.assertIsNone(self.store.run_details(run_id + 99))
+
+    def test_job_counts_and_count_jobs(self):
+        run_id = self.store.start_run(SETTINGS)
+        self.store.add_jobs(run_id, [make_job("https://a.com/1"), make_job("https://a.com/2"),
+                                     make_job("https://a.com/3", source="Linkedin")])
+        self.store.set_status(job_id("https://a.com/1"), "saved")
+        self.store.set_status(job_id("https://a.com/2"), "dismissed")
+        self.assertEqual(self.store.job_counts(), {"new": 1, "saved": 1, "applied": 0, "dismissed": 1})
+        self.assertEqual(self.store.count_jobs(), 2)
+        self.assertEqual(self.store.count_jobs(include_dismissed=True), 3)
+        self.assertEqual(self.store.count_jobs(source="Linkedin"), 1)
+
+    def test_last_finished_run(self):
+        self.assertIsNone(self.store.last_finished_run())
+        manual = self.store.start_run(SETTINGS)
+        self.store.finish_run(manual, "done", 1, 1)
+        auto = self.store.start_run(SETTINGS, trigger="auto")
+        self.store.finish_run(auto, "cancelled", 0, 0)
+        self.store.start_run(SETTINGS)  # still running: ignored
+        self.assertEqual(self.store.last_finished_run()["id"], auto)
+        self.assertEqual(self.store.last_finished_run(trigger="manual")["id"], manual)
 
 
 if __name__ == "__main__":

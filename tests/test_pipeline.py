@@ -179,6 +179,11 @@ class HappyPathTests(PipelineTestCase):
         summary = self.run_search(settings(), on_event=broken)
         self.assertEqual(summary.state, "done")
 
+    def test_trigger_is_recorded_on_the_run(self):
+        summary = self.run_search(settings(sources=("linkedin",)), trigger="auto")
+        self.assertEqual(self.store.list_runs()[0]["id"], summary.run_id)
+        self.assertEqual(self.store.list_runs()[0]["trigger"], "auto")
+
 
 class FailureTests(PipelineTestCase):
     def test_failing_query_does_not_stop_run(self):

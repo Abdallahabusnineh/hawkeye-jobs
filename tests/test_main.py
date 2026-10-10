@@ -70,8 +70,8 @@ class MainTests(unittest.TestCase):
 
     def _search_adding(self, jobs, state="done"):
         """run_search stand-in that stores `jobs` the way a real run would."""
-        def fake(chosen, on_event=None, country_labels=None, store=None):
-            run_id = store.start_run(chosen)
+        def fake(chosen, on_event=None, country_labels=None, store=None, trigger="manual"):
+            run_id = store.start_run(chosen, trigger=trigger)
             added = store.add_jobs(run_id, jobs) if jobs else []
             return RunSummary(run_id=run_id, state=state, found=len(jobs), new_jobs=added)
         return fake

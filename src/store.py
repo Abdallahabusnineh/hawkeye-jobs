@@ -6,14 +6,16 @@ so the app can show history and let the user mark jobs as saved / applied /
 dismissed.
 
 Tables (see docs/superpowers/specs/2026-10-10-core-pipeline-design.md §5):
-    runs        — one row per search run
+    runs        — one row per search run (v3: trigger, search_id)
+    run_queries — one row per query of a run, with its outcome (v3)
     jobs        — one row per unique job URL (id = job_id(url)); notified_at is
                   NULL until the job has been reported (v2)
     legacy_seen — hashes imported from the old seen_jobs.json (dedup only)
     site_requests — last request start time per host group, for throttling (v2)
 
-Schema version 2 (PRAGMA user_version): v1 = runs/jobs/legacy_seen,
-v2 adds jobs.notified_at and site_requests.
+Schema version 3 (PRAGMA user_version): v1 = runs/jobs/legacy_seen,
+v2 adds jobs.notified_at and site_requests, v3 adds runs.trigger,
+runs.search_id and run_queries.
 
 Threading:
     One Store per thread (sqlite3 connections are not shared). WAL mode lets
@@ -24,6 +26,7 @@ Threading:
 import hashlib
 import json
 import logging
+import re
 import sqlite3
 import time
 from datetime import datetime, timezone
@@ -34,9 +37,11 @@ from utils import clean_url
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 STATUSES = ("new", "saved", "applied", "dismissed")
 RUN_STATES = ("running", "done", "cancelled", "failed")
+TRIGGERS = ("manual", "auto", "terminal")
+_QUERY_STATUS = {"query_done": "done", "query_failed": "failed", "query_skipped": "skipped"}
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -85,10 +90,29 @@ _V2_STATEMENTS = [
   last_request_at REAL NOT NULL
 )""",
 ]
+_V3_STATEMENTS = [
+    "ALTER TABLE runs ADD COLUMN trigger TEXT NOT NULL DEFAULT 'manual' "
+    "CHECK (trigger IN ('manual','auto','terminal'))",
+    "ALTER TABLE runs ADD COLUMN search_id INTEGER NOT NULL DEFAULT 1",
+    """CREATE TABLE IF NOT EXISTS run_queries (
+  run_id      INTEGER NOT NULL REFERENCES runs(id),
+  idx         INTEGER NOT NULL,
+  source      TEXT NOT NULL,
+  keyword     TEXT NOT NULL DEFAULT '',
+  location_id TEXT,
+  status      TEXT NOT NULL CHECK (status IN ('done','failed','skipped')),
+  found       INTEGER NOT NULL DEFAULT 0,
+  new         INTEGER NOT NULL DEFAULT 0,
+  detail      TEXT,
+  PRIMARY KEY (run_id, idx)
+)""",
+]
 _STEPS = [
     (1, [st.strip() for st in _SCHEMA.split(";") if st.strip()]),
     (2, _V2_STATEMENTS),
+    (3, _V3_STATEMENTS),
 ]
+_ADD_COLUMN = re.compile(r"ALTER TABLE (\w+) ADD COLUMN (\w+)", re.IGNORECASE)
 
 
 def _now() -> str:
@@ -110,11 +134,15 @@ class Store:
     def __init__(self, path: Path | None = None):
         self.path = Path(path) if path else db_path()
         self.conn = sqlite3.connect(self.path, timeout=5.0)
-        self.conn.row_factory = sqlite3.Row
-        self.conn.execute("PRAGMA busy_timeout = 5000")
-        self.conn.execute("PRAGMA foreign_keys = ON")
-        self._enable_wal()
-        self._migrate()
+        try:
+            self.conn.row_factory = sqlite3.Row
+            self.conn.execute("PRAGMA busy_timeout = 5000")
+            self.conn.execute("PRAGMA foreign_keys = ON")
+            self._enable_wal()
+            self._migrate()
+        except BaseException:
+            self.conn.close()  # a failed open must not leak the connection
+            raise
 
     def _enable_wal(self) -> None:
         """Switch to WAL. Several processes creating a brand-new DB at once can hit
@@ -144,14 +172,16 @@ class Store:
             if self._read_version() >= target:
                 self.conn.execute("ROLLBACK")
                 return
-            skip_backfill = False
+            skipped_columns = set()
             for statement in statements:
-                if statement.startswith("ALTER TABLE jobs ADD COLUMN notified_at"):
-                    cols = [r[1] for r in self.conn.execute("PRAGMA table_info(jobs)")]
-                    if "notified_at" in cols:  # e.g. tables built by hand at version 0
-                        skip_backfill = True
+                match = _ADD_COLUMN.match(statement)
+                if match:
+                    table, column = match.groups()
+                    existing = [r[1] for r in self.conn.execute(f"PRAGMA table_info({table})")]
+                    if column in existing:  # e.g. tables built by hand at an older version
+                        skipped_columns.add(column)
                         continue
-                if statement.startswith("UPDATE jobs SET notified_at") and skip_backfill:
+                if statement.startswith("UPDATE jobs SET notified_at") and "notified_at" in skipped_columns:
                     continue
                 self.conn.execute(statement)
             self.conn.execute(f"PRAGMA user_version = {target}")
@@ -183,13 +213,54 @@ class Store:
             log.info("Marked %d interrupted run(s) as failed", cur.rowcount)
         return cur.rowcount
 
-    def start_run(self, settings: dict) -> int:
+    def start_run(self, settings: dict, trigger: str = "manual", search_id: int = 1) -> int:
+        if trigger not in TRIGGERS:
+            raise ValueError(f"Unknown trigger: {trigger}")
         with self.conn:
             cur = self.conn.execute(
-                "INSERT INTO runs (started_at, state, settings_json) VALUES (?, 'running', ?)",
-                (_now(), json.dumps(settings, ensure_ascii=False)),
+                "INSERT INTO runs (started_at, state, settings_json, trigger, search_id) "
+                "VALUES (?, 'running', ?, ?, ?)",
+                (_now(), json.dumps(settings, ensure_ascii=False), trigger, search_id),
             )
         return cur.lastrowid
+
+    def record_query(self, run_id: int, event: dict) -> None:
+        """Store one finished query (query_done / query_failed / query_skipped); other events are ignored."""
+        status = _QUERY_STATUS.get(event.get("type"))
+        if status is None:
+            return
+        with self.conn:
+            self.conn.execute(
+                "INSERT OR REPLACE INTO run_queries "
+                "(run_id, idx, source, keyword, location_id, status, found, new, detail) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (run_id, event["index"], event["source"], event.get("keyword") or "",
+                 event.get("location_id"), status, int(event.get("found") or 0),
+                 int(event.get("new") or 0), event.get("error") or event.get("reason")),
+            )
+
+    def run_details(self, run_id: int):
+        row = self.conn.execute("SELECT * FROM runs WHERE id = ?", (run_id,)).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        item["settings"] = json.loads(item.pop("settings_json"))
+        item["queries"] = [dict(r) for r in self.conn.execute(
+            "SELECT * FROM run_queries WHERE run_id = ? ORDER BY idx", (run_id,))]
+        return item
+
+    def last_finished_run(self, trigger=None):
+        sql = "SELECT * FROM runs WHERE state != 'running'"
+        params = []
+        if trigger is not None:
+            sql += " AND trigger = ?"
+            params.append(trigger)
+        row = self.conn.execute(sql + " ORDER BY id DESC LIMIT 1", params).fetchone()
+        if row is None:
+            return None
+        item = dict(row)
+        item["settings"] = json.loads(item.pop("settings_json"))
+        return item
 
     def finish_run(self, run_id: int, state: str, found: int, new: int) -> None:
         if state not in RUN_STATES or state == "running":
@@ -286,8 +357,13 @@ class Store:
             )
         return cur.rowcount > 0
 
-    def list_jobs(self, status=None, source=None, run_id=None, text=None,
-                  include_dismissed=False, limit=100, offset=0) -> list:
+    def job_counts(self) -> dict:
+        counts = {status: 0 for status in STATUSES}
+        for status, n in self.conn.execute("SELECT status, COUNT(*) FROM jobs GROUP BY status"):
+            counts[status] = n
+        return counts
+
+    def _job_where(self, status, source, run_id, text, include_dismissed):
         clauses, params = [], []
         if status is not None:
             if status not in STATUSES:
@@ -306,7 +382,15 @@ class Store:
             clauses.append("(title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')")
             pattern = _like_pattern(text)
             params += [pattern, pattern]
-        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        return (f"WHERE {' AND '.join(clauses)}" if clauses else ""), params
+
+    def count_jobs(self, status=None, source=None, run_id=None, text=None, include_dismissed=False) -> int:
+        where, params = self._job_where(status, source, run_id, text, include_dismissed)
+        return self.conn.execute(f"SELECT COUNT(*) FROM jobs {where}", params).fetchone()[0]
+
+    def list_jobs(self, status=None, source=None, run_id=None, text=None,
+                  include_dismissed=False, limit=100, offset=0) -> list:
+        where, params = self._job_where(status, source, run_id, text, include_dismissed)
         rows = self.conn.execute(
             f"SELECT * FROM jobs {where} ORDER BY first_seen_at DESC, rowid DESC LIMIT ? OFFSET ?",
             (*params, limit, offset),

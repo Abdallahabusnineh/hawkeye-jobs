@@ -300,7 +300,8 @@ def _make_emitter(on_event):
 
 
 def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=None,
-               store=None, fetchers=None, driver_factory=None, delays=None) -> RunSummary:
+               store=None, fetchers=None, driver_factory=None, delays=None,
+               trigger="manual") -> RunSummary:
     """
     Run one search. settings = {"keywords", "locations", "sources"}.
 
@@ -313,6 +314,8 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
     requests to one site; None uses POLITE_DELAYS, and a source missing from it
     is not throttled. Sources sharing a host (SITE_GROUPS) share one throttle at
     the largest of their gaps.
+
+    `trigger` is recorded on the run (`manual`, `auto` or `terminal`).
     """
     cancel = cancel or threading.Event()
     owns_store = store is None
@@ -331,7 +334,8 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
         query["index"] = i
 
     _prime_throttles(store, groups)
-    run_id = store.start_run({key: list(settings[key]) for key in ("keywords", "locations", "sources")})
+    run_id = store.start_run({key: list(settings[key]) for key in ("keywords", "locations", "sources")},
+                             trigger=trigger)
     emit({"type": "run_started", "run_id": run_id, "total": len(queries)})
 
     http_queries = [q for q in queries if q["source"] in HTTP_SOURCES]
