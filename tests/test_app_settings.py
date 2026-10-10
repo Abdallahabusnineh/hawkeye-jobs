@@ -107,5 +107,41 @@ class ValidateSearchSettingsTests(unittest.TestCase):
                                                 "sources": "invalid"})
 
 
+class ConcurrentSaveTests(unittest.TestCase):
+    def test_concurrent_saves_keep_every_key(self):
+        import threading
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            errors = []
+
+            def app_save(i):
+                try:
+                    settings.save_app_settings({"latest_version": f"v{i}"} if i % 3 == 0 else
+                                               {"theme": ("dark", "light")[i % 2]}, path)
+                    settings.save_app_settings({"last_posts_run": "2026-01-01T00:00:00Z"}, path)
+                except Exception as exc:  # pragma: no cover
+                    errors.append(exc)
+
+            def search_save():
+                try:
+                    for _ in range(10):
+                        settings.save_config({"keywords": ["Java"], "locations": ["jo"], "sources": ["bayt"]}, path)
+                except Exception as exc:  # pragma: no cover
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=app_save, args=(i,)) for i in range(30)]
+            threads += [threading.Thread(target=search_save) for _ in range(5)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30)
+            self.assertEqual(errors, [])
+            data = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(data["keywords"], ["Java"])
+            self.assertEqual(data["app"]["last_posts_run"], "2026-01-01T00:00:00Z")
+            self.assertIn(data["app"]["latest_version"], {f"v{i}" for i in range(0, 30, 3)})
+            self.assertIn(data["app"]["theme"], {"dark", "light"})
+
+
 if __name__ == "__main__":
     unittest.main()

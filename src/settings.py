@@ -6,6 +6,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 from catalog import SOURCE_ORDER, SOURCES, get_location, normalize_location_id, source_choice_label
@@ -32,6 +33,8 @@ APP_DEFAULTS = {
     "latest_version": None,
     "last_posts_run": None,
 }
+# One lock for every read-modify-write of config.json (API threads + the run worker both save).
+_CONFIG_LOCK = threading.RLock()
 MAX_KEYWORDS = 20
 MAX_KEYWORD_LENGTH = 100
 
@@ -120,10 +123,11 @@ def _write_json_atomic(path: Path, data: dict) -> None:
 def save_config(data: dict, path=None) -> None:
     """Write keywords/locations/sources, keeping any other keys already in the file (e.g. the app's settings)."""
     path = Path(path) if path else config_path()
-    existing = _read_config_dict(path)
-    for key in SEARCH_KEYS:
-        existing[key] = list(data[key])
-    _write_json_atomic(path, existing)
+    with _CONFIG_LOCK:
+        existing = _read_config_dict(path)
+        for key in SEARCH_KEYS:
+            existing[key] = list(data[key])
+        _write_json_atomic(path, existing)
 
 
 def _valid_app_value(key: str, value) -> bool:
@@ -164,11 +168,12 @@ def save_app_settings(patch: dict, path=None) -> dict:
             errors[key] = "invalid"
     if errors:
         raise SettingsError(errors)
-    data = _read_config_dict(path)
-    app = load_app_settings(path)
-    app.update(patch)
-    data["app"] = app
-    _write_json_atomic(path, data)
+    with _CONFIG_LOCK:
+        data = _read_config_dict(path)
+        app = load_app_settings(path)
+        app.update(patch)
+        data["app"] = app
+        _write_json_atomic(path, data)
     return app
 
 

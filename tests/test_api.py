@@ -177,5 +177,86 @@ class ReadTests(ApiTestCase):
         self.assertEqual(self.get("/api/runs/999").status_code, 404)
 
 
+class WriteTests(ApiTestCase):
+    def send(self, method, path, json=None):
+        return self.client.request(method, path, headers={"X-Hawkeye-Token": TOKEN}, json=json)
+
+    def test_put_settings_validates_and_saves(self):
+        ok = self.send("PUT", "/api/settings", {"keywords": [" Java "], "locations": ["jo", "remote"],
+                                                "sources": ["bayt"]})
+        self.assertEqual(ok.status_code, 200)
+        self.assertEqual(self.config["keywords"], ["Java"])
+        bad = self.send("PUT", "/api/settings", {"keywords": [], "locations": ["xx"], "sources": []})
+        self.assertEqual(bad.status_code, 422)
+        self.assertEqual(bad.json()["errors"], {"keywords": "required", "locations": "invalid",
+                                                "sources": "required"})
+
+    def test_patch_app_settings_only_user_keys(self):
+        ok = self.send("PATCH", "/api/app-settings", {"language": "en"})
+        self.assertEqual((ok.status_code, ok.json()["language"]), (200, "en"))
+        internal = self.send("PATCH", "/api/app-settings", {"last_posts_run": "2026-01-01T00:00:00Z"})
+        self.assertEqual(internal.status_code, 422)
+        self.assertEqual(internal.json()["errors"], {"last_posts_run": "unknown"})
+
+    def test_patch_job_status(self):
+        from store import job_id
+        jid = job_id("https://a.com/1")
+        self.assertEqual(self.send("PATCH", f"/api/jobs/{jid}", {"status": "saved"}).status_code, 200)
+        self.assertEqual(self.get("/api/jobs?status=saved").json()["total"], 1)
+        self.assertEqual(self.send("PATCH", "/api/jobs/nope", {"status": "saved"}).status_code, 404)
+        self.assertEqual(self.send("PATCH", f"/api/jobs/{jid}", {"status": "archived"}).status_code, 422)
+
+    def test_start_run(self):
+        response = self.send("POST", "/api/runs")
+        self.assertEqual((response.status_code, response.json()), (202, {"run_id": 42}))
+        self.assertEqual(self.manager.started, ["manual"])
+
+    def test_start_run_still_starting_returns_null_id(self):
+        self.manager.start = lambda trigger="manual": None
+        response = self.send("POST", "/api/runs")
+        self.assertEqual((response.status_code, response.json()), (202, {"run_id": None}))
+
+    def test_start_run_conflicts(self):
+        self.manager.is_running = True
+        self.assertEqual(self.send("POST", "/api/runs").json(), {"error": "run_in_progress"})
+        self.assertEqual(self.send("POST", "/api/runs").status_code, 409)
+        self.manager.is_running = False
+        self.manager.no_settings = True
+        response = self.send("POST", "/api/runs")
+        self.assertEqual((response.status_code, response.json()), (422, {"error": "no_settings"}))
+
+    def test_cancel(self):
+        self.assertEqual(self.send("POST", "/api/runs/current/cancel").status_code, 409)
+        self.manager.is_running = True
+        self.assertEqual(self.send("POST", "/api/runs/current/cancel").status_code, 202)
+
+    def test_events_stream(self):
+        import threading
+
+        def feed():
+            import time
+            deadline = time.time() + 5
+            while self.manager.queue is None and time.time() < deadline:
+                time.sleep(0.01)
+            self.manager.queue.put({"type": "run_started", "run_id": 1, "total": 2})
+            self.manager.queue.put(None)  # app shutting down: stream ends
+
+        threading.Thread(target=feed, daemon=True).start()
+        with self.client.stream("GET", f"/api/events?token={TOKEN}") as response:
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.headers["content-type"].startswith("text/event-stream"))
+            body = "".join(response.iter_text())
+        self.assertIn('data: {"type": "run_started", "run_id": 1, "total": 2}', body)
+        self.assertFalse(self.manager.subscribed)
+
+    def test_event_stream_generator_unsubscribes_on_close(self):
+        from web import api
+        q = self.manager.subscribe()
+        stream = api._event_stream(self.manager, q)
+        self.assertEqual(next(stream), "retry: 3000\n\n")
+        stream.close()  # client disconnected
+        self.assertFalse(self.manager.subscribed)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -4,12 +4,16 @@ api.py — Endpoints the UI calls (all local; see server.py for the guards)
 Responses are data and codes only — the UI owns every displayed word.
 """
 
+import json
 import logging
+import queue
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from countries import localized_countries
-from settings import LANGUAGES
+from runner import NoSearchSettings, RunInProgress
+from settings import LANGUAGES, USER_APP_KEYS, SettingsError, validate_search_settings
 from store import STATUSES
 
 log = logging.getLogger(__name__)
@@ -97,3 +101,83 @@ def get_run(request: Request, run_id: int):
     if details is None:
         raise HTTPException(status_code=404, detail={"run": "not_found"})
     return details
+
+
+KEEPALIVE_SECONDS = 15
+
+
+@router.put("/settings")
+def put_settings(request: Request, body: dict):
+    s = _services(request)
+    allowed = {c["id"] for c in s.base_countries()}
+    try:
+        cleaned = validate_search_settings(body, allowed)
+    except SettingsError as exc:
+        return JSONResponse({"errors": exc.errors}, status_code=422)
+    s.save_config(cleaned)
+    return cleaned
+
+
+@router.patch("/app-settings")
+def patch_app_settings(request: Request, body: dict):
+    unknown = {key: "unknown" for key in body if key not in USER_APP_KEYS}
+    if unknown:
+        return JSONResponse({"errors": unknown}, status_code=422)
+    try:
+        return _services(request).save_app_settings(body)
+    except SettingsError as exc:
+        return JSONResponse({"errors": exc.errors}, status_code=422)
+
+
+@router.patch("/jobs/{job_id}")
+def patch_job(request: Request, job_id: str, body: dict):
+    status = body.get("status")
+    if status not in STATUSES:
+        return JSONResponse({"errors": {"status": "invalid"}}, status_code=422)
+    with _services(request).store_factory() as store:
+        found = store.set_status(job_id, status)
+    if not found:
+        raise HTTPException(status_code=404, detail={"job": "not_found"})
+    return {"ok": True}
+
+
+@router.post("/runs", status_code=202)
+def post_run(request: Request):
+    try:
+        run_id = _services(request).manager.start("manual")
+    except RunInProgress:
+        return JSONResponse({"error": "run_in_progress"}, status_code=409)
+    except NoSearchSettings:
+        return JSONResponse({"error": "no_settings"}, status_code=422)
+    return {"run_id": run_id}  # None while the run is still starting
+
+
+@router.post("/runs/current/cancel", status_code=202)
+def cancel_run(request: Request):
+    if not _services(request).manager.cancel():
+        return JSONResponse({"error": "not_running"}, status_code=409)
+    return {"ok": True}
+
+
+def _event_stream(manager, q):
+    try:
+        yield "retry: 3000\n\n"
+        while manager.is_subscribed(q):
+            try:
+                event = q.get(timeout=KEEPALIVE_SECONDS)
+            except queue.Empty:
+                yield ": keepalive\n\n"
+                continue
+            if event is None:
+                break
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+    finally:
+        manager.unsubscribe(q)
+
+
+@router.get("/events")
+def get_events(request: Request):
+    manager = _services(request).manager
+    q = manager.subscribe()
+    return StreamingResponse(_event_stream(manager, q), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
