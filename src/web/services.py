@@ -12,6 +12,7 @@ import os
 import platform
 import subprocess
 import sys
+import threading
 import time
 import webbrowser
 from dataclasses import dataclass, field
@@ -47,14 +48,17 @@ def _fetch_latest_release() -> dict:
 
 def _base_countries_factory():
     cache = {}
+    lock = threading.Lock()
 
     def base_countries():
         if "rows" not in cache:
-            from countries import CountryFetchError, load_countries, offline_countries
-            try:
-                cache["rows"] = load_countries()
-            except CountryFetchError:
-                cache["rows"] = offline_countries()
+            with lock:
+                if "rows" not in cache:
+                    from countries import CountryFetchError, load_countries, offline_countries
+                    try:
+                        cache["rows"] = load_countries()
+                    except CountryFetchError:
+                        cache["rows"] = offline_countries()
         return cache["rows"]
     return base_countries
 

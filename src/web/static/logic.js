@@ -204,3 +204,8 @@ export function runFinishedKey(state) {
 export function browserNoticeKey(reason) {
   return ["chrome_not_found", "start_failed", "crashed"].includes(reason) ? `notice.browser.${reason}` : "notice.browser.start_failed";
 }
+
+export function shouldReplaceToast(current, next) {
+  if (!current) return true;
+  return !(current.action && !(next && next.action));
+}

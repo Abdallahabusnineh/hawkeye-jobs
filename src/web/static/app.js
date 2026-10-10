@@ -67,14 +67,16 @@ function hawkeye() {
         this.theme = this.state.theme;
         this.applyLanguage();
         this.applyTheme();
-        await Promise.all([this.loadCountries(), this.loadSearchSettings(), this.loadJobs()]);
+        await Promise.all([this.loadSearchSettings(), this.loadJobs()]);
+        this.ready = true;
         this.connectEvents();
         setInterval(() => { this.now = Date.now(); }, 60000);
-        this.ready = true;
       } catch (error) {
         console.error("Hawkeye Jobs could not start", error);
         this.fatal = true;
+        return;
       }
+      this.loadCountries().catch((error) => this.showError(error));
     },
 
     // ── text ─────────────────────────────────────────────────────────
@@ -107,7 +109,11 @@ function hawkeye() {
       const id = L.jobSourceId(job.source);
       return id ? this.sourceShort(id) : job.source;
     },
-    locationLabel(id) { return id ? (this.countryLabels[id] || id) : ""; },
+    locationLabel(id) {
+      if (!id) return "";
+      if (this.countryLabels[id]) return this.countryLabels[id];
+      return id === "remote" ? this.t("search.remote_label") : String(id).toUpperCase();
+    },
     jobLocation(job) { return job.location_id ? this.locationLabel(job.location_id) : (job.location || ""); },
 
     // ── state helpers (safe before /api/state has loaded) ────────────
@@ -181,7 +187,7 @@ function hawkeye() {
         case "browser_failed":
           this.notify("warn", L.browserNoticeKey(event.reason), {}, event.reason === "chrome_not_found"
             ? { label: "action.download_chrome", run: () => this.openUrl(CHROME_URL) }
-            : { label: "action.report_problem", run: () => this.reportProblem() });
+            : { label: "action.retry", run: () => this.startSearch() });
           break;
         case "run_finished":
           this.scheduleRefresh(0);
@@ -215,6 +221,7 @@ function hawkeye() {
 
     // ── messages ─────────────────────────────────────────────────────
     notify(kind, key, params = {}, action = null) {
+      if (!L.shouldReplaceToast(this.toast, { action })) return;
       clearTimeout(this.timers.toast);
       this.toast = { kind, key, params, action };
       this.timers.toast = setTimeout(() => { this.toast = null; }, action ? TOAST_MS * 2 : TOAST_MS);
@@ -374,7 +381,7 @@ function hawkeye() {
       this.setFieldError("keywords", null);
       this.requestEstimate();
     },
-    countryMatches() { return L.filterCountries(this.countries, this.search.countryQuery, this.search.locations); },
+    countryMatches() { return !this.countries.length ? [] : L.filterCountries(this.countries, this.search.countryQuery, this.search.locations); },
     addLocation(id) {
       if (!this.search.locations.includes(id)) this.search.locations = [...this.search.locations, id];
       this.search.countryQuery = "";
@@ -560,6 +567,7 @@ function hawkeye() {
       this.settingsPage.confirmOpen = true;
     },
     closeDeleteDialog() {
+      if (!this.settingsPage.confirmOpen) return;
       this.settingsPage.confirmOpen = false;
       this.$nextTick(() => { if (this.$refs.deleteOpener) this.$refs.deleteOpener.focus(); });
     },

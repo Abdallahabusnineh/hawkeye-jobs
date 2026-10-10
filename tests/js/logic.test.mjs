@@ -184,3 +184,10 @@ test("small key helpers", () => {
   assert.equal(L.browserNoticeKey("crashed"), "notice.browser.crashed");
   assert.equal(L.browserNoticeKey("odd"), "notice.browser.start_failed");
 });
+
+test("shouldReplaceToast keeps an actionable toast over a plain one", () => {
+  assert.equal(L.shouldReplaceToast(null, { action: null }), true);
+  assert.equal(L.shouldReplaceToast({ action: { label: "x" } }, { action: null }), false);
+  assert.equal(L.shouldReplaceToast({ action: { label: "x" } }, { action: { label: "y" } }), true);
+  assert.equal(L.shouldReplaceToast({ action: null }, { action: null }), true);
+});
