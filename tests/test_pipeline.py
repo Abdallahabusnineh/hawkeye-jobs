@@ -381,12 +381,14 @@ class ThrottleTests(PipelineTestCase):
             return [job_for("bayt", args)]
 
         self.rec.behaviour["bayt"] = stamp
+        begin = time.monotonic()
         summary = self.run_search(settings(keywords=("Java", "Kotlin", "Go"), sources=("bayt",)),
                                   delays={"bayt": (0.05, 0.05)})
         self.assertEqual(summary.state, "done")
         self.assertEqual(len(starts), 3)
-        gaps = [b - a for a, b in zip(starts, starts[1:])]
-        self.assertTrue(all(gap >= 0.05 - 0.01 for gap in gaps), gaps)
+        # The k-th request may not start before k gaps have passed (robust to a paused thread).
+        offsets = [round(t - begin, 3) for t in starts]
+        self.assertTrue(all(off >= k * 0.05 - 0.01 for k, off in enumerate(offsets)), offsets)
 
     def test_cancel_while_waiting_on_throttle_ends_run_quickly(self):
         cancel = threading.Event()
