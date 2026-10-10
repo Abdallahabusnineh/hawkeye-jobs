@@ -105,7 +105,7 @@ def main(argv=None) -> None:
     args = _parse(argv)
     setup_logging()
     _prepare_data()
-    parts = build()
+    parts = build(port=args.port)
     thread = None
     try:
         thread = _serve(parts)
@@ -141,6 +141,7 @@ def main(argv=None) -> None:
 def _parse(argv):
     parser = argparse.ArgumentParser(prog="app.py", description="Hawkeye Jobs desktop app")
     parser.add_argument("--no-window", action="store_true", help="serve only and print the URL")
+    parser.add_argument("--port", type=int, default=None, help="fixed port (development)")
     return parser.parse_args(argv)
 
 

@@ -25,6 +25,26 @@ from web.api import router
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 EVENTS_PATH = "/api/events"
 
+# 'unsafe-eval' is required by the standard Alpine.js build (it compiles x-* expressions).
+# Everything else is locked to this origin; the UI loads nothing from the internet.
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self'; img-src 'self' data:; "
+        "connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; "
+        "frame-ancestors 'none'"
+    ),
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "no-store",
+}
+
+
+def _token_ok(request: Request, token: str) -> bool:
+    supplied = request.headers.get("x-hawkeye-token")
+    if supplied is None and request.url.path == EVENTS_PATH:
+        supplied = request.query_params.get("token")
+    return bool(supplied) and hmac.compare_digest(supplied.encode(), token.encode())
+
 
 def create_app(*, token: str, allowed_hosts: set, services, static_dir: Path = STATIC_DIR) -> FastAPI:
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -33,14 +53,13 @@ def create_app(*, token: str, allowed_hosts: set, services, static_dir: Path = S
     @app.middleware("http")
     async def guard(request: Request, call_next):
         if request.headers.get("host") not in allowed_hosts:
-            return JSONResponse({"error": "forbidden"}, status_code=403)
-        if request.url.path.startswith("/api/"):
-            supplied = request.headers.get("x-hawkeye-token")
-            if supplied is None and request.url.path == EVENTS_PATH:
-                supplied = request.query_params.get("token")
-            if not supplied or not hmac.compare_digest(supplied.encode(), token.encode()):
-                return JSONResponse({"error": "forbidden"}, status_code=403)
-        return await call_next(request)
+            response = JSONResponse({"error": "forbidden"}, status_code=403)
+        elif request.url.path.startswith("/api/") and not _token_ok(request, token):
+            response = JSONResponse({"error": "forbidden"}, status_code=403)
+        else:
+            response = await call_next(request)
+        response.headers.update(SECURITY_HEADERS)
+        return response
 
     # The backend sends codes, never display text: replace FastAPI's English default bodies.
     @app.exception_handler(RequestValidationError)

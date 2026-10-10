@@ -638,6 +638,17 @@ class SpacingAcrossRunsTests(PipelineTestCase):
         self.assertLess(order.index("prime"), order.index("run_started"))
 
 
+class EstimateTests(unittest.TestCase):
+    def test_estimate_takes_the_slower_lane(self):
+        from pipeline import estimate_seconds
+        queries = [{"source": "linkedin"}, {"source": "linkedin"}, {"source": "google_jobs"}]
+        # http lane: 2 × ((3+6)/2 + 4) = 17; browser lane: (8+12)/2 + 8 = 18
+        self.assertEqual(estimate_seconds(queries), 18)
+
+    def test_estimate_of_nothing_is_zero(self):
+        from pipeline import estimate_seconds
+        self.assertEqual(estimate_seconds([]), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

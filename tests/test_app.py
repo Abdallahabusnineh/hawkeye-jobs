@@ -91,6 +91,36 @@ class AppTests(unittest.TestCase):
         parts.manager.report_pending_now.assert_called_once()
         shut.assert_called_once_with(parts)
 
+    def test_port_option_reaches_build(self):
+        self.assertEqual(app._parse(["--no-window", "--port", "8765"]).port, 8765)
+        self.assertIsNone(app._parse([]).port)
+
+    def test_main_recovers_then_starts_auto_then_reports(self):
+        from unittest.mock import patch
+        parent = MagicMock()
+        parts = MagicMock()
+        parts.manager = parent.manager
+        parts.auto = parent.auto
+        thread = MagicMock()
+        thread.is_alive.return_value = False
+        with patch.object(app, "setup_logging"), patch.object(app, "_prepare_data"), \
+                patch.object(app, "build", return_value=parts) as build, \
+                patch.object(app, "_serve", return_value=thread), patch.object(app, "shutdown"), \
+                self.assertLogs("app", "ERROR"), patch("builtins.print"), patch("sys.stderr"):
+            with self.assertRaises(SystemExit):
+                app.main(["--no-window", "--port", "8765"])
+        build.assert_called_once_with(port=8765)
+        names = [c[0] for c in parent.mock_calls]
+        self.assertEqual(names[:3], ["manager.recover_interrupted", "auto.start", "manager.report_pending_now"])
+
+    def test_prepare_data_never_recovers_runs_without_the_lock(self):
+        from unittest.mock import patch
+        with patch.object(app, "migrate_legacy_config"), patch.object(app, "Store") as store_cls:
+            app._prepare_data()
+        store = store_cls.return_value.__enter__.return_value
+        store.recover_interrupted_runs.assert_not_called()
+        store.import_legacy_seen_file.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

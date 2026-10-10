@@ -495,5 +495,62 @@ class ProfileDirTests(ApiTestCase):
         self.assertFalse(response.json()["linkedin_profile"])
 
 
+class EstimateApiTests(ApiTestCase):
+    def post(self, path, body):
+        return self.client.post(path, json=body, headers={"X-Hawkeye-Token": TOKEN})
+
+    def test_estimate_counts_queries_and_seconds(self):
+        response = self.post("/api/estimate", {"keywords": ["Java"], "locations": ["jo"],
+                                               "sources": ["linkedin", "bayt"]})
+        self.assertEqual(response.status_code, 200)
+        # linkedin (http): (3+6)/2 + 4 = 8.5; bayt (browser): (6+10)/2 + 8 = 16
+        self.assertEqual(response.json(), {"queries": 2, "seconds": 16})
+
+    def test_estimate_with_missing_or_bad_input_is_zero(self):
+        for body in ({}, {"keywords": [], "locations": ["jo"], "sources": ["linkedin"]},
+                     {"keywords": "Java", "locations": ["jo"], "sources": ["linkedin"]},
+                     {"keywords": ["Java"], "locations": ["jo"], "sources": ["nope"]}):
+            self.assertEqual(self.post("/api/estimate", body).json(), {"queries": 0, "seconds": 0}, body)
+
+
+class SecurityHeaderTests(ApiTestCase):
+    def assert_secure(self, response):
+        self.assertIn("frame-ancestors 'none'", response.headers["content-security-policy"])
+        self.assertIn("script-src 'self'", response.headers["content-security-policy"])
+        self.assertEqual(response.headers["referrer-policy"], "no-referrer")
+        self.assertEqual(response.headers["x-content-type-options"], "nosniff")
+        self.assertEqual(response.headers["cache-control"], "no-store")
+
+    def test_headers_on_static_api_and_refusals(self):
+        self.assert_secure(self.client.get("/"))
+        self.assert_secure(self.get("/api/state"))
+        self.assert_secure(self.client.get("/api/state"))  # 403 without the token
+
+
+class ResetOrderTests(ApiTestCase):
+    def test_reset_deletes_wal_and_shm_before_the_database(self):
+        from pathlib import Path
+        from unittest.mock import patch
+        real_close = Store.close
+
+        def close_leaving_wal(store):  # SQLite removes empty WAL/SHM on the last close; a crash would not
+            real_close(store)
+            for suffix in ("-wal", "-shm"):
+                Path(str(self.db) + suffix).touch()
+
+        deleted = []
+        real_unlink = Path.unlink
+
+        def recording_unlink(path, *args, **kwargs):
+            deleted.append(path.name)
+            return real_unlink(path, *args, **kwargs)
+
+        with patch.object(Store, "close", close_leaving_wal), patch.object(Path, "unlink", recording_unlink):
+            response = self.client.post("/api/reset", json={"confirm": "DELETE"},
+                                        headers={"X-Hawkeye-Token": TOKEN})
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(deleted, ["t.db-wal", "t.db-shm", "t.db"])
+
+
 if __name__ == "__main__":
     unittest.main()

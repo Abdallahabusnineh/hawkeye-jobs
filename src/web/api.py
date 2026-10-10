@@ -14,7 +14,9 @@ from urllib.parse import urlencode, urlparse
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from catalog import SOURCES, plan_queries
 from countries import localized_countries
+from pipeline import estimate_seconds
 from runner import NoSearchSettings, RunInProgress
 from settings import LANGUAGES, USER_APP_KEYS, SettingsError, validate_search_settings
 from store import STATUSES
@@ -124,6 +126,28 @@ def put_settings(request: Request, body: dict):
         return JSONResponse({"errors": exc.errors}, status_code=422)
     s.save_config(cleaned)
     return cleaned
+
+
+def _str_list(value, limit):
+    if not isinstance(value, list):
+        return []
+    return [item.strip() for item in value[:limit] if isinstance(item, str) and item.strip()]
+
+
+@router.post("/estimate")
+def estimate(request: Request, body: dict):
+    """How long a search with these (unsaved) settings would take, roughly. Never fails."""
+    keywords = _str_list(body.get("keywords"), 20)
+    locations = _str_list(body.get("locations"), 300)
+    sources = [s for s in _str_list(body.get("sources"), 20) if s in SOURCES]
+    if not (keywords and locations and sources):
+        return {"queries": 0, "seconds": 0}
+    try:
+        queries = plan_queries(keywords, locations, sources)
+    except Exception:
+        log.warning("Estimate failed for %r", body, exc_info=True)
+        return {"queries": 0, "seconds": 0}
+    return {"queries": len(queries), "seconds": estimate_seconds(queries)}
 
 
 @router.patch("/app-settings")
@@ -302,7 +326,7 @@ def reset(request: Request, body: dict):
             if Path(db_path).parent.resolve() != root:
                 log.warning("Reset refused: database is not directly inside the data folder")
                 return JSONResponse({"error": "outside_data_dir"}, status_code=409)
-            for suffix in ("", "-wal", "-shm"):
+            for suffix in ("-wal", "-shm", ""):  # WAL/SHM first: never leave an old WAL beside a new DB
                 target = root / (Path(db_path).name + suffix)
                 if target.is_symlink() or target.is_file():
                     try:

@@ -53,6 +53,20 @@ POLITE_DELAYS = {  # (min, max) seconds between requests to the same site
     "linkedin_posts": (10, 20),  # the user's own LinkedIn account: slowest
 }
 
+# Rough time per query on top of the polite gap (page load, parsing). Only used
+# for the estimate shown on the Search page; the real pacing is the Throttles.
+_WORK_SECONDS = {"http": 4, "browser": 8}
+
+
+def estimate_seconds(queries: list) -> int:
+    """Approximate run time for plan_queries() output. The two lanes run in parallel."""
+    lanes = {"http": 0.0, "browser": 0.0}
+    for query in queries:
+        lane = "browser" if query["source"] in BROWSER_SOURCES else "http"
+        low, high = POLITE_DELAYS.get(query["source"], (0, 0))
+        lanes[lane] += (low + high) / 2 + _WORK_SECONDS[lane]
+    return int(round(max(lanes.values())))
+
 # Sources that hit the same host share one Throttle, whichever lane they run on
 # (e.g. linkedin via JobSpy and linkedin_posts via the user's logged-in Chrome).
 SITE_GROUPS = {
