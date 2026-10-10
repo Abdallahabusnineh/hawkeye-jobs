@@ -224,7 +224,6 @@ class ConcurrencyTests(StoreTestCase):
             reader.close()
 
 
-
 V1_SCHEMA = """
 CREATE TABLE runs (
   id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT NOT NULL, finished_at TEXT,
@@ -278,6 +277,64 @@ class SchemaV2Tests(StoreTestCase):
             self.assertEqual(row["title"], "Old Job")
             self.assertEqual(store.unnotified_jobs(), [])
             self.assertEqual(store.site_last_requests(), {})
+
+
+class MigrationRaceTests(StoreTestCase):
+    def _make_v1(self, name="v1.db"):
+        path = Path(self.tmp.name) / name
+        conn = sqlite3.connect(path)
+        conn.executescript(V1_SCHEMA)
+        conn.execute(
+            "INSERT INTO jobs (id, title, url, source, first_seen_at, last_seen_at)"
+            " VALUES ('x1','Old','https://a.com/o','Bayt','2026-01-02T00:00:00Z','2026-01-02T00:00:00Z')"
+        )
+        conn.execute("PRAGMA user_version = 1")
+        conn.commit()
+        conn.close()
+        return path
+
+    def test_stale_opener_does_not_crash_after_other_migrated(self):
+        path = self._make_v1()
+        real = Store._read_version
+        reads = []
+
+        def stale_first(self_):
+            reads.append(1)
+            return 1 if len(reads) == 1 else real(self_)
+
+        with Store(path) as a:  # A migrates v1 -> v2
+            with patch.object(Store, "_read_version", stale_first):
+                with Store(path) as b:  # B's first read is stale (1)
+                    self.assertFalse(b.conn.in_transaction)
+                    self.assertEqual(b.conn.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(a.conn.execute("SELECT title FROM jobs").fetchone()[0], "Old")
+            self.assertEqual(a.unnotified_jobs(), [])
+
+    def test_open_v2_db_is_noop(self):
+        before = self.store.conn.total_changes
+        with Store(self.db) as again:
+            self.assertEqual(again.conn.total_changes, 0)
+            self.assertFalse(again.conn.in_transaction)
+        self.assertEqual(self.store.conn.total_changes, before)
+
+    def test_v1_tables_at_version_0_end_at_v2(self):
+        path = Path(self.tmp.name) / "v0.db"
+        conn = sqlite3.connect(path)
+        conn.executescript(V1_SCHEMA.replace("CREATE TABLE", "CREATE TABLE IF NOT EXISTS"))
+        conn.commit()
+        conn.close()
+        with Store(path) as store:
+            self.assertEqual(store.conn.execute("PRAGMA user_version").fetchone()[0], 2)
+
+    def test_failed_step_rolls_back_and_reraises(self):
+        path = self._make_v1()
+        with patch("store._STEPS", [(2, ["ALTER TABLE jobs ADD COLUMN zzz TEXT", "BOGUS SQL"])]):
+            with self.assertRaises(sqlite3.OperationalError):
+                Store(path)
+        conn = sqlite3.connect(path)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
+        self.assertNotIn("zzz", [r[1] for r in conn.execute("PRAGMA table_info(jobs)")])
+        conn.close()
 
 
 class NotifiedTests(StoreTestCase):

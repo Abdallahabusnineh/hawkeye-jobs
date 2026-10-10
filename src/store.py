@@ -71,19 +71,23 @@ CREATE INDEX IF NOT EXISTS jobs_by_status_seen ON jobs (status, first_seen_at DE
 CREATE TABLE IF NOT EXISTS legacy_seen (id TEXT PRIMARY KEY);
 """
 
-# v2 step runs in one explicit transaction. Jobs that existed before v2 count as
-# already reported; on a fresh DB the UPDATE touches nothing.
-_SCHEMA_V2 = """
-BEGIN;
-ALTER TABLE jobs ADD COLUMN notified_at TEXT;
-UPDATE jobs SET notified_at = first_seen_at;
-CREATE TABLE IF NOT EXISTS site_requests (
+# Migration steps: (target version, statements). Each runs in its own
+# BEGIN IMMEDIATE transaction that re-checks user_version first, so two
+# processes opening an old DB at once cannot both apply a step. Jobs that
+# existed before v2 count as already reported; on a fresh DB that UPDATE
+# touches nothing.
+_V2_STATEMENTS = [
+    "ALTER TABLE jobs ADD COLUMN notified_at TEXT",
+    "UPDATE jobs SET notified_at = first_seen_at",
+    """CREATE TABLE IF NOT EXISTS site_requests (
   site            TEXT PRIMARY KEY,
   last_request_at REAL NOT NULL
-);
-PRAGMA user_version = 2;
-COMMIT;
-"""
+)""",
+]
+_STEPS = [
+    (1, [st.strip() for st in _SCHEMA.split(";") if st.strip()]),
+    (2, _V2_STATEMENTS),
+]
 
 
 def _now() -> str:
@@ -111,16 +115,38 @@ class Store:
         self.conn.execute("PRAGMA journal_mode = WAL")
         self._migrate()
 
+    def _read_version(self) -> int:
+        return self.conn.execute("PRAGMA user_version").fetchone()[0]
+
     def _migrate(self) -> None:
-        version = self.conn.execute("PRAGMA user_version").fetchone()[0]
-        if version >= SCHEMA_VERSION:
-            return
-        if version < 1:
-            self.conn.executescript(_SCHEMA)
-            self.conn.execute("PRAGMA user_version = 1")
-            self.conn.commit()
-        if version < 2:
-            self.conn.executescript(_SCHEMA_V2)
+        version = self._read_version()
+        for target, statements in _STEPS:
+            if version < target:
+                self._apply_step(target, statements)
+
+    def _apply_step(self, target: int, statements: list) -> None:
+        """Apply one step atomically; no-op if another opener already did."""
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
+            if self._read_version() >= target:
+                self.conn.execute("ROLLBACK")
+                return
+            skip_backfill = False
+            for statement in statements:
+                if statement.startswith("ALTER TABLE jobs ADD COLUMN notified_at"):
+                    cols = [r[1] for r in self.conn.execute("PRAGMA table_info(jobs)")]
+                    if "notified_at" in cols:  # e.g. tables built by hand at version 0
+                        skip_backfill = True
+                        continue
+                if statement.startswith("UPDATE jobs SET notified_at") and skip_backfill:
+                    continue
+                self.conn.execute(statement)
+            self.conn.execute(f"PRAGMA user_version = {target}")
+            self.conn.execute("COMMIT")
+        except BaseException:
+            if self.conn.in_transaction:
+                self.conn.execute("ROLLBACK")
+            raise
 
     def close(self) -> None:
         self.conn.close()
