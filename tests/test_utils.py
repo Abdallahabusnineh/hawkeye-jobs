@@ -53,9 +53,21 @@ class IsRecentTests(unittest.TestCase):
         self.check("29 Sep", False)
 
     def test_day_month_in_the_future_rolls_back_a_year(self):
-        self.check("11 Oct", False)
+        self.check("12 Oct", False)
         self.assertTrue(utils.is_recent("29 Dec", today=date(2026, 1, 2)))
         self.assertFalse(utils.is_recent("20 Dec", today=date(2026, 1, 2)))
+
+    def test_day_month_tolerates_local_date_one_ahead_of_utc(self):
+        self.assertTrue(utils.is_recent("10 Oct", today=date(2026, 10, 9)))
+        self.assertFalse(utils.is_recent("11 Oct", today=date(2026, 10, 9)))
+
+    def test_iso_datetime_with_offset_is_not_an_old_marker(self):
+        self.check("2026-10-08T22:30:00+03:00", True)
+        self.check("2026-09-01T22:30:00+03:00", False)
+        self.check("30+ days ago", False)
+
+    def test_leap_day_rolled_back_into_a_non_leap_year_does_not_raise(self):
+        self.assertFalse(utils.is_recent("29 Feb", today=date(2028, 1, 15)))
 
     def test_leap_day(self):
         self.assertTrue(utils.is_recent("29 Feb", today=date(2028, 3, 1)))

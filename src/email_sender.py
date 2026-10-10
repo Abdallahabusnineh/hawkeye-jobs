@@ -36,6 +36,7 @@ import os
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime, timezone
+from html import escape
 
 
 GMAIL_USER = ""
@@ -98,19 +99,19 @@ def _build_html(jobs: list) -> str:
     source_pills = "".join(
         f'<span style="display:inline-block;margin:0 4px 4px 0;padding:4px 12px;'
         f'background:{_source_color(src)};color:#fff;border-radius:20px;'
-        f'font-size:12px;font-weight:600;">{src} ({len(lst)})</span>'
+        f'font-size:12px;font-weight:600;">{escape(src)} ({len(lst)})</span>'
         for src, lst in by_source.items()
     )
 
     job_cards = ""
     for job in jobs:
         color = _source_color(job.get("source", ""))
-        url   = job.get("url", "#")
-        title = job.get("title", "No title")
-        desc  = job.get("description", "")
-        src   = job.get("source", "")
-        kw    = job.get("keyword", "")
-        date  = job.get("date_found", "")
+        url   = escape(str(job.get("url", "#")), quote=True)
+        title = escape(str(job.get("title", "No title")), quote=True)
+        desc  = escape(str(job.get("description", "")), quote=True)
+        src   = escape(str(job.get("source", "")), quote=True)
+        kw    = escape(str(job.get("keyword", "")), quote=True)
+        date  = escape(str(job.get("date_found", "")), quote=True)
 
         job_cards += f"""
         <div style="background:#ffffff;border:1px solid #e8e8e8;border-left:4px solid {color};

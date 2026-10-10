@@ -99,8 +99,8 @@ def is_recent(date_str: str, today=None) -> bool:
         return True
     if "yesterday" in s:
         return True
-    if "+" in s:
-        return False                          # "30+ days ago"
+    if re.search(r"\d\+(?!\d)", s):
+        return False                          # "30+ days ago" (not an ISO "+03:00" offset)
     m = re.search(r"(\d+)\s*(?:hour|hr)", s)
     if m:
         return int(m.group(1)) <= MAX_AGE_DAYS * 24
@@ -119,8 +119,11 @@ def is_recent(date_str: str, today=None) -> bool:
             parsed = datetime.strptime(f"{date_str.strip()} {today.year}", fmt).date()
         except ValueError:
             continue
-        if parsed > today:
-            parsed = parsed.replace(year=today.year - 1)
+        if (parsed - today).days > 1:         # 1 day of slack: local date can be ahead of UTC
+            try:
+                parsed = parsed.replace(year=today.year - 1)
+            except ValueError:                # 29 Feb rolled back into a non-leap year
+                return False
         return (today - parsed).days <= MAX_AGE_DAYS
 
     # ISO date "2026-10-08" (optionally with a time part)
