@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 from run_lock import RunLock
 from reporting import report_pending
-from settings import load_app_settings, load_config, save_app_settings
+from settings import AUTO_HOURS, load_app_settings, load_config, save_app_settings
 from store import Store
 
 log = logging.getLogger(__name__)
@@ -266,6 +266,7 @@ class AutoSearch:
         self._interval = interval
         self._stop = threading.Event()
         self._thread = None
+        self._last_attempt = None
 
     def due(self) -> bool:
         app = self._app_settings_loader()
@@ -277,7 +278,12 @@ class AutoSearch:
         finished = _parse_iso(last.get("finished_at")) if last else None
         if finished is None:
             return False
-        return self._clock() - finished >= auto["hours"] * 3600
+        if self._last_attempt is not None:
+            finished = max(finished, self._last_attempt)
+        hours = auto.get("hours")
+        if hours not in AUTO_HOURS:
+            hours = 6
+        return self._clock() - finished >= hours * 3600
 
     def tick(self) -> bool:
         if self._manager.is_running:
@@ -285,9 +291,15 @@ class AutoSearch:
         try:
             if not self.due():
                 return False
+            # Count the attempt even if the run crashes before it records a finished run,
+            # so a failing search is retried after `hours`, not every tick.
+            previous, self._last_attempt = self._last_attempt, self._clock()
             self._manager.start("auto")
             return True
-        except (RunInProgress, NoSearchSettings):
+        except RunInProgress:
+            self._last_attempt = previous  # someone else is running; no attempt was made
+            return False
+        except NoSearchSettings:
             return False
         except Exception:
             log.exception("Auto-search tick failed")
@@ -303,9 +315,12 @@ class AutoSearch:
     def _loop(self) -> None:
         while not self._stop.wait(self._interval):
             self.tick()
+            if self._stop.is_set():
+                break
 
     def stop(self) -> None:
         self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=5)
-            self._thread = None
+            if not self._thread.is_alive():
+                self._thread = None

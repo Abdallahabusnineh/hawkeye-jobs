@@ -381,8 +381,43 @@ class AutoSearchTests(RunnerTestCase):
         while not self.search.calls:
             self.assertLess(time.monotonic(), deadline)
             time.sleep(0.01)
+        thread = auto._thread
         auto.stop()
+        self.assertFalse(thread.is_alive())
         manager.wait(5)
+
+    def test_failing_run_is_not_retried_every_tick(self):
+        self.finished_run_at("1970-04-26T17:46:40Z")
+        calls = []
+
+        def crash(settings, **kwargs):
+            calls.append(1)
+            raise RuntimeError("crashed before run row")
+        manager = self.make(run_search=crash)
+        now = [20_000_000]
+        app = {"auto_search": {"enabled": True, "hours": 6}, "onboarding_done": True}
+        auto = AutoSearch(manager, app_settings_loader=lambda: app, store_factory=lambda: Store(self.db),
+                          clock=lambda: now[0], interval=0.05)
+        for _ in range(5):
+            auto.tick()
+            manager.wait(5)
+            now[0] += 60
+        self.assertEqual(len(calls), 1)
+        now[0] += 6 * 3600
+        auto.tick()
+        manager.wait(5)
+        self.assertEqual(len(calls), 2)
+
+    def test_invalid_hours_fall_back_to_six(self):
+        self.finished_run_at("1970-04-26T17:46:40Z")
+        manager = self.make()
+        for bad in (None, 0, "x", 7):
+            app = {"auto_search": {"enabled": True, "hours": bad}, "onboarding_done": True}
+            def make(now):
+                return AutoSearch(manager, app_settings_loader=lambda: app,
+                                  store_factory=lambda: Store(self.db), clock=lambda: now)
+            self.assertFalse(make(10_000_000 + 6 * 3600 - 1).due())
+            self.assertTrue(make(10_000_000 + 6 * 3600).due())
 
 
 if __name__ == "__main__":
