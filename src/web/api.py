@@ -7,6 +7,9 @@ Responses are data and codes only — the UI owns every displayed word.
 import json
 import logging
 import queue
+from pathlib import Path
+from datetime import datetime, timezone
+from urllib.parse import urlencode, urlparse
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -15,6 +18,7 @@ from countries import localized_countries
 from runner import NoSearchSettings, RunInProgress
 from settings import LANGUAGES, USER_APP_KEYS, SettingsError, validate_search_settings
 from store import STATUSES
+from web.redact import redact
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -181,3 +185,115 @@ def get_events(request: Request):
     q = manager.subscribe()
     return StreamingResponse(_event_stream(manager, q), media_type="text/event-stream",
                              headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
+ISSUE_URL = "https://github.com/Abdallahabusnineh/hawkeye-jobs/issues/new"
+LOG_LINES = 200
+MAX_ISSUE_URL = 6000  # browsers and GitHub reject very long URLs
+UPDATE_CACHE_SECONDS = 24 * 3600
+
+
+def _iso(ts: float) -> str:
+    return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse_iso(value):
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+@router.post("/open-url", status_code=204)
+def open_url(request: Request, body: dict):
+    url = body.get("url")
+    parsed = urlparse(url) if isinstance(url, str) else None
+    if not parsed or parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return JSONResponse({"errors": {"url": "invalid"}}, status_code=422)
+    _services(request).open_url(url)
+
+
+@router.post("/open-data-folder", status_code=204)
+def open_data_folder(request: Request):
+    s = _services(request)
+    s.open_path(s.data_dir())
+
+
+@router.post("/linkedin/login", status_code=202)
+def linkedin_login(request: Request):
+    s = _services(request)
+    if s.manager.is_running:
+        return JSONResponse({"error": "run_in_progress"}, status_code=409)
+    chrome = s.find_chrome()
+    if not chrome:
+        return JSONResponse({"error": "chrome_not_found"}, status_code=409)
+    s.launch([chrome, f"--user-data-dir={s.linkedin_profile_dir()}", "https://www.linkedin.com/login"])
+    return {"ok": True}
+
+
+def _issue_url(s, lines):
+    """Build the prefilled issue URL, dropping the oldest log lines until it is short enough."""
+    while True:
+        excerpt = redact("\n".join(lines), home=s.home, user=s.user)
+        body = (f"**Version:** {s.version}\n**System:** {s.os_name}\n\n"
+                "**What happened?**\n\n\n"
+                f"<details><summary>Log (last {len(lines)} lines, personal data removed)</summary>\n\n"
+                f"```\n{excerpt}\n```\n</details>\n")
+        url = f"{ISSUE_URL}?{urlencode({'title': 'Problem report', 'body': body})}"
+        if len(url) <= MAX_ISSUE_URL or not lines:
+            return url
+        lines = lines[max(1, len(lines) // 10):]
+
+
+@router.post("/report-problem")
+def report_problem(request: Request):
+    s = _services(request)
+    try:
+        lines = s.log_path().read_text(encoding="utf-8", errors="replace").splitlines()[-LOG_LINES:]
+    except OSError:
+        lines = []
+    url = _issue_url(s, lines)
+    s.open_url(url)
+    return {"url": url}
+
+
+@router.get("/update")
+def check_update(request: Request):
+    s = _services(request)
+    app = s.load_app_settings()
+    if not app["update_check"]:
+        return {"available": False, "disabled": True}
+    checked = _parse_iso(app.get("last_update_check"))
+    latest = app.get("latest_version")
+    if checked is None or s.clock() - checked >= UPDATE_CACHE_SECONDS:
+        patch = {}
+        try:
+            latest = str(s.fetch_latest_release().get("tag_name", "")).lstrip("vV") or None
+            patch["latest_version"] = latest
+        except Exception:
+            log.warning("Update check failed", exc_info=True)  # keep what we knew; retry in 24 h
+        patch["last_update_check"] = _iso(s.clock())
+        s.save_app_settings(patch)
+        checked = s.clock()
+    return {"current": s.version, "latest": latest, "checked": _iso(checked),
+            "available": bool(latest) and _version_tuple(latest) > _version_tuple(s.version)}
+
+
+@router.post("/reset", status_code=204)
+def reset(request: Request, body: dict):
+    s = _services(request)
+    if body.get("confirm") != "DELETE":
+        return JSONResponse({"errors": {"confirm": "required"}}, status_code=422)
+    if s.manager.is_running:
+        return JSONResponse({"error": "run_in_progress"}, status_code=409)
+    probe = s.store_factory()
+    db_path = probe.path
+    probe.close()
+    root = Path(s.data_dir()).resolve()
+    if Path(db_path).parent.resolve() != root:
+        log.warning("Reset refused: database is not directly inside the data folder")
+        return JSONResponse({"error": "outside_data_dir"}, status_code=409)
+    for suffix in ("", "-wal", "-shm"):
+        target = root / (Path(db_path).name + suffix)
+        if target.is_symlink() or target.is_file():
+            target.unlink()  # unlink removes a symlink itself, never its target

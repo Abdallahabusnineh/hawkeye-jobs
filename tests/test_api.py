@@ -260,3 +260,145 @@ class WriteTests(ApiTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+from web.redact import redact
+
+
+class RedactTests(unittest.TestCase):
+    def test_redact_removes_personal_data(self):
+        text = ("Copied /Users/sam/Library/Application Support/hawkeye-jobs/config.json for sam\n"
+                "login sam.smith@gmail.com failed token=abc123 key=zzz password=hunter2 GMAIL_PASS=xyzw\n"
+                "GET https://www.linkedin.com/search/results/content/?keywords=java&session=s3cr3t")
+        out = redact(text, home="/Users/sam", user="sam")
+        for secret in ("/Users/sam", "sam.smith@gmail.com", "abc123", "zzz", "hunter2", "xyzw", "s3cr3t",
+                       "keywords=java"):
+            self.assertNotIn(secret, out)
+        self.assertIn("~/Library/Application Support/hawkeye-jobs/config.json", out)
+        self.assertIn("<user>", out)
+        self.assertIn("https://www.linkedin.com", out)
+
+    def test_redact_quoted_and_prefixed_secrets(self):
+        out = redact('{"api_token": "abc123"} MY_SECRET=s1 Authorization: Bearer xyz987', home="", user="")
+        for secret in ("abc123", "s1", "xyz987"):
+            self.assertNotIn(secret, out)
+
+
+class ActionTests(ApiTestCase):
+    def send(self, method, path, json=None):
+        return self.client.request(method, path, headers={"X-Hawkeye-Token": TOKEN}, json=json)
+
+    def test_open_url_only_http(self):
+        self.assertEqual(self.send("POST", "/api/open-url", {"url": "https://a.com/1"}).status_code, 204)
+        self.assertEqual(self.opened_urls, ["https://a.com/1"])
+        for bad in ("javascript:alert(1)", "file:///etc/passwd", "", None):
+            self.assertEqual(self.send("POST", "/api/open-url", {"url": bad}).status_code, 422)
+        self.assertEqual(self.opened_urls, ["https://a.com/1"])
+
+    def test_open_data_folder(self):
+        self.assertEqual(self.send("POST", "/api/open-data-folder").status_code, 204)
+        self.assertEqual(self.opened_paths, [Path(self.tmp.name)])
+
+    def test_linkedin_login(self):
+        self.assertEqual(self.send("POST", "/api/linkedin/login").status_code, 202)
+        argv = self.launched[0]
+        self.assertTrue(argv[0].endswith("Google Chrome"))
+        self.assertTrue(any(a.startswith("--user-data-dir=") for a in argv))
+        self.assertEqual(argv[-1], "https://www.linkedin.com/login")
+
+    def test_linkedin_login_refused_while_running_or_without_chrome(self):
+        self.manager.is_running = True
+        self.assertEqual(self.send("POST", "/api/linkedin/login").json(), {"error": "run_in_progress"})
+        self.manager.is_running = False
+        self.services.find_chrome = lambda: None
+        response = self.send("POST", "/api/linkedin/login")
+        self.assertEqual((response.status_code, response.json()), (409, {"error": "chrome_not_found"}))
+        self.assertEqual(self.launched, [])
+
+    def test_report_problem_builds_redacted_issue_url(self):
+        (Path(self.tmp.name) / "hawkeye.log").write_text(
+            f"line one {self.services.home}/x for sam@example.com\n", encoding="utf-8")
+        response = self.send("POST", "/api/report-problem")
+        url = response.json()["url"]
+        self.assertTrue(url.startswith("https://github.com/Abdallahabusnineh/hawkeye-jobs/issues/new?"))
+        self.assertEqual(self.opened_urls, [url])
+        from urllib.parse import parse_qs, urlparse
+        body = parse_qs(urlparse(url).query)["body"][0]
+        self.assertIn("1.0.0", body)
+        self.assertIn("macOS 15", body)
+        self.assertNotIn(self.services.home, body)
+        self.assertNotIn("sam@example.com", body)
+
+    def test_report_problem_keeps_url_short(self):
+        (Path(self.tmp.name) / "hawkeye.log").write_text(
+            "\n".join(f"line {i} " + "x" * 120 for i in range(300)) + "\n", encoding="utf-8")
+        url = self.send("POST", "/api/report-problem").json()["url"]
+        self.assertLessEqual(len(url), 6000)
+        self.assertIn("line+299", url)
+
+    def test_update_check_and_cache(self):
+        self.release = {"tag_name": "v1.2.0"}
+        first = self.get("/api/update").json()
+        self.assertEqual((first["available"], first["latest"]), (True, "1.2.0"))
+        self.release = {"tag_name": "v9.9.9"}  # cached for 24 h: not fetched again
+        self.assertEqual(self.get("/api/update").json()["latest"], "1.2.0")
+
+    def test_update_check_disabled_or_failing(self):
+        self.app_settings["update_check"] = False
+        self.assertEqual(self.get("/api/update").json(), {"available": False, "disabled": True})
+        self.app_settings["update_check"] = True
+
+        def boom():
+            raise OSError("offline")
+        self.services.fetch_latest_release = boom
+        with self.assertLogs("web.api", "WARNING"):
+            body = self.get("/api/update").json()
+        self.assertEqual((body["available"], body["latest"]), (False, None))
+
+    def test_update_failure_keeps_previously_known_version(self):
+        self.app_settings["latest_version"] = "1.5.0"
+        self.app_settings["last_update_check"] = "1970-01-01T00:00:00Z"
+
+        def boom():
+            raise OSError("offline")
+        self.services.fetch_latest_release = boom
+        with self.assertLogs("web.api", "WARNING"):
+            body = self.get("/api/update").json()
+        self.assertEqual((body["available"], body["latest"]), (True, "1.5.0"))
+
+    def test_reset_requires_confirmation_and_idle(self):
+        self.assertEqual(self.send("POST", "/api/reset", {}).status_code, 422)
+        self.manager.is_running = True
+        self.assertEqual(self.send("POST", "/api/reset", {"confirm": "DELETE"}).status_code, 409)
+        self.assertTrue(self.db.exists())
+        self.manager.is_running = False
+        self.assertEqual(self.send("POST", "/api/reset", {"confirm": "DELETE"}).status_code, 204)
+        self.assertFalse(self.db.exists())
+        self.assertEqual(self.get("/api/state").json()["job_counts"]["new"], 0)  # fresh DB on next open
+
+    def test_reset_never_leaves_data_dir_or_follows_symlinks(self):
+        outside = tempfile.TemporaryDirectory()
+        self.addCleanup(outside.cleanup)
+        victim = Path(outside.name) / "victim.db"
+        victim.write_text("keep")
+        keep = Path(self.tmp.name) / "config.json"
+        keep.write_text("{}")
+        # db path outside the data dir: refused, nothing deleted
+        self.services.store_factory = lambda: Store(Path(outside.name) / "other.db")
+        (Path(outside.name) / "other.db").touch()
+        response = self.send("POST", "/api/reset", {"confirm": "DELETE"})
+        self.assertEqual(response.status_code, 409)
+        self.assertTrue((Path(outside.name) / "other.db").exists())
+        # a -wal symlink inside the data dir: the link goes, its target stays
+        link = Path(self.tmp.name) / "t.db-wal"
+
+        def factory():
+            store = Store(self.db)
+            link.unlink(missing_ok=True)
+            link.symlink_to(victim)  # appears only after the probe opened the database
+            return store
+        self.services.store_factory = factory
+        self.assertEqual(self.send("POST", "/api/reset", {"confirm": "DELETE"}).status_code, 204)
+        self.assertEqual(victim.read_text(), "keep")
+        self.assertFalse((Path(self.tmp.name) / "t.db-wal").is_symlink())
+        self.assertTrue(keep.exists())
