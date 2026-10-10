@@ -33,6 +33,8 @@
 | Windows 10 / 11 | [HawkeyeJobs-Windows.zip](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows.zip) |
 | Linux (x86-64) | [HawkeyeJobs-Linux.tar.gz](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Linux.tar.gz) |
 
+**Mac, easiest:** open Terminal and paste `curl -fsSL https://abdallahabusnineh.github.io/hawkeye-jobs/install.sh | bash` — it downloads the right build, checks its checksum, installs it to Applications and opens it, with no warning.
+
 The app is not signed with a paid certificate, so the first launch shows a warning: on macOS open **System Settings → Privacy & Security → Open Anyway**; on Windows click **More info → Run anyway**. Bayt, NaukriGulf, Google Jobs and LinkedIn posts need [Google Chrome](https://www.google.com/chrome/).
 
 ## Features

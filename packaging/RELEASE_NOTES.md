@@ -18,7 +18,16 @@ Bayt, NaukriGulf, Google Jobs and LinkedIn posts need Google Chrome installed.
 التطبيق غير موقَّع بشهادة مدفوعة، لذلك يعرض النظام تحذيرًا في المرة الأولى فقط.
 The app is not signed with a paid certificate, so your system warns you the first time only.
 
-**macOS**
+**macOS — أسهل طريقة · easiest way**
+
+افتح تطبيق Terminal والصق هذا السطر (يُنزِّل التطبيق ويثبّته ويفتحه دون تحذير):
+Open Terminal and paste this line (downloads, installs and opens the app with no warning):
+
+```
+curl -fsSL https://abdallahabusnineh.github.io/hawkeye-jobs/install.sh | bash
+```
+
+**macOS — من الملف · from the file**
 1. افتح ملف ‎.dmg واسحب Hawkeye Jobs إلى مجلد Applications.
    Open the .dmg and drag Hawkeye Jobs into Applications.
 2. افتح التطبيق. إذا ظهرت رسالة «لا يمكن التحقق من المطوّر»، فافتح «إعدادات النظام ← الخصوصية والأمان» واضغط «افتح على أي حال».
