@@ -10,8 +10,11 @@ are kept, printed and emailed. Runtime files live in the data directory
 (paths.data_dir()), not in the repo.
 """
 
+import logging
 import os
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -24,9 +27,11 @@ from paths import data_dir, linkedin_profile_dir
 from pipeline import run_search
 from reporting import REPORT_LIMIT, report_pending
 from run_lock import RunLock
-from settings import collect_settings, migrate_legacy_config
+from runner import POSTS_SOURCE, apply_posts_gate
+from settings import collect_settings, load_app_settings, migrate_legacy_config, save_app_settings
 from store import Store
 
+log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parent.parent
 
 _BROWSER_FAILED = {
@@ -102,15 +107,24 @@ def main():
     store = Store()
     run_lock = RunLock()
     try:
+        print(f"Data folder: {data_dir()}")
+
+        chosen = collect_settings()
+        # Take the run lock only now, so the app is not blocked while the user sits in the picker.
         if not run_lock.acquire():
-            print("[main] A search is already running in the Hawkeye Jobs app — try again when it finishes.")
+            print("[main] Another Hawkeye Jobs search is already running — try again when it finishes.")
             return
         store.recover_interrupted_runs()
         if store.import_legacy_seen_file(ROOT / "seen_jobs.json"):
             print("Imported your previously seen jobs into the data folder.")
-        print(f"Data folder: {data_dir()}")
 
-        chosen = collect_settings()
+        # LinkedIn posts at most once per 24 h, same rule as the app (protects the user's account).
+        chosen, posts_skipped = apply_posts_gate(dict(chosen), load_app_settings().get("last_posts_run"),
+                                                 None, time.time())
+        if posts_skipped:
+            print("[main] LinkedIn posts skipped — they already ran within the last 24 hours.")
+        posts_marked = False
+
         try:
             countries = load_countries()
         except CountryFetchError:
@@ -118,6 +132,13 @@ def main():
         country_labels = {c["id"]: c["label"] for c in countries}
 
         def print_event(event):
+            nonlocal posts_marked
+            if event["type"] == "query_started" and event.get("source") == POSTS_SOURCE and not posts_marked:
+                posts_marked = True
+                try:
+                    save_app_settings({"last_posts_run": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+                except Exception:
+                    log.exception("Could not save last_posts_run")
             line = format_event(event, country_labels)
             if line:
                 print(line)

@@ -64,7 +64,6 @@ def window_url(port: int, token: str) -> str:
 def _prepare_data() -> None:
     migrate_legacy_config(ROOT)
     with Store() as store:
-        store.recover_interrupted_runs()
         store.import_legacy_seen_file(ROOT / "seen_jobs.json")
 
 
@@ -110,6 +109,10 @@ def main(argv=None) -> None:
     thread = None
     try:
         thread = _serve(parts)
+        try:
+            parts.manager.recover_interrupted()
+        except Exception:
+            log.exception("Recovering interrupted runs failed; it will be retried at the next launch")
         parts.auto.start()
         try:
             parts.manager.report_pending_now()

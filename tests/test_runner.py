@@ -342,6 +342,53 @@ class ReportNowTests(RunnerTestCase):
         hold.set()
         manager.wait(5)
 
+    def test_report_pending_now_skipped_while_another_process_holds_the_lock(self):
+        with Store(self.db) as store:
+            run_id = store.start_run(SETTINGS)
+            store.add_jobs(run_id, [job(7)])  # a terminal run saved this and has not reported yet
+        other = RunLock(self.lock_path)
+        self.assertTrue(other.acquire())
+        self.addCleanup(other.release)
+        manager = self.make()
+        self.assertEqual(manager.report_pending_now(), 0)
+        self.assertEqual(self.notified, [])
+        with Store(self.db) as store:
+            self.assertEqual(len(store.unnotified_jobs()), 1)
+
+    def test_report_pending_now_releases_the_lock_and_respects_close(self):
+        with Store(self.db) as store:
+            run_id = store.start_run(SETTINGS)
+            store.add_jobs(run_id, [job(7)])
+        manager = self.make()
+        self.assertEqual(manager.report_pending_now(), 1)
+        probe = RunLock(self.lock_path)
+        self.assertTrue(probe.acquire())
+        probe.release()
+        with Store(self.db) as store:
+            run_id = store.start_run(SETTINGS)
+            store.add_jobs(run_id, [job(8)])
+        manager.close()
+        self.assertEqual(manager.report_pending_now(), 0)
+
+    def test_recover_interrupted_marks_stale_run_failed(self):
+        with Store(self.db) as store:
+            run_id = store.start_run(SETTINGS)
+        self.assertEqual(self.make().recover_interrupted(), 1)
+        with Store(self.db) as store:
+            self.assertEqual(store.conn.execute("SELECT state FROM runs WHERE id=?", (run_id,)).fetchone()[0],
+                             "failed")
+
+    def test_recover_interrupted_skipped_while_another_process_holds_the_lock(self):
+        with Store(self.db) as store:
+            run_id = store.start_run(SETTINGS)
+        other = RunLock(self.lock_path)
+        self.assertTrue(other.acquire())
+        self.addCleanup(other.release)
+        self.assertEqual(self.make().recover_interrupted(), 0)
+        with Store(self.db) as store:
+            self.assertEqual(store.conn.execute("SELECT state FROM runs WHERE id=?", (run_id,)).fetchone()[0],
+                             "running")
+
 
 class AutoSearchTests(RunnerTestCase):
     def finished_run_at(self, iso):

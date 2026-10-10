@@ -42,6 +42,10 @@ def get_state(request: Request):
     s = _services(request)
     app = s.load_app_settings()
     profile = s.linkedin_profile_dir()
+    try:
+        has_profile = profile.is_dir() and any(profile.iterdir())
+    except OSError:
+        has_profile = False
     with s.store_factory() as store:
         counts = store.job_counts()
     latest = app.get("latest_version")
@@ -51,7 +55,7 @@ def get_state(request: Request):
         "language": app["language"],
         "theme": app["theme"],
         "chrome": {"found": bool(s.find_chrome())},
-        "linkedin_profile": profile.exists() and any(profile.iterdir()),
+        "linkedin_profile": has_profile,
         "run": s.manager.current,
         "job_counts": counts,
         "has_settings": s.load_config() is not None,
@@ -301,6 +305,10 @@ def reset(request: Request, body: dict):
             for suffix in ("", "-wal", "-shm"):
                 target = root / (Path(db_path).name + suffix)
                 if target.is_symlink() or target.is_file():
-                    target.unlink()  # unlink removes a symlink itself, never its target
+                    try:
+                        target.unlink()  # unlink removes a symlink itself, never its target
+                    except OSError:
+                        log.warning("Reset: could not delete %s", target.name, exc_info=True)
+                        return JSONResponse({"error": "files_in_use"}, status_code=409)
     except RunInProgress:
         return JSONResponse({"error": "run_in_progress"}, status_code=409)

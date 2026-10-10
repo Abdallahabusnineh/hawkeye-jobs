@@ -127,7 +127,7 @@ One middleware: the `Host` header must be `127.0.0.1:<port>` or `localhost:<port
 
 ### RunManager / AutoSearch (`src/runner.py`)
 
-- `RunManager.start(trigger)` allows one search at a time: an in-process lock plus `RunLock` (`src/run_lock.py`, file `<data dir>/run.lock`, non-blocking OS lock released by the OS if the holder dies) shared with terminal mode. It runs `pipeline.run_search` on a worker thread, records each finished query in `run_queries`, keeps a `current` progress snapshot, fans events out to SSE subscribers (bounded queues; a slow subscriber is dropped and the UI reconnects) and limits LinkedIn posts to once per 24 h. It raises `RunInProgress` / `NoSearchSettings`.
+- `RunManager.start(trigger)` allows one search at a time: an in-process lock plus `RunLock` (`src/run_lock.py`, file `<data dir>/run.lock`, non-blocking OS lock released by the OS if the holder dies) shared with terminal mode. It runs `pipeline.run_search` on a worker thread, records each finished query in `run_queries`, keeps a `current` progress snapshot, fans events out to SSE subscribers (bounded queues; a slow subscriber is dropped and the UI reconnects) and limits LinkedIn posts to once per 24 h (`runner.apply_posts_gate`, shared with terminal mode, which also stamps `last_posts_run`). Launch recovery (`recover_interrupted`) and `report_pending_now` run only while holding the run lock and are skipped if a search runs anywhere. It raises `RunInProgress` / `NoSearchSettings`.
 - `exclusive()` is a context manager that refuses (`RunInProgress`) while a search runs and blocks new ones inside the block. Reset and the LinkedIn login window use it.
 - `AutoSearch` ticks every 60 s and starts a `trigger="auto"` run when enabled, onboarding is done and the configured hours have passed since the last finished run. After any attempt it made (started, failed, or no settings) it backs off a full interval; when another run holds the lock it simply tries again next tick.
 - `settings.py` has a `_CONFIG_LOCK` (RLock) that serialises every write to `config.json` (search settings and the `app` section).
@@ -164,7 +164,7 @@ One middleware: the `Host` header must be `127.0.0.1:<port>` or `localhost:<port
 | POST | `/open-url` | 204 (http/https only; control characters refused) | 422 |
 | POST | `/open-data-folder` | 204 | |
 | POST | `/linkedin/login` | 202 `{ok}` (opens Chrome on the LinkedIn profile) | 409 `chrome_not_found` / `run_in_progress` |
-| POST | `/report-problem` | 200 `{url}` (also opened in the browser) | |
+| POST | `/report-problem` | 200 `{url}` (the backend has already opened it; the UI must not open it again) | |
 | GET | `/update` | 200 `{current, latest, checked, available}` (cached 24 h; `disabled` if the check is off) | |
 | POST | `/reset` | 204 (body `{"confirm": "DELETE"}`) | 422 `confirm`, 409 `run_in_progress` / `outside_data_dir` |
 

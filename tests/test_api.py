@@ -440,6 +440,60 @@ class ActionTests(ApiTestCase):
         self.assertFalse((Path(self.tmp.name) / "t.db-wal").is_symlink())
         self.assertTrue(keep.exists())
 
+    def test_reset_unlink_failure_is_files_in_use(self):
+        from unittest.mock import patch
+        with patch.object(Path, "unlink", side_effect=PermissionError("locked")), \
+                self.assertLogs("web.api", "WARNING"):
+            response = self.send("POST", "/api/reset", {"confirm": "DELETE"})
+        self.assertEqual((response.status_code, response.json()), (409, {"error": "files_in_use"}))
+        self.assertTrue(self.db.exists())
+
+
+class ErrorBodyTests(ApiTestCase):
+    def send(self, method, path, json=None):
+        return self.client.request(method, path, headers={"X-Hawkeye-Token": TOKEN}, json=json)
+
+    def assert_no_english(self, response):
+        self.assertNotIn("msg", response.text)
+        self.assertNotIn("Not Found", response.text)
+        self.assertNotIn("Input should", response.text)
+
+    def test_validation_error_is_codes_only(self):
+        response = self.get("/api/jobs?limit=500")
+        self.assertEqual((response.status_code, response.json()), (422, {"errors": {"limit": "invalid"}}))
+        self.assert_no_english(response)
+
+    def test_non_object_body_is_codes_only(self):
+        response = self.send("PATCH", "/api/app-settings", [1, 2])
+        self.assertEqual((response.status_code, response.json()), (422, {"errors": {"body": "invalid"}}))
+        self.assert_no_english(response)
+
+    def test_unknown_api_route_is_coded_404(self):
+        response = self.get("/api/nope")
+        self.assertEqual((response.status_code, response.json()), (404, {"error": "not_found"}))
+
+    def test_guard_still_runs_first(self):
+        self.assertEqual(self.client.get("/api/jobs?limit=500").status_code, 403)
+        self.assertEqual(self.client.get("/api/nope").status_code, 403)
+
+
+class ProfileDirTests(ApiTestCase):
+    def test_state_survives_profile_path_being_a_file(self):
+        f = Path(self.tmp.name) / "afile"
+        f.write_text("x")
+        self.services.linkedin_profile_dir = lambda: f
+        response = self.get("/api/state")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["linkedin_profile"])
+
+    def test_state_survives_unreadable_profile_dir(self):
+        from unittest.mock import patch
+        with patch.object(Path, "iterdir", side_effect=PermissionError("no")):
+            (Path(self.tmp.name) / "profile" / "x").write_text("1")
+            response = self.get("/api/state")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["linkedin_profile"])
+
 
 if __name__ == "__main__":
     unittest.main()

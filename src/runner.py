@@ -54,6 +54,21 @@ def _parse_iso(value) -> float | None:
         return None
 
 
+def apply_posts_gate(settings: dict, saved_iso, remembered, now: float):
+    """Drop the LinkedIn-posts source if posts ran less than 24 h ago (protects the user's account).
+
+    `saved_iso` is last_posts_run from the app settings file; `remembered` is the in-memory
+    timestamp of this process (used when saving failed). Returns (settings, skipped)."""
+    if POSTS_SOURCE not in settings.get("sources", []):
+        return settings, False
+    last = _parse_iso(saved_iso)
+    if remembered is not None and (last is None or remembered > last):
+        last = remembered
+    if last is not None and now - last < POSTS_INTERVAL_SECONDS:
+        return {**settings, "sources": [s for s in settings["sources"] if s != POSTS_SOURCE]}, True
+    return settings, False
+
+
 def _default_country_labels() -> dict:
     from countries import CountryFetchError, load_countries
     try:
@@ -203,15 +218,8 @@ class RunManager:
         return holder.get("run_id")
 
     def _apply_posts_gate(self, settings: dict):
-        if POSTS_SOURCE not in settings.get("sources", []):
-            return settings, False
-        last = _parse_iso(self._app_settings_loader().get("last_posts_run"))
-        if self._last_posts_run is not None and (last is None or self._last_posts_run > last):
-            last = self._last_posts_run
-        if last is not None and self._clock() - last < POSTS_INTERVAL_SECONDS:
-            settings["sources"] = [s for s in settings["sources"] if s != POSTS_SOURCE]
-            return settings, True
-        return settings, False
+        return apply_posts_gate(settings, self._app_settings_loader().get("last_posts_run"),
+                                self._last_posts_run, self._clock())
 
     def _run(self, settings, trigger, started, holder) -> None:
         store = None
@@ -269,14 +277,33 @@ class RunManager:
                     self._run_lock.release()
 
     def report_pending_now(self) -> int:
-        """Report jobs left unreported (e.g. the app was killed mid-run). Skipped while a search runs."""
-        if self.is_running:
-            return 0
-        with self._store_factory() as store:
-            result = report_pending(store, self._notifier)
+        """Report jobs left unreported (e.g. the app was killed mid-run).
+
+        Skipped while any search runs, in this app or in another process: that search reports
+        its own jobs, and marking them notified here would lose its notification."""
+        with self._state_lock:
+            if self._closing or self._exclusive or (self._worker is not None and self._worker.is_alive()):
+                return 0
+            if not self._run_lock.acquire():
+                return 0
+            try:
+                with self._store_factory() as store:
+                    result = report_pending(store, self._notifier)
+            finally:
+                self._run_lock.release()
         if result.jobs:
             self._publish({"type": "jobs_reported", "count": result.reported, "more_waiting": result.more_waiting})
         return result.reported
+
+    def recover_interrupted(self) -> int:
+        """Mark runs left 'running' by a killed process as failed, but only when no search is
+        running anywhere (a live run in the terminal must not be stamped failed)."""
+        try:
+            with self.exclusive():
+                with self._store_factory() as store:
+                    return store.recover_interrupted_runs()
+        except RunInProgress:
+            return 0
 
 
 class AutoSearch:

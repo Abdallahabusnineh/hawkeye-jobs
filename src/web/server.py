@@ -15,8 +15,10 @@ import hmac
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from web.api import router
 
@@ -39,6 +41,23 @@ def create_app(*, token: str, allowed_hosts: set, services, static_dir: Path = S
             if not supplied or not hmac.compare_digest(supplied.encode(), token.encode()):
                 return JSONResponse({"error": "forbidden"}, status_code=403)
         return await call_next(request)
+
+    # The backend sends codes, never display text: replace FastAPI's English default bodies.
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request: Request, exc: RequestValidationError):
+        errors = {}
+        for err in exc.errors():
+            loc = err.get("loc") or ()
+            field = str(loc[-1]) if len(loc) > 1 else "body"
+            errors[field] = "invalid"
+        return JSONResponse({"errors": errors or {"body": "invalid"}}, status_code=422)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(request: Request, exc: StarletteHTTPException):
+        if isinstance(exc.detail, dict):  # our own coded errors, e.g. {"lang": "invalid"}: keep FastAPI's shape
+            return JSONResponse({"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers)
+        code = "not_found" if exc.status_code == 404 else f"http_{exc.status_code}"
+        return JSONResponse({"error": code}, status_code=exc.status_code, headers=exc.headers)
 
     app.include_router(router, prefix="/api")
     app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
