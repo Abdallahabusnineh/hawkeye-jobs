@@ -65,6 +65,12 @@ You will be asked for:
 
 Bayt.com and NaukriGulf only cover Jordan/Gulf. Other countries still search LinkedIn, Indeed, and Google Jobs.
 
+## Desktop app (preview)
+
+    venv/bin/python3 src/app.py
+
+Opens the Hawkeye Jobs window. Everything runs on your computer: the window talks to a small server on 127.0.0.1 that only this app can use. The interface is being built; downloadable installers come later.
+
 ## Where your data lives
 
 Everything hawkeye-jobs saves is kept in one folder on your computer:
@@ -121,6 +127,13 @@ hawkeye-jobs/
 │   ├── paths.py           # Data directory and file locations
 │   ├── logs.py            # Rotating log file
 │   ├── utils.py           # URL cleaning, date parsing
+│   ├── app.py             # Desktop launcher (local server + window)
+│   ├── runner.py          # One search at a time, live events, auto-search
+│   ├── reporting.py       # Report new jobs, then mark them
+│   ├── run_lock.py        # Cross-process "one search at a time" lock
+│   ├── notify.py          # Desktop notifications
+│   ├── version.py         # App version
+│   ├── web/               # Local API (FastAPI) and UI
 │   └── email_sender.py    # HTML email + Gmail SMTP
 ├── docs/ARCHITECTURE.md   # Technical reference
 ├── config.example.json    # Sample search settings

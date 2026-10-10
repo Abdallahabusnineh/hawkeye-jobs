@@ -17,6 +17,7 @@ python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 cp .env.example .env   # then fill in GMAIL_USER / GMAIL_PASS / RECIPIENT_EMAIL
 bash run.sh
+venv/bin/python3 src/app.py   # desktop app (--no-window to serve only)
 ```
 
 Runtime files (`hawkeye.db`, `config.json`, `hawkeye.log`, LinkedIn profile) live in the per-OS data directory from `src/paths.py` (`HAWKEYE_DATA_DIR` overrides it).
@@ -68,6 +69,16 @@ Set in `.env` (gitignored): `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`. Copy 
 | `src/paths.py` | Data directory and file locations |
 | `src/utils.py` | Date parsing, URL cleaning |
 | `src/email_sender.py` | Email template, source colors |
+| `src/app.py` | Desktop launcher: free port, per-launch token, uvicorn thread, pywebview window, graceful shutdown |
+| `src/runner.py` | `RunManager` (one search at a time, live events, `exclusive()`) and `AutoSearch` (timer) |
+| `src/reporting.py` | Report new jobs through a notifier, then mark them reported |
+| `src/notify.py` | Desktop notifications (never fails the run) |
+| `src/run_lock.py` | `RunLock`: cross-process lock on `<data dir>/run.lock` |
+| `src/version.py` | `__version__`, shown in Settings and compared with GitHub releases |
+| `src/web/server.py` | FastAPI app: Host/token guards, static UI |
+| `src/web/api.py` | The `/api/*` endpoints |
+| `src/web/services.py` | `AppServices`: everything the API needs from outside (swappable in tests) |
+| `src/web/redact.py` | Strips personal data from the problem-report log excerpt |
 
 ## Resetting
 

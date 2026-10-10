@@ -26,6 +26,13 @@ hawkeye-jobs/
 │   ├── linkedin_posts.py # LinkedIn content/post search via Selenium (needs login)
 │   ├── browser.py       # Chrome discovery, version detection, driver factory, wait_for()
 │   ├── utils.py         # Shared: clean_url(), is_recent()
+│   ├── version.py       # __version__
+│   ├── run_lock.py      # RunLock: cross-process one-search-at-a-time lock
+│   ├── reporting.py     # report_pending(): notify, then mark reported
+│   ├── notify.py        # DesktopNotifier
+│   ├── runner.py        # RunManager + AutoSearch
+│   ├── app.py           # Desktop launcher
+│   ├── web/             # server.py, api.py, services.py, redact.py, static/
 │   └── email_sender.py  # HTML email builder + Gmail SMTP sender
 ├── config.example.json  # Sample search settings
 ├── .env.example         # Credential template
@@ -101,6 +108,65 @@ Values live in `pipeline.POLITE_DELAYS`. `run_search(..., delays={...})` overrid
 ### Cancel
 
 Pass a `threading.Event` as `cancel`, or press Ctrl+C: a `KeyboardInterrupt` on the calling thread sets the event instead of aborting. Each lane checks it before its next query, so cancel takes at most one in-flight query. Lanes are always joined (the Chrome driver is quit), the run is recorded as `cancelled`, and `run_finished` is still emitted. Jobs saved so far are kept, and `main.py` reports them (see Pipeline Flow).
+
+---
+
+## Desktop app
+
+`src/app.py` is the desktop entry point. The window is a thin shell around a local web UI; nothing leaves the machine except the searches themselves.
+
+### Launch (`src/app.py`)
+
+- `free_port()` picks a free port on 127.0.0.1; `build(port=None)` makes a per-launch token (`secrets.token_urlsafe(32)`), the `RunManager` (with `DesktopNotifier`), `AutoSearch`, the FastAPI app and a `uvicorn.Server` (host `127.0.0.1`, `access_log=False` because the token appears in `/api/events?token=`, `lifespan="off"`). It returns an `AppParts` dataclass and starts nothing.
+- `main()` runs `_prepare_data()` (legacy config import, `recover_interrupted_runs()`, legacy `seen_jobs.json` import), serves uvicorn on a daemon thread, starts `AutoSearch`, reports pending jobs once (`report_pending_now`), then opens a pywebview window on `window_url(port, token)`. `--no-window` only prints the URL (UI development, browser checks) and waits for Ctrl+C.
+- `shutdown(parts, wait_seconds=35)`: cancel the running search, wait for it (in-flight requests finish, Chrome closes), stop `AutoSearch`, close SSE subscribers, set `server.should_exit`.
+
+### Server guards (`src/web/server.py`)
+
+One middleware: the `Host` header must be `127.0.0.1:<port>` or `localhost:<port>` (blocks DNS rebinding), else 403. Every `/api/*` request needs the token in `X-Hawkeye-Token` (compared with `hmac.compare_digest`); only `/api/events` also accepts `?token=` because `EventSource` cannot set headers. Failures return 403 `{"error": "forbidden"}`. Everything else is the static UI (`src/web/static/`). Handlers only use `AppServices` (`services.py`), so tests inject fakes: no network, Chrome, notifications or real folders.
+
+### RunManager / AutoSearch (`src/runner.py`)
+
+- `RunManager.start(trigger)` allows one search at a time: an in-process lock plus `RunLock` (`src/run_lock.py`, file `<data dir>/run.lock`, non-blocking OS lock released by the OS if the holder dies) shared with terminal mode. It runs `pipeline.run_search` on a worker thread, records each finished query in `run_queries`, keeps a `current` progress snapshot, fans events out to SSE subscribers (bounded queues; a slow subscriber is dropped and the UI reconnects) and limits LinkedIn posts to once per 24 h. It raises `RunInProgress` / `NoSearchSettings`.
+- `exclusive()` is a context manager that refuses (`RunInProgress`) while a search runs and blocks new ones inside the block. Reset and the LinkedIn login window use it.
+- `AutoSearch` ticks every 60 s and starts a `trigger="auto"` run when enabled, onboarding is done and the configured hours have passed since the last finished run. After any attempt (started or refused) it backs off a full interval.
+- `settings.py` has a `_CONFIG_LOCK` (RLock) that serialises every write to `config.json` (search settings and the `app` section).
+
+### Reporting and notifications
+
+`reporting.report_pending(store, notifier)` sends `unnotified_jobs()` to a notifier (`notifier(jobs) -> bool`) and marks them with `mark_notified` only when it returns True. The app's notifier is `notify.DesktopNotifier` (desktop-notifier; Arabic or English headline from app settings). It always returns True: if the OS refuses, jobs stay visible as "New" in the app rather than piling up and re-notifying. Terminal mode uses the same function with print + email.
+
+### Schema v3
+
+`runs` gains `trigger` (`manual` | `auto` | `terminal`) and `search_id`; the new `run_queries` table stores one row per finished query (`run_id`, `idx`, `source`, `keyword`, `location_id`, `status` in `done|failed|skipped`, `found`, `new`, `detail`). `Store.run_details(id)` joins them for the History page.
+
+### Problem report and redaction
+
+`POST /api/report-problem` reads the last 200 log lines, passes them through `web/redact.py` (home path and user name, e-mail addresses, `token/key/secret/password/pass` values, bearer/basic credentials, query strings of URLs), builds a prefilled GitHub issue URL and opens it in the browser; the user reviews and submits it. The URL is capped at 6000 chars by dropping the oldest log lines first.
+
+### Endpoints (all under `/api`, all need the token)
+
+| Method | Path | Success | Errors |
+|---|---|---|---|
+| GET | `/state` | 200 version, onboarding, language, theme, chrome, linkedin_profile, run, job_counts, has_settings, update | |
+| GET | `/settings` | 200 search settings (empty defaults if unset) | |
+| PUT | `/settings` | 200 cleaned settings | 422 `{errors}` |
+| GET | `/app-settings` | 200 | |
+| PATCH | `/app-settings` | 200 full settings | 422 `{errors}` (unknown or invalid keys) |
+| GET | `/countries?lang=ar\|en` | 200 | 422 |
+| GET | `/jobs?status&source&text&limit&offset` | 200 `{jobs, total}` (`status=all` includes dismissed) | 422 |
+| PATCH | `/jobs/{id}` | 200 `{ok}` (body `{status}`) | 404 `{job: not_found}`, 422 |
+| GET | `/runs?limit` | 200 `{runs}` | |
+| GET | `/runs/{id}` | 200 run with its queries | 404 `{run: not_found}` |
+| POST | `/runs` | 202 `{run_id}` (`null` while the run is still starting) | 409 `run_in_progress`, 422 `no_settings` |
+| POST | `/runs/current/cancel` | 202 `{ok}` | 409 `not_running` |
+| GET | `/events` | 200 SSE stream (keepalive every 15 s) | |
+| POST | `/open-url` | 204 (http/https only; control characters refused) | 422 |
+| POST | `/open-data-folder` | 204 | |
+| POST | `/linkedin/login` | 202 `{ok}` (opens Chrome on the LinkedIn profile) | 409 `chrome_not_found` / `run_in_progress` |
+| POST | `/report-problem` | 200 `{url}` (also opened in the browser) | |
+| GET | `/update` | 200 `{current, latest, checked, available}` (cached 24 h; `disabled` if the check is off) | |
+| POST | `/reset` | 204 (body `{"confirm": "DELETE"}`) | 422 `confirm`, 409 `run_in_progress` / `outside_data_dir` |
 
 ---
 
@@ -485,6 +551,12 @@ Install: `pip install -r requirements.txt`
 ---
 
 ## Running Locally
+
+```bash
+venv/bin/python3 src/app.py   # desktop app; --no-window prints the URL and serves only
+```
+
+Terminal mode:
 
 ```bash
 cp .env.example .env   # fill in GMAIL_USER / GMAIL_PASS / RECIPIENT_EMAIL
