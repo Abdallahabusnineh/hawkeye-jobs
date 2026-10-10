@@ -49,8 +49,10 @@ export function ageParts(iso, nowMs) {
 
 // ── run progress ─────────────────────────────────────────────────────
 
-export function startingRun() {
-  return { run_id: null, trigger: "manual", total: 0, done: 0, found: 0, new: 0, current: null, stopping: false };
+export const STARTING_TTL_MS = 30000;
+
+export function startingRun(now = Date.now()) {
+  return { run_id: null, trigger: "manual", total: 0, done: 0, found: 0, new: 0, current: null, stopping: false, since: now };
 }
 
 export function applyEvent(run, event) {
@@ -75,8 +77,10 @@ export function applyEvent(run, event) {
 }
 
 // GET /api/state -> run snapshot {run_id, trigger, total, done, found, new} (no current query).
-export function fromSnapshot(snapshot, previous) {
-  if (!snapshot) return previous && previous.run_id === null ? previous : null;
+export function fromSnapshot(snapshot, previous, now = Date.now()) {
+  if (!snapshot) {
+    return previous && previous.run_id === null && now - previous.since < STARTING_TTL_MS ? previous : null;
+  }
   const same = !!previous && previous.run_id === snapshot.run_id;
   return {
     run_id: snapshot.run_id, trigger: snapshot.trigger, total: snapshot.total, done: snapshot.done,

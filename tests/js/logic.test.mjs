@@ -67,6 +67,14 @@ test("fromSnapshot keeps the current query of the same run and the starting plac
   assert.equal(L.fromSnapshot(null, prev), null);
 });
 
+test("the starting placeholder expires after 30 seconds", () => {
+  const starting = L.startingRun(1000);
+  assert.equal(starting.since, 1000);
+  assert.equal(L.fromSnapshot(null, starting, 1000 + 29000), starting);
+  assert.equal(L.fromSnapshot(null, starting, 1000 + 31000), null);
+  assert.equal(L.applyEvent(starting, { type: "run_started", run_id: 2, total: 1 }).since, undefined);
+});
+
 test("progressPercent is bounded", () => {
   assert.equal(L.progressPercent(null), 0);
   assert.equal(L.progressPercent({ done: 3, total: 4 }), 75);

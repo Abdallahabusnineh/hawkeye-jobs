@@ -1,13 +1,369 @@
 <!doctype html>
-<html lang="en">
+<html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
   <title>Hawkeye Jobs</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- Module first: it registers the "hawkeye" component on alpine:init before Alpine starts. -->
+  <script type="module" src="app.js"></script>
+  <script defer src="vendor/alpine.min.js"></script>
 </head>
-<body>
-  <!-- Placeholder: replaced by the real UI in Plan 2b (docs/superpowers/plans). -->
-  <h1>Hawkeye Jobs</h1>
-  <p>The app is running. The full interface arrives with the front-end plan.</p>
+<body x-data="hawkeye">
+  <div class="boot" x-show="!ready && !fatal"><p>Hawkeye Jobs</p></div>
+
+  <div class="fatal" x-cloak x-show="fatal" role="alert">
+    <div>
+      <p>تعذّر تشغيل الواجهة. أغلق التطبيق، ثم افتحه من جديد.</p>
+      <p lang="en" dir="ltr">The interface could not start. Close the app and open it again.</p>
+    </div>
+  </div>
+
+  <div class="shell" x-cloak x-show="ready" :class="{ 'is-wizard': inWizard() }">
+    <header class="topbar">
+      <span class="brand">Hawkeye Jobs</span>
+      <div x-show="!inWizard()">
+        <button type="button" class="btn" x-show="!run" @click="startSearch()" x-text="t('run.start')"></button>
+        <button type="button" class="btn-danger" x-show="run" :disabled="!!(run && run.stopping)" @click="stopSearch()"
+                x-text="run && run.stopping ? t('run.stopping') : t('run.stop')"></button>
+      </div>
+    </header>
+
+    <nav class="sidenav" x-show="!inWizard()" :aria-label="t('nav.label')">
+      <template x-for="p in pages" :key="p">
+        <button type="button" class="nav-item" :aria-current="page === p ? 'page' : null" @click="go(p)">
+          <span x-text="t('nav.' + p)"></span>
+          <span class="nav-count" x-show="p === 'jobs' && count('new') > 0" x-text="count('new')"></span>
+          <span class="nav-dot" x-show="p === 'settings' && updateAvailable()" aria-hidden="true"></span>
+        </button>
+      </template>
+    </nav>
+
+    <main class="main">
+      <!-- ── First-run wizard: header and steps 1, 2 and 4 (step 3 is the search form below) ── -->
+      <div class="wizard-head" x-show="inWizard()">
+        <p class="hint" x-text="t('wizard.step', { n: wizard.step, total: 4 })"></p>
+        <div class="steps" aria-hidden="true">
+          <template x-for="n in 4" :key="n"><span :class="{ on: n <= wizard.step }"></span></template>
+        </div>
+      </div>
+
+      <section x-show="wizardStep(1)">
+        <h1 class="page-title" x-text="t('wizard.welcome')"></h1>
+        <p x-text="t('wizard.intro')"></p>
+        <h2 x-text="t('wizard.language_title')"></h2>
+        <div class="choice-row">
+          <button type="button" class="choice" lang="ar" :aria-pressed="(lang === 'ar').toString()" @click="setLanguage('ar')">العربية</button>
+          <button type="button" class="choice" lang="en" :aria-pressed="(lang === 'en').toString()" @click="setLanguage('en')">English</button>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn" @click="wizard.step = 2" x-text="t('action.next')"></button>
+        </div>
+      </section>
+
+      <section x-show="wizardStep(2)">
+        <h1 class="page-title" x-text="t('wizard.browser_title')"></h1>
+        <p class="callout callout-ok" x-show="chromeFound()" x-text="t('wizard.chrome_ok')"></p>
+        <div class="callout callout-warn" x-show="!chromeFound()">
+          <p x-text="t('wizard.chrome_missing')"></p>
+          <div class="row">
+            <button type="button" class="btn-ghost" @click="openUrl(chromeUrl)" x-text="t('action.download_chrome')"></button>
+            <button type="button" class="btn-ghost" @click="recheckChrome()" x-text="t('wizard.recheck')"></button>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn-ghost" @click="wizard.step = 1" x-text="t('action.back')"></button>
+          <button type="button" class="btn" @click="wizard.step = 3" x-text="t('action.next')"></button>
+        </div>
+      </section>
+
+      <section x-show="wizardStep(4)">
+        <h1 class="page-title" x-text="t('wizard.ready_title')"></h1>
+        <p x-text="t('wizard.ready_body')"></p>
+        <p class="hint" x-text="estimateText()"></p>
+        <div class="actions">
+          <button type="button" class="btn-ghost" @click="wizard.step = 3" x-text="t('action.back')"></button>
+          <button type="button" class="btn" @click="finishWizard()" x-text="t('wizard.start')"></button>
+        </div>
+      </section>
+
+      <!-- ── Jobs ── -->
+      <section x-show="showPage('jobs')">
+        <div class="banner" x-show="run" role="status" aria-live="polite">
+          <div class="banner-row">
+            <strong x-text="bannerTitle()"></strong>
+            <span x-text="t('banner.new', { n: run ? run.new : 0 })"></span>
+          </div>
+          <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="progress()">
+            <div class="progress-fill" :style="{ width: progress() + '%' }"></div>
+          </div>
+          <p class="hint" x-text="bannerNow()"></p>
+        </div>
+
+        <div class="toolbar">
+          <div class="chips" role="tablist">
+            <template x-for="f in filters" :key="f">
+              <button type="button" class="chip" role="tab" :aria-selected="(jobs.filter === f).toString()" @click="setFilter(f)">
+                <span x-text="t('jobs.filter.' + f)"></span>
+                <span class="chip-count" x-show="f !== 'all'" x-text="count(f)"></span>
+              </button>
+            </template>
+          </div>
+          <input type="search" class="search-box" x-model="jobs.text" @input="onJobsText()"
+                 :placeholder="t('jobs.search_placeholder')" :aria-label="t('jobs.search_placeholder')">
+        </div>
+
+        <ul class="job-list" :aria-label="t('jobs.list_label')">
+          <template x-for="job in jobs.items" :key="job.id">
+            <li class="job" :class="'is-' + job.status">
+              <div class="job-head">
+                <h3 class="job-title" x-text="job.title"></h3>
+                <span class="badge" x-text="jobSourceLabel(job)"></span>
+              </div>
+              <p class="job-meta">
+                <span x-text="job.description"></span>
+                <span x-show="jobLocation(job)" x-text="' · ' + jobLocation(job)"></span>
+              </p>
+              <p class="job-age">
+                <span x-text="ageText(job.first_seen_at)"></span>
+                <span class="tag-muted" x-show="job.status === 'dismissed'" x-text="t('jobs.dismissed_badge')"></span>
+              </p>
+              <div class="job-actions">
+                <button type="button" class="btn-small" @click="openUrl(job.url)" x-text="t('jobs.open')"></button>
+                <button type="button" class="btn-ghost-small" :aria-pressed="(job.status === 'saved').toString()"
+                        @click="setJobStatus(job, 'saved')" x-text="t('jobs.save')"></button>
+                <button type="button" class="btn-ghost-small" :aria-pressed="(job.status === 'applied').toString()"
+                        @click="setJobStatus(job, 'applied')" x-text="t('jobs.applied')"></button>
+                <button type="button" class="btn-ghost-small" :aria-pressed="(job.status === 'dismissed').toString()"
+                        @click="setJobStatus(job, 'dismissed')" x-text="t('jobs.dismiss')"></button>
+              </div>
+            </li>
+          </template>
+        </ul>
+        <p class="empty" x-show="!jobs.loading && !jobs.items.length" x-text="emptyText()"></p>
+        <button type="button" class="btn-ghost load-more" x-show="jobs.items.length < jobs.total"
+                @click="loadMore()" x-text="t('jobs.load_more')"></button>
+      </section>
+
+      <!-- ── Search form: the Search page and wizard step 3 ── -->
+      <section x-show="showSearchForm()">
+        <h1 class="page-title" x-show="!inWizard()" x-text="t('nav.search')"></h1>
+
+        <div class="panel">
+          <h2 x-text="t('search.title_1')"></h2>
+          <p class="hint" x-text="t('search.keywords_hint')"></p>
+          <div class="tags">
+            <template x-for="(keyword, i) in search.keywords" :key="keyword">
+              <span class="tag">
+                <span x-text="keyword"></span>
+                <button type="button" class="tag-remove" @click="removeKeyword(i)"
+                        :aria-label="t('action.remove_item', { item: keyword })">×</button>
+              </span>
+            </template>
+            <input type="text" class="tag-input" maxlength="100" x-model="search.keywordInput"
+                   @keydown.enter.prevent="commitKeyword()" @keydown="keywordKeydown($event)" @blur="commitKeyword()"
+                   :placeholder="t('search.keywords_placeholder')" :aria-label="t('search.title_1')">
+          </div>
+          <p class="field-error" role="alert" x-show="search.errors.keywords" x-text="fieldError('keywords')"></p>
+          <p class="tip" x-text="t('search.keywords_tip')"></p>
+        </div>
+
+        <div class="panel">
+          <h2 x-text="t('search.title_2')"></h2>
+          <p class="hint" x-text="t('search.locations_hint')"></p>
+          <div class="tags">
+            <template x-for="id in search.locations" :key="id">
+              <span class="tag">
+                <span x-text="locationLabel(id)"></span>
+                <button type="button" class="tag-remove" @click="removeLocation(id)"
+                        :aria-label="t('action.remove_item', { item: locationLabel(id) })">×</button>
+              </span>
+            </template>
+            <div class="combo" @click.outside="search.countryOpen = false">
+              <input type="text" class="tag-input" role="combobox" aria-controls="country-list"
+                     :aria-expanded="search.countryOpen.toString()" x-model="search.countryQuery"
+                     @focus="search.countryOpen = true" @input="search.countryOpen = true"
+                     @keydown.escape="search.countryOpen = false" @keydown.enter.prevent="pickFirstCountry()"
+                     :placeholder="t('search.locations_placeholder')" :aria-label="t('search.title_2')">
+              <ul id="country-list" class="combo-list" role="listbox" x-show="search.countryOpen && countryMatches().length">
+                <template x-for="c in countryMatches()" :key="c.id">
+                  <li role="option"><button type="button" @click="addLocation(c.id)" x-text="c.label"></button></li>
+                </template>
+              </ul>
+            </div>
+          </div>
+          <p class="field-error" role="alert" x-show="search.errors.locations" x-text="fieldError('locations')"></p>
+        </div>
+
+        <div class="panel">
+          <h2 x-text="t('search.title_3')"></h2>
+          <div class="sources">
+            <template x-for="id in sourceOrder" :key="id">
+              <label class="source" :class="{ 'is-disabled': sourceDisabled(id) }">
+                <input type="checkbox" :checked="search.sources.includes(id)" :disabled="sourceDisabled(id)" @change="toggleSource(id)">
+                <span>
+                  <strong x-text="t('source.' + id)"></strong>
+                  <small x-text="sourceDisabled(id) ? t('search.browser_needed') : t('source.' + id + '.hint')"></small>
+                </span>
+              </label>
+            </template>
+          </div>
+          <p class="field-error" role="alert" x-show="search.errors.sources" x-text="fieldError('sources')"></p>
+          <div class="warning" role="note">
+            <p x-text="t('search.posts_warning')"></p>
+            <button type="button" class="btn-ghost" @click="linkedinLogin()" x-text="t('linkedin.login')"></button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2 x-text="t('search.title_4')"></h2>
+          <div class="row">
+            <label class="switch">
+              <input type="checkbox" x-model="search.auto.enabled">
+              <span x-text="t('search.auto_label')"></span>
+            </label>
+            <select x-model.number="search.auto.hours" :disabled="!search.auto.enabled" :aria-label="t('search.auto_label')">
+              <template x-for="h in autoHours" :key="h">
+                <option :value="h" :selected="h === search.auto.hours" x-text="t('hours.' + h)"></option>
+              </template>
+            </select>
+            <span class="hint" x-text="t('search.auto_note')"></span>
+          </div>
+        </div>
+
+        <div class="actions" x-show="!inWizard()">
+          <button type="button" class="btn" :disabled="search.saving || !!run" @click="saveSearch(true)" x-text="t('search.save_and_run')"></button>
+          <button type="button" class="btn-ghost" :disabled="search.saving" @click="saveSearch(false)" x-text="t('search.save_only')"></button>
+          <span class="hint" x-text="estimateText()"></span>
+        </div>
+        <div class="actions" x-show="inWizard()">
+          <button type="button" class="btn-ghost" @click="wizard.step = 2" x-text="t('action.back')"></button>
+          <button type="button" class="btn" :disabled="search.saving" @click="wizardNextFromSearch()" x-text="t('action.next')"></button>
+          <span class="hint" x-text="estimateText()"></span>
+        </div>
+      </section>
+
+      <!-- ── History ── -->
+      <section x-show="showPage('history')">
+        <h1 class="page-title" x-text="t('nav.history')"></h1>
+        <p class="empty" x-show="!history.loading && !history.runs.length" x-text="t('history.empty')"></p>
+        <div class="history" x-show="history.runs.length">
+          <ul class="run-list">
+            <template x-for="r in history.runs" :key="r.id">
+              <li>
+                <button type="button" class="run-row" :aria-current="history.selectedId === r.id ? 'true' : null" @click="selectRun(r.id)">
+                  <span class="dot" :class="'state-' + r.state" aria-hidden="true"></span>
+                  <span x-text="formatDate(r.started_at) + ' · ' + t('history.trigger.' + r.trigger)"></span>
+                  <span x-text="t('history.state.' + r.state)"></span>
+                  <span class="run-counts" x-text="t('history.counts', { found: r.found_count, new: r.new_count })"></span>
+                </button>
+              </li>
+            </template>
+          </ul>
+          <div class="run-details">
+            <p class="hint" x-show="!history.details" x-text="t('history.select_hint')"></p>
+            <template x-if="history.details">
+              <div>
+                <h2 x-text="t('history.details_title', { when: formatDate(history.details.started_at) })"></h2>
+                <p class="hint" x-show="!history.details.queries.length" x-text="t('history.no_details')"></p>
+                <ul>
+                  <template x-for="q in history.details.queries" :key="q.idx">
+                    <li class="query-row">
+                      <span x-text="queryLabel(q)"></span>
+                      <span :class="'outcome-' + q.status" x-text="queryOutcomeText(q)"></span>
+                    </li>
+                  </template>
+                </ul>
+              </div>
+            </template>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Settings ── -->
+      <section x-show="showPage('settings')">
+        <h1 class="page-title" x-text="t('nav.settings')"></h1>
+        <div class="settings">
+          <div class="setting">
+            <label for="set-lang" x-text="t('settings.language')"></label>
+            <select id="set-lang" @change="setLanguage($event.target.value)">
+              <option value="ar" :selected="lang === 'ar'">العربية</option>
+              <option value="en" :selected="lang === 'en'">English</option>
+            </select>
+          </div>
+          <div class="setting">
+            <label for="set-theme" x-text="t('settings.theme')"></label>
+            <select id="set-theme" @change="setTheme($event.target.value)">
+              <template x-for="th in themes" :key="th">
+                <option :value="th" :selected="th === theme" x-text="t('theme.' + th)"></option>
+              </template>
+            </select>
+          </div>
+          <div class="setting">
+            <span x-text="t('settings.browser')"></span>
+            <span class="setting-value">
+              <span class="ok" x-show="chromeFound()" x-text="t('settings.chrome_found')"></span>
+              <span class="warn-text" x-show="!chromeFound()" x-text="t('settings.chrome_missing')"></span>
+              <button type="button" class="btn-ghost" x-show="!chromeFound()" @click="openUrl(chromeUrl)" x-text="t('action.download_chrome')"></button>
+            </span>
+          </div>
+          <div class="setting">
+            <span x-text="t('settings.linkedin')"></span>
+            <span class="setting-value">
+              <span class="hint" x-text="linkedinProfile() ? t('settings.linkedin_ready') : t('settings.linkedin_none')"></span>
+              <button type="button" class="btn-ghost" @click="linkedinLogin()" x-text="t('linkedin.login')"></button>
+            </span>
+          </div>
+          <div class="setting">
+            <span x-text="t('settings.version', { version: version() })"></span>
+            <span class="setting-value">
+              <span class="hint" x-text="updateText()"></span>
+              <button type="button" class="btn-ghost" :disabled="settingsPage.checking" @click="checkUpdate()" x-text="t('settings.check_updates')"></button>
+              <button type="button" class="btn" x-show="updateAvailable()" @click="openUrl(releasesUrl)" x-text="t('settings.download_update')"></button>
+            </span>
+          </div>
+          <div class="setting">
+            <label class="switch">
+              <input type="checkbox" :checked="!!appSettings.update_check" @change="setUpdateCheck($event.target.checked)">
+              <span x-text="t('settings.update_check')"></span>
+            </label>
+          </div>
+          <div class="setting">
+            <span x-text="t('settings.problem')"></span>
+            <button type="button" class="btn-ghost" @click="reportProblem()" x-text="t('action.report_problem')"></button>
+          </div>
+          <div class="setting">
+            <span x-text="t('settings.data_folder')"></span>
+            <button type="button" class="btn-ghost" @click="openDataFolder()" x-text="t('settings.open_folder')"></button>
+          </div>
+          <div class="setting danger-zone">
+            <span x-text="t('settings.delete_all')"></span>
+            <button type="button" class="btn-danger-ghost" @click="openDeleteDialog()" x-text="t('settings.delete')"></button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="overlay" x-cloak x-show="settingsPage.confirmOpen" @keydown.escape.window="closeDeleteDialog()">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+      <h2 id="delete-title" x-text="t('settings.delete_title')"></h2>
+      <p x-text="t('settings.delete_body')"></p>
+      <label for="delete-confirm" x-text="t('settings.delete_type', { word: t('settings.delete_word') })"></label>
+      <input id="delete-confirm" type="text" autocomplete="off" x-ref="deleteConfirm" x-model="settingsPage.confirmText">
+      <div class="actions">
+        <button type="button" class="btn-danger" :disabled="!canDelete() || settingsPage.busy" @click="resetData()" x-text="t('settings.delete_confirm')"></button>
+        <button type="button" class="btn-ghost" @click="closeDeleteDialog()" x-text="t('action.cancel')"></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" x-cloak x-show="toast" :class="toast ? 'toast-' + toast.kind : ''" role="status" aria-live="polite">
+    <span class="toast-text" x-text="toast ? t(toast.key, toast.params) : ''"></span>
+    <button type="button" class="btn-ghost-small" x-show="toast && toast.action" @click="runToastAction()"
+            x-text="toast && toast.action ? t(toast.action.label) : ''"></button>
+    <button type="button" class="toast-close" @click="toast = null" :aria-label="t('action.close')">×</button>
+  </div>
 </body>
 </html>

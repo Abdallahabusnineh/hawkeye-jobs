@@ -134,6 +134,12 @@ class GuardTests(ApiTestCase):
         self.assertEqual(evil.get("/").status_code, 403)
         self.assertEqual(evil.get("/api/state", headers={"X-Hawkeye-Token": TOKEN}).status_code, 403)
 
+    def test_static_ui_files_are_served_without_the_token(self):
+        for path in ("/", "/app.js", "/logic.js", "/api.js", "/styles.css", "/i18n/ar.json",
+                     "/vendor/alpine.min.js"):
+            self.assertEqual(self.client.get(path).status_code, 200, path)
+        self.assertIn('x-data="hawkeye"', self.client.get("/").text)
+
     def test_token_query_param_only_for_events(self):
         self.assertEqual(self.client.get(f"/api/state?token={TOKEN}").status_code, 403)
 
