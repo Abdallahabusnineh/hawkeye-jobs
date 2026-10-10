@@ -143,6 +143,28 @@ class MainTests(unittest.TestCase):
         self.assertIn("More jobs are waiting", out)
         self.assertEqual(len(self._unnotified()), 1)
 
+    def test_no_more_jobs_note_when_exactly_the_report_limit_is_pending(self):
+        jobs = [{"title": f"J{i}", "url": f"https://a.com/{i}", "description": "x", "source": "Bayt"}
+                for i in range(2)]
+        with patch("main.REPORT_LIMIT", 2), \
+             patch("main.run_search", side_effect=self._search_adding(jobs)), \
+             patch("main.email_configured", return_value=False):
+            main.main()
+        self.assertNotIn("More jobs are waiting", sys.stdout.getvalue())
+        self.assertEqual(self._unnotified(), [])
+
+    def test_only_report_limit_jobs_are_marked_when_one_extra_waits(self):
+        jobs = [{"title": f"J{i}", "url": f"https://a.com/{i}", "description": "x", "source": "Bayt"}
+                for i in range(3)]
+        with patch("main.REPORT_LIMIT", 2), \
+             patch("main.run_search", side_effect=self._search_adding(jobs)), \
+             patch("main.email_configured", return_value=True), \
+             patch("main.send_email", return_value=True) as send:
+            main.main()
+        self.assertEqual(len(send.call_args.args[0]), 2)
+        self.assertIn("More jobs are waiting", sys.stdout.getvalue())
+        self.assertEqual(len(self._unnotified()), 1)
+
     def test_no_new_jobs_sends_nothing(self):
         with patch("main.run_search", return_value=RunSummary(1, "done", 0, [])), \
              patch("main.email_configured", return_value=True), \

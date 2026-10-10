@@ -44,6 +44,11 @@ class IsolationTests(unittest.TestCase):
         profile = paths.linkedin_profile_dir()
         self.assertTrue(_inside(profile, _bootstrap.TEMP_ROOT), profile)
 
+    def test_linkedin_profile_dir_with_cleared_environ_stays_in_temp_dir(self):
+        with patch.dict(os.environ, {}, clear=True):
+            profile = paths.linkedin_profile_dir()
+        self.assertTrue(_inside(profile, _bootstrap.TEMP_ROOT), profile)
+
 
 if __name__ == "__main__":
     unittest.main()

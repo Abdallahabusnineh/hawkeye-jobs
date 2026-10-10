@@ -37,3 +37,9 @@ def _tmp_user_data_dir(appname=None, *args, **kwargs):
 
 
 platformdirs.user_data_dir = _tmp_user_data_dir
+
+# paths.linkedin_profile_dir() falls back to a legacy home-folder profile when
+# it exists; point that at the temp dir too so a cleared environ can't see it.
+import paths  # noqa: E402
+
+paths.LEGACY_LINKEDIN_PROFILE = TEMP_ROOT / "legacy-linkedin-profile"

@@ -16,7 +16,7 @@ back_off(), which doubles the gap (capped at 4x). Delays are tuned in
 pipeline.POLITE_DELAYS.
 
 Spacing also holds between runs: pipeline.py saves last_request_wall() per host
-group in the Store when a run ends and prime()s the next run's throttles with it,
+group in the Store as each query starts (on the caller thread) and prime()s the next run's throttles with it,
 so a run started right after another still waits out the gap.
 """
 

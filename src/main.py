@@ -125,13 +125,14 @@ def main():
 
         # Report everything not yet reported, including jobs left by an earlier
         # run that was killed before it got this far.
-        pending = store.unnotified_jobs(limit=REPORT_LIMIT)
+        fetched = store.unnotified_jobs(limit=REPORT_LIMIT + 1)
+        pending = fetched[:REPORT_LIMIT]
         if not pending:
             print("[main] No new jobs to report")
             return
 
         _print_jobs(pending)
-        if len(pending) == REPORT_LIMIT:
+        if len(fetched) > REPORT_LIMIT:
             print("[main] More jobs are waiting — they will come in the next report.")
         ids = [job["id"] for job in pending]
         if email_configured():
