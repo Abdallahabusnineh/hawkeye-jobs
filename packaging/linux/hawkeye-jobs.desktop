@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Hawkeye Jobs
+Comment=Find new jobs on LinkedIn, Indeed, Bayt, NaukriGulf and Google Jobs
+Comment[ar]=ابحث عن الوظائف الجديدة في LinkedIn وIndeed وBayt وNaukriGulf وGoogle Jobs
+Exec=hawkeye-jobs
+Icon=hawkeye-jobs
+Categories=Office;Network;
+Terminal=false

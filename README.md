@@ -30,8 +30,10 @@
 |---|---|
 | macOS (Apple M1 or newer) | [HawkeyeJobs-macOS-AppleSilicon.dmg](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-macOS-AppleSilicon.dmg) |
 | macOS (Intel) | [HawkeyeJobs-macOS-Intel.dmg](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-macOS-Intel.dmg) |
-| Windows 10 / 11 | [HawkeyeJobs-Windows.zip](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows.zip) |
-| Linux (x86-64) | [HawkeyeJobs-Linux.tar.gz](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Linux.tar.gz) |
+| Windows 10 / 11 | [HawkeyeJobs-Windows-Setup.exe](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows-Setup.exe) (installer) · [.zip](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows.zip) |
+| Linux (x86-64) | [HawkeyeJobs-Linux.AppImage](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Linux.AppImage) · [.tar.gz](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Linux.tar.gz) |
+
+**Windows, easiest:** open PowerShell and paste `irm https://abdallahabusnineh.github.io/hawkeye-jobs/install.ps1 | iex` — same idea: installs and opens the app, with no warning.
 
 **Mac, easiest:** open Terminal and paste `curl -fsSL https://abdallahabusnineh.github.io/hawkeye-jobs/install.sh | bash` — it downloads the right build, checks its checksum, installs it to Applications and opens it, with no warning.
 

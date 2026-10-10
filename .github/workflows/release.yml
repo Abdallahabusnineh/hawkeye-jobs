@@ -21,13 +21,13 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            asset: HawkeyeJobs-macOS-AppleSilicon.dmg
+            artifact: macos-applesilicon
           - os: macos-15-intel
-            asset: HawkeyeJobs-macOS-Intel.dmg
+            artifact: macos-intel
           - os: windows-latest
-            asset: HawkeyeJobs-Windows.zip
+            artifact: windows
           - os: ubuntu-22.04
-            asset: HawkeyeJobs-Linux.tar.gz
+            artifact: linux
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -49,6 +49,7 @@ jobs:
           if [ "v$version" != "$GITHUB_REF_NAME" ]; then
             echo "Tag $GITHUB_REF_NAME does not match src/version.py ($version)"; exit 1
           fi
+          echo "APP_VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Build
         run: python -m PyInstaller packaging/hawkeye.spec --noconfirm
@@ -59,22 +60,49 @@ jobs:
       - name: Package (macOS)
         if: runner.os == 'macOS'
         run: |
-          mkdir -p staging
+          asset=HawkeyeJobs-macOS-AppleSilicon.dmg
+          [ "$(uname -m)" = "arm64" ] || asset=HawkeyeJobs-macOS-Intel.dmg
+          mkdir -p staging out
           cp -R "dist/Hawkeye Jobs.app" staging/
           ln -s /Applications staging/Applications
-          hdiutil create -volname "Hawkeye Jobs" -srcfolder staging -ov -format UDZO "${{ matrix.asset }}"
+          hdiutil create -volname "Hawkeye Jobs" -srcfolder staging -ov -format UDZO "out/$asset"
+
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: Compress-Archive -Path "dist/Hawkeye Jobs" -DestinationPath "${{ matrix.asset }}"
+        run: |
+          New-Item -ItemType Directory -Force out | Out-Null
+          Compress-Archive -Path "dist/Hawkeye Jobs" -DestinationPath out/HawkeyeJobs-Windows.zip
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; }
+          $version = if ($env:APP_VERSION) { $env:APP_VERSION } else { "0.0.0" }
+          & $iscc "/DAppVersion=$version" packaging\windows\hawkeye.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Move-Item dist/HawkeyeJobs-Windows-Setup.exe out/
+      - name: Installer test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process out/HawkeyeJobs-Windows-Setup.exe -Wait -PassThru -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
+          if ($p.ExitCode -ne 0) { exit $p.ExitCode }
+          python packaging/smoke_test.py "$env:LOCALAPPDATA\Programs\Hawkeye Jobs\Hawkeye Jobs.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Package (Linux)
         if: runner.os == 'Linux'
-        run: tar -C dist -czf "${{ matrix.asset }}" "Hawkeye Jobs"
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          mkdir -p out
+          tar -C dist -czf out/HawkeyeJobs-Linux.tar.gz "Hawkeye Jobs"
+          bash packaging/linux/build_appimage.sh
+          mv dist/HawkeyeJobs-Linux.AppImage out/
+          python packaging/smoke_test.py out/HawkeyeJobs-Linux.AppImage
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset }}
-          path: ${{ matrix.asset }}
+          name: ${{ matrix.artifact }}
+          path: out/*
           if-no-files-found: error
 
   publish:

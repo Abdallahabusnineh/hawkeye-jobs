@@ -86,11 +86,13 @@
       <div class="card">
         <h3>Windows</h3>
         <p data-lang="ar">Windows 10 و11</p><p data-lang="en">Windows 10 and 11</p>
+        <a href="https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows-Setup.exe"><span data-lang="ar">برنامج التثبيت</span><span data-lang="en">Installer</span> (.exe)</a> ·
         <a href="https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows.zip" dir="ltr">.zip</a>
       </div>
       <div class="card">
         <h3>Linux</h3>
         <p data-lang="ar">أنظمة 64-بت الحديثة</p><p data-lang="en">Modern 64-bit distributions</p>
+        <a href="https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Linux.AppImage" dir="ltr">.AppImage</a> ·
         <a href="https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Linux.tar.gz" dir="ltr">.tar.gz</a>
       </div>
     </div>
@@ -113,7 +115,14 @@
       <p data-lang="ar">افتح تطبيق «Terminal»، والصق هذا السطر، ثم اضغط Enter. سيُنزَّل التطبيق ويُثبَّت ويُفتح مباشرة، دون رسالة التحذير.</p>
       <p data-lang="en">Open the Terminal app, paste this line and press Enter. It downloads, installs and opens the app, with no warning.</p>
       <pre dir="ltr"><code id="mac-cmd">curl -fsSL https://abdallahabusnineh.github.io/hawkeye-jobs/install.sh | bash</code></pre>
-      <button type="button" class="copy" id="copy-cmd"><span data-lang="ar">نسخ الأمر</span><span data-lang="en">Copy command</span></button>
+      <button type="button" class="copy" data-copy="mac-cmd"><span data-lang="ar">نسخ الأمر</span><span data-lang="en">Copy command</span></button>
+    </div>
+    <div class="card mac-install">
+      <h3><span data-lang="ar">أسهل طريقة على Windows: أمر واحد</span><span data-lang="en">Easiest on Windows: one command</span></h3>
+      <p data-lang="ar">افتح «PowerShell» من قائمة Start، والصق هذا السطر، ثم اضغط Enter. سيُنزَّل التطبيق ويُثبَّت ويُفتح مباشرة، دون رسالة التحذير.</p>
+      <p data-lang="en">Open PowerShell from the Start menu, paste this line and press Enter. It downloads, installs and opens the app, with no warning.</p>
+      <pre dir="ltr"><code id="win-cmd">irm https://abdallahabusnineh.github.io/hawkeye-jobs/install.ps1 | iex</code></pre>
+      <button type="button" class="copy" data-copy="win-cmd"><span data-lang="ar">نسخ الأمر</span><span data-lang="en">Copy command</span></button>
     </div>
     <details>
       <summary>macOS</summary>
@@ -122,13 +131,13 @@
     </details>
     <details>
       <summary>Windows</summary>
-      <p data-lang="ar">فكّ ضغط الملف، ثم شغّل <code>Hawkeye Jobs.exe</code> من المجلد. إذا ظهرت رسالة «حمى Windows جهاز الكمبيوتر»، فاضغط «مزيد من المعلومات» ثم «التشغيل على أي حال».</p>
-      <p data-lang="en">Extract the archive and run <code>Hawkeye Jobs.exe</code> from the folder. If Windows shows "Windows protected your PC", click More info → Run anyway.</p>
+      <p data-lang="ar">شغّل برنامج التثبيت ‎(Setup.exe)‎ واتبع الخطوات؛ لا يحتاج صلاحيات المسؤول، ويضيف التطبيق إلى قائمة Start. إذا ظهرت رسالة «حمى Windows جهاز الكمبيوتر»، فاضغط «مزيد من المعلومات» ثم «التشغيل على أي حال».</p>
+      <p data-lang="en">Run the installer (Setup.exe) and follow the steps; it needs no administrator rights and adds the app to the Start menu. If Windows shows "Windows protected your PC", click More info → Run anyway.</p>
     </details>
     <details>
       <summary>Linux</summary>
-      <p data-lang="ar">فكّ ضغط الملف وشغّل <code>Hawkeye Jobs/Hawkeye Jobs</code>.</p>
-      <p data-lang="en">Extract the archive and run <code>Hawkeye Jobs/Hawkeye Jobs</code>.</p>
+      <p data-lang="ar">نزّل ملف ‎.AppImage‎، ثم اسمح بتشغيله (كليك يمين ← خصائص ← «السماح بتشغيله كبرنامج»، أو <code dir="ltr">chmod +x HawkeyeJobs-Linux.AppImage</code>) وانقر عليه مرتين.</p>
+      <p data-lang="en">Download the .AppImage, allow it to run (right-click → Properties → "Allow executing as program", or <code>chmod +x HawkeyeJobs-Linux.AppImage</code>) and double-click it.</p>
     </details>
     <p class="hint" data-lang="ar">يحتاج البحث في Bayt وNaukriGulf وGoogle Jobs ومنشورات LinkedIn إلى متصفح <a href="https://www.google.com/chrome/">Google Chrome</a>.</p>
     <p class="hint" data-lang="en">Bayt, NaukriGulf, Google Jobs and LinkedIn posts need <a href="https://www.google.com/chrome/">Google Chrome</a>.</p>
@@ -151,9 +160,9 @@
       }
       function system() {
         var ua = navigator.userAgent;
-        if (/Windows/i.test(ua)) return { file: "HawkeyeJobs-Windows.zip", ar: "لنظام Windows", en: "for Windows" };
+        if (/Windows/i.test(ua)) return { file: "HawkeyeJobs-Windows-Setup.exe", ar: "لنظام Windows", en: "for Windows" };
         if (/Mac/i.test(ua) && !/iPhone|iPad/i.test(ua)) return { file: "HawkeyeJobs-macOS-AppleSilicon.dmg", ar: "لأجهزة Mac بشرائح Apple (لأجهزة Intel اختر من القائمة أدناه)", en: "for Macs with Apple chips (Intel Macs: pick from the list below)" };
-        if (/Linux/i.test(ua) && !/Android/i.test(ua)) return { file: "HawkeyeJobs-Linux.tar.gz", ar: "لنظام Linux", en: "for Linux" };
+        if (/Linux/i.test(ua) && !/Android/i.test(ua)) return { file: "HawkeyeJobs-Linux.AppImage", ar: "لنظام Linux", en: "for Linux" };
         return null;
       }
       function hint() {
@@ -166,11 +175,11 @@
       try { saved = localStorage.getItem("hawkeye-site-lang"); } catch (e) {}
       // Arabic first; English for visitors whose browser asks for English.
       setLang(saved || ((navigator.language || "").toLowerCase().indexOf("en") === 0 ? "en" : "ar"));
-      document.getElementById("copy-cmd").addEventListener("click", function () {
-        var btn = this;
-        navigator.clipboard.writeText(document.getElementById("mac-cmd").textContent).then(function () {
-          btn.dataset.done = "1";
-          btn.querySelectorAll("span").forEach(function (s) { s.textContent = s.dataset.lang === "ar" ? "تم النسخ ✓" : "Copied ✓"; });
+      document.querySelectorAll("[data-copy]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          navigator.clipboard.writeText(document.getElementById(btn.dataset.copy).textContent).then(function () {
+            btn.querySelectorAll("span").forEach(function (s) { s.textContent = s.dataset.lang === "ar" ? "تم النسخ ✓" : "Copied ✓"; });
+          });
         });
       });
       document.getElementById("lang-toggle").addEventListener("click", function () { setLang(html.lang === "ar" ? "en" : "ar"); });

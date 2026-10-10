@@ -7,8 +7,8 @@ Hawkeye Jobs is a free, open-source job finder for LinkedIn, Indeed, Bayt, Naukr
 |---|---|
 | macOS (Apple M1/M2/M3/M4) | `HawkeyeJobs-macOS-AppleSilicon.dmg` |
 | macOS (Intel) | `HawkeyeJobs-macOS-Intel.dmg` |
-| Windows 10 / 11 | `HawkeyeJobs-Windows.zip` |
-| Linux (x86-64) | `HawkeyeJobs-Linux.tar.gz` |
+| Windows 10 / 11 | `HawkeyeJobs-Windows-Setup.exe` (برنامج تثبيت · installer) — أو · or `HawkeyeJobs-Windows.zip` |
+| Linux (x86-64) | `HawkeyeJobs-Linux.AppImage` — أو · or `HawkeyeJobs-Linux.tar.gz` |
 
 يتطلب البحث في Bayt وNaukriGulf وGoogle Jobs ومنشورات LinkedIn وجود متصفح Google Chrome.
 Bayt, NaukriGulf, Google Jobs and LinkedIn posts need Google Chrome installed.
@@ -33,15 +33,24 @@ curl -fsSL https://abdallahabusnineh.github.io/hawkeye-jobs/install.sh | bash
 2. افتح التطبيق. إذا ظهرت رسالة «لا يمكن التحقق من المطوّر»، فافتح «إعدادات النظام ← الخصوصية والأمان» واضغط «افتح على أي حال».
    Open the app. If macOS says it cannot verify the developer, go to System Settings → Privacy & Security and click **Open Anyway**.
 
-**Windows**
-1. فكّ ضغط الملف ‎.zip، ثم افتح المجلد وشغّل `Hawkeye Jobs.exe`.
-   Extract the .zip, open the folder and run `Hawkeye Jobs.exe`.
+**Windows — أسهل طريقة · easiest way**
+
+افتح PowerShell من قائمة Start والصق هذا السطر (يُنزِّل التطبيق ويثبّته ويفتحه دون تحذير):
+Open PowerShell from the Start menu and paste this line (downloads, installs and opens the app with no warning):
+
+```
+irm https://abdallahabusnineh.github.io/hawkeye-jobs/install.ps1 | iex
+```
+
+**Windows — من الملف · from the file**
+1. شغّل `HawkeyeJobs-Windows-Setup.exe` (لا يحتاج صلاحيات المسؤول).
+   Run `HawkeyeJobs-Windows-Setup.exe` (no administrator rights needed).
 2. إذا ظهرت رسالة «حمى Windows جهاز الكمبيوتر»، فاضغط «مزيد من المعلومات» ثم «التشغيل على أي حال».
    If Windows shows "Windows protected your PC", click **More info** → **Run anyway**.
 
 **Linux**
-فكّ ضغط الملف وشغّل `Hawkeye Jobs/Hawkeye Jobs`.
-Extract the archive and run `Hawkeye Jobs/Hawkeye Jobs`.
+اجعل ملف ‎.AppImage‎ قابلًا للتشغيل ثم انقر عليه مرتين.
+Make the .AppImage executable, then double-click it: `chmod +x HawkeyeJobs-Linux.AppImage`
 
 ## الخصوصية · Privacy
 

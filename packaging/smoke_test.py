@@ -1,5 +1,8 @@
 """Smoke test for a PyInstaller build (run from the repo root after building).
 
+    python packaging/smoke_test.py                 # the build in dist/
+    python packaging/smoke_test.py PATH_TO_APP     # an installed app or an AppImage
+
 1. `--self-test`: bundled data and libraries load (exit code 0).
 2. `--no-window`: the app starts, serves the window files, and guards the API.
 Uses a throwaway data folder; makes no searches.
@@ -41,7 +44,7 @@ def status(url: str) -> int:
 
 
 def main() -> None:
-    exe = executable()
+    exe = Path(sys.argv[1]) if len(sys.argv) > 1 else executable()
     env = {**os.environ, "HAWKEYE_DATA_DIR": tempfile.mkdtemp(prefix="hawkeye-smoke-"),
            "GMAIL_USER": "", "GMAIL_PASS": ""}
 

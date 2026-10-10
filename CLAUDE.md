@@ -88,7 +88,8 @@ Set in `.env` (gitignored): `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`. Copy 
 | `packaging/hawkeye.spec` | PyInstaller build (what gets bundled); `packaging/launcher.py` is the frozen entry point |
 | `packaging/smoke_test.py` | Checks a build: `--self-test`, then start/serve |
 | `.github/workflows/release.yml` | Builds macOS/Windows/Linux on a `v*` tag and publishes the GitHub release |
-| `site/index.html` | Download page (GitHub Pages, `.github/workflows/pages.yml`) |
+| `site/index.html` | Download page (GitHub Pages, `.github/workflows/pages.yml`); `site/install.sh` / `site/install.ps1` are the one-command installers |
+| `packaging/windows/hawkeye.iss` | Windows installer (Inno Setup); `packaging/linux/` builds the AppImage |
 
 ## Resetting
 

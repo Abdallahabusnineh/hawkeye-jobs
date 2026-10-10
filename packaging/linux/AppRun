@@ -1,0 +1,4 @@
+#!/bin/sh
+# AppImage entry point: run the PyInstaller build bundled next to this file.
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/lib/hawkeye-jobs/Hawkeye Jobs" "$@"
