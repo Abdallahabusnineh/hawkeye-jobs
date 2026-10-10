@@ -132,6 +132,17 @@ class MainTests(unittest.TestCase):
             main.main()
         self.assertIn("No new jobs to report", sys.stdout.getvalue())
 
+    def test_notes_when_more_jobs_are_waiting_than_the_report_limit(self):
+        jobs = [{"title": f"J{i}", "url": f"https://a.com/{i}", "description": "x", "source": "Bayt"}
+                for i in range(3)]
+        with patch("main.REPORT_LIMIT", 2), \
+             patch("main.run_search", side_effect=self._search_adding(jobs)), \
+             patch("main.email_configured", return_value=False):
+            main.main()
+        out = sys.stdout.getvalue()
+        self.assertIn("More jobs are waiting", out)
+        self.assertEqual(len(self._unnotified()), 1)
+
     def test_no_new_jobs_sends_nothing(self):
         with patch("main.run_search", return_value=RunSummary(1, "done", 0, [])), \
              patch("main.email_configured", return_value=True), \

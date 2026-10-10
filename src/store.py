@@ -123,8 +123,8 @@ class Store:
             try:
                 self.conn.execute("PRAGMA journal_mode = WAL")
                 return
-            except sqlite3.OperationalError:
-                if attempt == 4:
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or attempt == 4:
                     raise
                 time.sleep(0.2)
 

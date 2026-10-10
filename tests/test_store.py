@@ -390,16 +390,17 @@ class SiteRequestTests(StoreTestCase):
 
 class _FlakyConn:
     """Wraps a real connection; the first journal_mode=WAL execute raises 'locked'."""
-    def __init__(self, real, failures=1):
+    def __init__(self, real, failures=1, message="database is locked"):
         object.__setattr__(self, "_real", real)
         object.__setattr__(self, "wal_calls", 0)
         object.__setattr__(self, "_failures", failures)
+        object.__setattr__(self, "_message", message)
 
     def execute(self, sql, *a):
         if "journal_mode" in sql:
             object.__setattr__(self, "wal_calls", self.wal_calls + 1)
             if self.wal_calls <= self._failures:
-                raise sqlite3.OperationalError("database is locked")
+                raise sqlite3.OperationalError(self._message)
         return self._real.execute(sql, *a)
 
     def __getattr__(self, name):
@@ -410,14 +411,14 @@ class _FlakyConn:
 
 
 class WalRetryTests(unittest.TestCase):
-    def _open(self, failures):
+    def _open(self, failures, message="database is locked"):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         real_connect = sqlite3.connect
         holder = {}
 
         def connect(*a, **k):
-            holder["c"] = _FlakyConn(real_connect(*a, **k), failures)
+            holder["c"] = _FlakyConn(real_connect(*a, **k), failures, message)
             return holder["c"]
 
         with patch("store.sqlite3.connect", side_effect=connect), patch("store.time.sleep") as sleep:
@@ -433,6 +434,12 @@ class WalRetryTests(unittest.TestCase):
         self.assertIsNotNone(store)
         self.assertEqual(conn.wal_calls, 2)
         sleep.assert_called_once()
+
+    def test_non_locked_error_is_not_retried(self):
+        store, conn, sleep = self._open(failures=99, message="disk I/O error")
+        self.assertIsNone(store)
+        self.assertEqual(conn.wal_calls, 1)
+        sleep.assert_not_called()
 
     def test_gives_up_after_five_attempts(self):
         store, conn, sleep = self._open(failures=99)

@@ -25,6 +25,8 @@ from pipeline import run_search
 from settings import collect_settings, migrate_legacy_config
 from store import Store
 
+REPORT_LIMIT = 500  # most jobs reported (printed/emailed) per run
+
 ROOT = Path(__file__).resolve().parent.parent
 
 _BROWSER_FAILED = {
@@ -123,12 +125,14 @@ def main():
 
         # Report everything not yet reported, including jobs left by an earlier
         # run that was killed before it got this far.
-        pending = store.unnotified_jobs()
+        pending = store.unnotified_jobs(limit=REPORT_LIMIT)
         if not pending:
             print("[main] No new jobs to report")
             return
 
         _print_jobs(pending)
+        if len(pending) == REPORT_LIMIT:
+            print("[main] More jobs are waiting — they will come in the next report.")
         ids = [job["id"] for job in pending]
         if email_configured():
             print(f"\n[main] Sending email for {len(pending)} new jobs...")
