@@ -20,6 +20,7 @@ from catalog import SOURCES
 from countries import CountryFetchError, load_countries
 from email_sender import email_configured, send_email
 from logs import setup_logging
+from filelock import RunLock
 from paths import data_dir, linkedin_profile_dir
 from pipeline import run_search
 from settings import collect_settings, migrate_legacy_config
@@ -100,6 +101,11 @@ def main():
     if migrate_legacy_config(ROOT):
         print("Copied your saved search settings into the data folder.")
     store = Store()
+    run_lock = RunLock()
+    if not run_lock.acquire():
+        store.close()
+        print("[main] A search is already running in the Hawkeye Jobs app — try again when it finishes.")
+        return
     try:
         store.recover_interrupted_runs()
         if store.import_legacy_seen_file(ROOT / "seen_jobs.json"):
@@ -146,6 +152,7 @@ def main():
             # No email set up: the terminal print is the report.
             store.mark_notified(ids)
     finally:
+        run_lock.release()
         store.close()
 
     print("=" * 50)

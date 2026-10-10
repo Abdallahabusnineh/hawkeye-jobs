@@ -196,6 +196,19 @@ class MainTests(unittest.TestCase):
             main.main()
         self.assertTrue((Path(os.environ["HAWKEYE_DATA_DIR"]) / "config.json").exists())
 
+    def test_main_refuses_when_app_holds_the_run_lock(self):
+        import filelock
+        holder = filelock.RunLock()
+        self.assertTrue(holder.acquire())
+        try:
+            with patch("main.run_search") as run_search, patch("main.send_email") as send:
+                main.main()
+            run_search.assert_not_called()
+            send.assert_not_called()
+            self.assertIn("already running", sys.stdout.getvalue())
+        finally:
+            holder.release()
+
 
 if __name__ == "__main__":
     unittest.main()
