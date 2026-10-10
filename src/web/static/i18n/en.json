@@ -1,4 +1,5 @@
 {
+  "app.closing": "Stopping the search before the app closes…",
   "app.loading": "Loading…",
   "nav.label": "Main navigation",
   "nav.jobs": "Jobs",

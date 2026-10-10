@@ -209,3 +209,14 @@ export function shouldReplaceToast(current, next) {
   if (!current) return true;
   return !(current.action && !(next && next.action));
 }
+
+const TOAST_QUEUE_MAX = 3;
+
+// What to show when `next` arrives while `current` is on screen. Nothing is dropped: a plain message
+// waits behind an actionable one (Undo), and an error goes first, putting the actionable one back in line.
+export function queueToast(current, queue, next) {
+  if (shouldReplaceToast(current, next)) return { show: next, queue };
+  if (next.kind === "error") return { show: next, queue: [current, ...queue].slice(0, TOAST_QUEUE_MAX) };
+  const rest = queue.filter((q) => q.key !== next.key);
+  return { show: current, queue: [...rest, next].slice(-TOAST_QUEUE_MAX) };
+}

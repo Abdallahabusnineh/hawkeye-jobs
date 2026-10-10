@@ -75,6 +75,31 @@ class AppTests(unittest.TestCase):
             manager.start()
         self.assertTrue(parts.server.should_exit)
 
+    def test_close_guard_closes_at_once_when_idle(self):
+        parts = MagicMock()
+        parts.manager.is_running = False
+        window = MagicMock()
+        self.assertTrue(app.CloseGuard(parts, window).on_closing())
+        window.evaluate_js.assert_not_called()
+
+    def test_close_guard_keeps_window_until_search_stops(self):
+        import threading
+        parts = MagicMock()
+        parts.manager.is_running = True
+        window = MagicMock()
+        destroyed = threading.Event()
+        window.destroy.side_effect = destroyed.set
+        guard = app.CloseGuard(parts, window, wait_seconds=3)
+        self.assertFalse(guard.on_closing())
+        self.assertTrue(destroyed.wait(5))
+        self.assertIn("hawkeye-closing", window.evaluate_js.call_args[0][0])
+        names = [c[0] for c in parts.mock_calls if c[0] in (
+            "auto.stop", "manager.close", "manager.cancel", "manager.wait")]
+        self.assertEqual(names, ["auto.stop", "manager.close", "manager.cancel", "manager.wait"])
+        parts.manager.wait.assert_called_once_with(3)
+        # A second close request while stopping closes at once.
+        self.assertTrue(guard.on_closing())
+
     def test_main_survives_report_failure_and_still_shuts_down(self):
         from unittest.mock import patch
         parts = MagicMock()

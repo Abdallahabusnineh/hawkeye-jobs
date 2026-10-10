@@ -43,6 +43,8 @@ function hawkeye() {
     run: null,
     now: Date.now(),
     toast: null,
+    toastQueue: [],
+    closing: false,
     countries: [],
     countryLabels: {},
     jobs: { filter: "new", text: "", items: [], total: 0, loading: false },
@@ -55,11 +57,14 @@ function hawkeye() {
     wizard: { step: 1 },
     timers: { refresh: null, text: null, estimate: null, toast: null },
     jobsRequest: 0,
+    countriesRequest: 0,
     finishedRunIds: [],
     terminalEvents: 0,
     starting: false,
 
     async init() {
+      // Sent by the window when it is closed during a search: show «Stopping…» until the search ends.
+      window.addEventListener("hawkeye-closing", () => { this.closing = true; });
       try {
         this.dicts = await loadDictionaries();
         await this.refreshState();
@@ -138,7 +143,11 @@ function hawkeye() {
       this.run = L.fromSnapshot(this.state.run, this.run, Date.now(), this.finishedRunIds);
     },
     async loadCountries() {
-      this.countries = await api.get(`/api/countries?lang=${this.lang}`);
+      // A language switch can overtake an earlier request; only the latest one may land.
+      const request = ++this.countriesRequest;
+      const countries = await api.get(`/api/countries?lang=${this.lang}`);
+      if (request !== this.countriesRequest) return;
+      this.countries = countries;
       this.countryLabels = Object.fromEntries(this.countries.map((c) => [c.id, c.label]));
     },
     async loadSearchSettings() {
@@ -221,14 +230,25 @@ function hawkeye() {
 
     // ── messages ─────────────────────────────────────────────────────
     notify(kind, key, params = {}, action = null) {
-      if (!L.shouldReplaceToast(this.toast, { action })) return;
+      const { show, queue } = L.queueToast(this.toast, this.toastQueue, { kind, key, params, action });
+      this.toastQueue = queue;
+      if (show !== this.toast) this.showToast(show);
+    },
+    showToast(toast) {
       clearTimeout(this.timers.toast);
-      this.toast = { kind, key, params, action };
-      this.timers.toast = setTimeout(() => { this.toast = null; }, action ? TOAST_MS * 2 : TOAST_MS);
+      this.toast = toast;
+      this.timers.toast = setTimeout(() => this.closeToast(), toast.action ? TOAST_MS * 2 : TOAST_MS);
+    },
+    closeToast() {
+      clearTimeout(this.timers.toast);
+      this.toast = null;
+      const [next, ...rest] = this.toastQueue;
+      this.toastQueue = rest;
+      if (next) this.showToast(next);
     },
     runToastAction() {
       const action = this.toast && this.toast.action;
-      this.toast = null;
+      this.closeToast();
       if (action) action.run();
     },
     showError(error) {

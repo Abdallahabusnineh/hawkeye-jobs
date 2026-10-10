@@ -191,3 +191,23 @@ test("shouldReplaceToast keeps an actionable toast over a plain one", () => {
   assert.equal(L.shouldReplaceToast({ action: { label: "x" } }, { action: { label: "y" } }), true);
   assert.equal(L.shouldReplaceToast({ action: null }, { action: null }), true);
 });
+
+test("queueToast never drops a message", () => {
+  const undo = { kind: "info", key: "jobs.dismissed_toast", action: { label: "x" } };
+  const plain = { kind: "info", key: "notice.saved", action: null };
+  const error = { kind: "error", key: "error.unexpected", action: null };
+  assert.deepEqual(L.queueToast(null, [], plain), { show: plain, queue: [] });
+  // A plain message waits behind Undo, once.
+  let r = L.queueToast(undo, [], plain);
+  assert.equal(r.show, undo);
+  r = L.queueToast(undo, r.queue, plain);
+  assert.deepEqual(r.queue, [plain]);
+  // An error goes first; Undo goes back in line ahead of the rest.
+  r = L.queueToast(undo, r.queue, error);
+  assert.equal(r.show, error);
+  assert.deepEqual(r.queue, [undo, plain]);
+  // The queue stays short.
+  let q = [];
+  for (const key of ["a", "b", "c", "d"]) q = L.queueToast(undo, q, { kind: "info", key, action: null }).queue;
+  assert.deepEqual(q.map((t) => t.key), ["b", "c", "d"]);
+});

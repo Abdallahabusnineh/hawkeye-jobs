@@ -101,6 +101,36 @@ def shutdown(parts, wait_seconds: float = SHUTDOWN_WAIT_SECONDS) -> None:
     parts.server.should_exit = True
 
 
+class CloseGuard:
+    """Keeps the window open while a running search stops, so the user sees «Stopping…» instead of a
+    window that vanished while Chrome is still closing. A second close request closes at once
+    (shutdown() still waits for the search in the background)."""
+
+    def __init__(self, parts, window, wait_seconds: float = SHUTDOWN_WAIT_SECONDS):
+        self.parts = parts
+        self.window = window
+        self.wait_seconds = wait_seconds
+        self.stopping = False
+
+    def on_closing(self) -> bool:
+        if self.stopping or not self.parts.manager.is_running:
+            return True
+        self.stopping = True
+        threading.Thread(target=self._stop_then_close, name="hawkeye-closing", daemon=True).start()
+        return False
+
+    def _stop_then_close(self) -> None:
+        try:
+            self.window.evaluate_js("window.dispatchEvent(new Event('hawkeye-closing'))")
+        except Exception:
+            log.exception("Could not show the closing message")
+        self.parts.auto.stop()
+        self.parts.manager.close()
+        self.parts.manager.cancel()
+        self.parts.manager.wait(self.wait_seconds)
+        self.window.destroy()
+
+
 def main(argv=None) -> None:
     args = _parse(argv)
     setup_logging()
@@ -128,7 +158,8 @@ def main(argv=None) -> None:
             sys.exit(1)
         else:
             import webview
-            webview.create_window(WINDOW_TITLE, url, width=1200, height=800, min_size=(360, 600))
+            window = webview.create_window(WINDOW_TITLE, url, width=1200, height=800, min_size=(360, 600))
+            window.events.closing += CloseGuard(parts, window).on_closing
             webview.start()
     except KeyboardInterrupt:
         pass

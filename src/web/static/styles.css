@@ -247,6 +247,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .danger-zone > span { color: var(--danger); }
 
 .overlay { position: fixed; inset: 0; background: rgb(2 6 23 / 55%); display: grid; place-items: center; padding: 16px; z-index: 20; }
+.closing p { background: var(--surface); color: var(--text); border-radius: 12px; padding: 18px 24px; margin: 0; }
 .dialog { background: var(--surface); border-radius: 12px; padding: 18px; width: min(460px, 100%); border: 1px solid var(--border); }
 .dialog h2 { margin: 0 0 8px; font-size: 18px; }
 .dialog input { width: 100%; margin-top: 6px; }
