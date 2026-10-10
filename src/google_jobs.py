@@ -23,7 +23,18 @@ How extraction works (key insight):
         link_grps = soup.select('[role="list"].EDblX') # [0..9] apply-link groups
 
     Each link_grps[i] contains <a> tags — one per platform hosting that job
-    (Indeed, LinkedIn, Glassdoor, etc.). The scraper takes the first non-Google URL.
+    (Indeed, LinkedIn, Glassdoor, etc.). Two link formats are supported:
+
+        1. Absolute https links to the platform (old format). The scraper takes the
+           first one that is not on a Google domain (SKIP_DOMAINS).
+        2. Google redirect links `href="/goto?url=CAES..."` (current format, relative,
+           with `title="Apply on LinkedIn"`). Used only when no absolute link exists;
+           the URL becomes `https://www.google.com/goto?url=CAES...`, which redirects
+           to the real apply page. The `/goto` token is stable per job across page
+           loads, so cross-run dedup on the URL still works.
+
+    When the chosen link's title reads "Apply on X", " (via X)" is appended to the
+    description.
 
     ⚠ Google changes CSS class names periodically. If 0 jobs are returned, open:
       https://www.google.com/search?q=Flutter+Developer+jobs+UAE&ibp=htl;jobs&hl=en
@@ -41,6 +52,7 @@ Filtering:
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
@@ -52,6 +64,10 @@ log = logging.getLogger(__name__)
 
 GOOGLE_WAIT_SECONDS = 15
 CARD_SELECTOR = ".PUpOsf"
+
+GOOGLE_ORIGIN = "https://www.google.com"
+GOTO_PREFIX = "/goto?url="
+APPLY_TITLE_RE = re.compile(r"apply on\s+(.+)", re.IGNORECASE)
 
 SKIP_DOMAINS = ["google.com", "google.jo", "google.ae", "google.co", "accounts.google", "goo.gl"]
 
@@ -85,7 +101,7 @@ def _parse_google_page(html: str, seen_urls: set, location: str, keywords: list)
     Skips the job if:
         - titles and link_grps have different lengths (page didn't render properly)
         - is_relevant_job() returns False
-        - All apply links in the group are Google-owned domains (SKIP_DOMAINS)
+        - The group has neither an absolute non-Google link nor a /goto?url= link
         - URL is already in seen_urls
 
     Args:
@@ -113,28 +129,38 @@ def _parse_google_page(html: str, seen_urls: set, location: str, keywords: list)
             if not is_relevant_job(title, keywords):
                 continue
 
-            urls = [
-                a["href"] for a in lg.find_all("a", href=True)
+            anchors = lg.find_all("a", href=True)
+            candidates = [
+                a for a in anchors
                 if a["href"].startswith("http")
                 and not any(skip in a["href"] for skip in SKIP_DOMAINS)
-            ]
-            if not urls:
+            ] + [a for a in anchors if a["href"].startswith(GOTO_PREFIX)]
+            if not candidates:
                 continue
 
-            url = urls[0]
+            anchor = candidates[0]
+            url = anchor["href"]
+            if url.startswith(GOTO_PREFIX):
+                url = GOOGLE_ORIGIN + url
             if url in seen_urls:
                 continue
             seen_urls.add(url)
+
+            platform = APPLY_TITLE_RE.match(anchor.get("title", "").strip())
 
             company = companies[i].get_text(strip=True) if i < len(companies) else ""
             loc_raw = locations[i].get_text(strip=True) if i < len(locations) else location
             # Clean up "  •  via Indeed" type suffix for location
             loc = loc_raw.split("•")[0].strip() if "•" in loc_raw else loc_raw
 
+            description = f"{company} - {loc}" if company else loc
+            if platform:
+                description += f" (via {platform.group(1).strip()})"
+
             result.append({
                 "title":       title,
                 "url":         url,
-                "description": f"{company} - {loc}" if company else loc,
+                "description": description,
                 "source":      "Google Jobs",
                 "keyword":     "",
                 "location":    location or "Remote/Worldwide",

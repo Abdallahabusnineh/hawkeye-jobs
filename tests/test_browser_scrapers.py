@@ -105,6 +105,36 @@ class GoogleJobsTests(unittest.TestCase):
         self.assertEqual(job["description"], "Acme Cloud - Dubai")
         self.assertEqual((job["source"], job["location"], job["published"]), ("Google Jobs", "UAE", ""))
 
+    def test_fetch_uses_google_goto_redirect_links(self):
+        driver = FakeDriver(fixture("google_jobs_goto.html"))
+        with patch("google_jobs.wait_for", return_value=True):
+            jobs = google_jobs.fetch_google_jobs(driver, ("Java Developer", "UAE"), set(), KEYWORDS)
+        self.assertEqual([j["url"] for j in jobs], [
+            "https://www.google.com/goto?url=CAESAcmeJavaLinkedInToken123",
+            "https://www.google.com/goto?url=CAESDesertJavaToken789&hl=en",
+        ])
+        self.assertEqual(jobs[0]["description"], "Acme Cloud - Dubai (via LinkedIn)")
+        self.assertEqual(jobs[1]["description"], "Desert Labs - Abu Dhabi (via Indeed)")
+
+    def test_absolute_links_win_over_goto_links(self):
+        html = (
+            '<div class="PUpOsf">Java Developer</div><div class="a3jPc">Acme</div>'
+            '<div class="FqK3wc">Dubai</div><div role="list" class="EDblX">'
+            '<a href="/goto?url=CAESfirst" title="Apply on LinkedIn">x</a>'
+            '<a href="https://careers.example.com/java" title="Apply on Acme Careers">y</a></div>'
+        )
+        jobs = google_jobs._parse_google_page(html, set(), "UAE", KEYWORDS)
+        self.assertEqual(jobs[0]["url"], "https://careers.example.com/java")
+        self.assertEqual(jobs[0]["description"], "Acme - Dubai (via Acme Careers)")
+
+    def test_card_with_only_google_links_is_skipped(self):
+        html = (
+            '<div class="PUpOsf">Java Developer</div><div class="a3jPc">Acme</div>'
+            '<div class="FqK3wc">Dubai</div><div role="list" class="EDblX">'
+            '<a href="https://www.google.com/search?q=acme">Google</a></div>'
+        )
+        self.assertEqual(google_jobs._parse_google_page(html, set(), "UAE", KEYWORDS), [])
+
     def test_closes_extra_tabs(self):
         driver = FakeDriver(fixture("google_jobs.html"))
         driver.window_handles = ["main", "popup"]

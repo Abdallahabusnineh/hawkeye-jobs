@@ -264,7 +264,7 @@ locations = soup.select(".FqK3wc")         # location text
 link_grps = soup.select('[role="list"].EDblX')  # apply link groups (10 lists)
 ```
 
-Each `link_grps[i]` contains multiple `<a>` tags (one per platform hosting the job). The scraper takes the first non-Google URL from each group.
+Each `link_grps[i]` contains multiple `<a>` tags (one per platform hosting the job). The scraper takes the first absolute non-Google URL (old format); if there is none it falls back to the first Google redirect link `href="/goto?url=CAES..."` (current format), stored as `https://www.google.com/goto?url=CAES...`. The `/goto` token is stable per job across page loads, so dedup still works. If the anchor has `title="Apply on X"`, the description gets a ` (via X)` suffix.
 
 **Google domains skipped:**
 ```python
