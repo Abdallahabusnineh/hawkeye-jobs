@@ -22,11 +22,10 @@ from email_sender import email_configured, send_email
 from logs import setup_logging
 from paths import data_dir, linkedin_profile_dir
 from pipeline import run_search
+from reporting import REPORT_LIMIT, report_pending
 from run_lock import RunLock
 from settings import collect_settings, migrate_legacy_config
 from store import Store
-
-REPORT_LIMIT = 500  # most jobs reported (printed/emailed) per run
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -129,27 +128,24 @@ def main():
         if summary.state == "failed":
             print("[main] The search stopped because of an error — see hawkeye.log in the data folder.")
 
+        def terminal_notifier(jobs) -> bool:
+            _print_jobs(jobs)
+            if not email_configured():
+                return True  # no email set up: the terminal print is the report
+            print(f"\n[main] Sending email for {len(jobs)} new jobs...")
+            if send_email(jobs):
+                return True
+            print("[main] Email failed — these jobs will be included again next time.")
+            return False
+
         # Report everything not yet reported, including jobs left by an earlier
         # run that was killed before it got this far.
-        fetched = store.unnotified_jobs(limit=REPORT_LIMIT + 1)
-        pending = fetched[:REPORT_LIMIT]
-        if not pending:
+        result = report_pending(store, terminal_notifier, limit=REPORT_LIMIT)
+        if not result.jobs:
             print("[main] No new jobs to report")
             return
-
-        _print_jobs(pending)
-        if len(fetched) > REPORT_LIMIT:
+        if result.more_waiting:
             print("[main] More jobs are waiting — they will come in the next report.")
-        ids = [job["id"] for job in pending]
-        if email_configured():
-            print(f"\n[main] Sending email for {len(pending)} new jobs...")
-            if send_email(pending):
-                store.mark_notified(ids)
-            else:
-                print("[main] Email failed — these jobs will be included again next time.")
-        else:
-            # No email set up: the terminal print is the report.
-            store.mark_notified(ids)
     finally:
         run_lock.release()
         store.close()
