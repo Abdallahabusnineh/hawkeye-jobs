@@ -3152,8 +3152,7 @@ def shutdown(parts, wait_seconds: float = SHUTDOWN_WAIT_SECONDS) -> None:
 
 
 def main(argv=None) -> None:
-    args = argparse.ArgumentParser(description=__doc__.splitlines()[1]).parse_known_args(argv)[0] \
-        if False else _parse(argv)
+    args = _parse(argv)
     setup_logging()
     _prepare_data()
     parts = build()
@@ -3185,15 +3184,6 @@ def _parse(argv):
 
 if __name__ == "__main__":
     main()
-```
-
-Simplify `main`'s first line to `args = _parse(argv)`. The conditional expression above is a leftover; do not keep it. Final form:
-
-```python
-def main(argv=None) -> None:
-    args = _parse(argv)
-    setup_logging()
-    ...
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
