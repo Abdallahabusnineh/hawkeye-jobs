@@ -526,10 +526,6 @@ class ThrottleTests(PipelineTestCase):
         self.assertEqual(len(self.rec.calls), 2)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SpacingAcrossRunsTests(PipelineTestCase):
     def test_second_run_waits_for_the_gap_left_by_the_first(self):
         runs = [[], []]
@@ -602,7 +598,7 @@ class SpacingAcrossRunsTests(PipelineTestCase):
 
         def flaky(times):
             calls.append(times)
-            if len(calls) == 1:
+            if len(calls) == 2:  # the end-of-run save (the first is at query start)
                 raise KeyboardInterrupt
             real(times)
 
@@ -610,3 +606,33 @@ class SpacingAcrossRunsTests(PipelineTestCase):
             summary = self.run_search(settings(sources=("bayt",)), delays={"bayt": (0.01, 0.01)})
         self.assertEqual(summary.state, "done")
         self.assertIn("bayt.com", self.store.site_last_requests())
+
+    def test_request_time_is_saved_before_query_started_is_emitted(self):
+        seen = []
+
+        def hook(event):
+            if event["type"] == "query_started":
+                seen.append(self.store.site_last_requests().get("bayt.com"))
+
+        before = time.time()
+        self.run_search(settings(sources=("bayt",)), delays={"bayt": (0.01, 0.01)}, on_event=hook)
+        self.assertTrue(seen)
+        self.assertTrue(all(t is not None and t >= before - 0.01 for t in seen), seen)
+
+    def test_priming_happens_before_run_started(self):
+        order = []
+        real = self.store.site_last_requests
+
+        def spy():
+            order.append("prime")
+            return real()
+
+        with mock.patch.object(self.store, "site_last_requests", side_effect=spy):
+            self.run_search(settings(sources=("bayt",)), delays={"bayt": (0.01, 0.01)},
+                            on_event=lambda e: order.append(e["type"]))
+        self.assertLess(order.index("prime"), order.index("run_started"))
+
+
+
+if __name__ == "__main__":
+    unittest.main()

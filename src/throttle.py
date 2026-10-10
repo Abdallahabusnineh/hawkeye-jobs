@@ -65,7 +65,8 @@ class Throttle:
 
     def wait(self, cancel=None) -> bool:
         """Block until this site may be hit again. Returns False if `cancel` was set
-        while waiting (caller must stop), True otherwise. The first call never waits.
+        while waiting (caller must stop), True otherwise. The first call waits only for a gap
+        left by a request saved from an earlier run (see prime()); otherwise it never waits.
         Reserves the start time of the request it allows, so concurrent callers
         are spaced a full gap apart."""
         if cancel is not None and cancel.is_set():

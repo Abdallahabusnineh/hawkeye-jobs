@@ -21,7 +21,8 @@ So on_event always runs on the caller's thread, in order.
 
 Spacing also holds between runs: run_search() primes each host group's Throttle
 from Store.site_last_requests() before the lanes start and saves the last request
-time per group after they are joined (best effort; the lanes never touch the Store).
+time per group as each query starts and again after they are joined (best effort;
+the lanes never touch the Store).
 
 Cancellation: set the `cancel` event (the terminal does this on Ctrl+C). Each
 lane stops before its next query, so cancel takes at most one in-flight query.
@@ -151,7 +152,8 @@ def _prime_throttles(store, groups) -> None:
 
 def _save_request_times(store, groups, cancel) -> None:
     """Best effort: record when each site was last hit. Requests that were sent count
-    even if the run was cancelled or failed."""
+    even if the run was cancelled or failed. Also called as each query starts, so a
+    killed process still leaves its request times behind."""
     times = {}
     for group, throttle in groups.items():
         stamp = throttle.last_request_wall()
@@ -328,12 +330,12 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
     for i, query in enumerate(queries):
         query["index"] = i
 
+    _prime_throttles(store, groups)
     run_id = store.start_run({key: list(settings[key]) for key in ("keywords", "locations", "sources")})
     emit({"type": "run_started", "run_id": run_id, "total": len(queries)})
 
     http_queries = [q for q in queries if q["source"] in HTTP_SOURCES]
     browser_queries = [q for q in queries if q["source"] in BROWSER_SOURCES]
-    _prime_throttles(store, groups)
     out = queue.Queue()
     lanes = []
     if http_queries:
@@ -352,6 +354,9 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
     def handle(message) -> None:
         kind = message[0]
         if kind == "started":
+            group = SITE_GROUPS.get(message[1]["source"], message[1]["source"])
+            if group in groups:
+                _save_request_times(store, {group: groups[group]}, cancel)
             emit({"type": "query_started", **_query_fields(message[1])})
         elif kind == "done":
             query, jobs = message[1], message[2]
