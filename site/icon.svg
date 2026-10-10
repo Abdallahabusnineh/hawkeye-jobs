@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Hawkeye Jobs app icon: a job briefcase with a watchful eye, in the app's navy and blue. -->
+  <rect width="1024" height="1024" rx="228" fill="#0f172a"/>
+  <path d="M378 330 V280 A62 62 0 0 1 440 218 H584 A62 62 0 0 1 646 280 V330 H602 V280 A18 18 0 0 0 584 262 H440 A18 18 0 0 0 422 280 V330 Z" fill="#ffffff"/>
+  <rect x="190" y="330" width="644" height="460" rx="72" fill="#2563eb"/>
+  <path d="M300 560 Q512 400 724 560 Q512 720 300 560 Z" fill="#ffffff"/>
+  <circle cx="512" cy="560" r="92" fill="#0f172a"/>
+  <circle cx="512" cy="560" r="40" fill="#3b82f6"/>
+  <circle cx="542" cy="532" r="16" fill="#ffffff"/>
+</svg>

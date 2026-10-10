@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="Hawkeye Jobs — تطبيق مجاني ومفتوح المصدر للبحث عن الوظائف، يعمل على جهازك. A free, open-source job finder that runs on your computer.">
+  <title>Hawkeye Jobs</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <style>
+    :root {
+      --bg: #f8fafc; --surface: #ffffff; --border: #e2e8f0; --text: #0f172a; --muted: #64748b;
+      --accent: #2563eb; --accent-text: #ffffff; --accent-soft: #eff6ff; --hero: #0f172a; --hero-text: #ffffff;
+      color-scheme: light;
+      font-family: system-ui, -apple-system, "Segoe UI", Tahoma, "Noto Sans Arabic", sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0b1220; --surface: #111a2e; --border: #263247; --text: #e2e8f0; --muted: #94a3b8;
+              --accent: #3b82f6; --accent-soft: #172554; --hero: #020617; color-scheme: dark; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); line-height: 1.6; }
+    a { color: var(--accent); }
+    .hero { background: var(--hero); color: var(--hero-text); padding: 48px 16px 56px; text-align: center; }
+    .hero img { width: 112px; height: 112px; }
+    .hero h1 { margin: 12px 0 4px; font-size: 36px; }
+    .hero p { margin: 0 auto; max-width: 560px; color: #cbd5e1; font-size: 18px; }
+    .lang { position: absolute; inset-block-start: 16px; inset-inline-end: 16px; background: transparent;
+            color: var(--hero-text); border: 1px solid #334155; border-radius: 8px; padding: 6px 12px; font: inherit; cursor: pointer; }
+    main { max-width: 880px; margin: 0 auto; padding: 0 16px 48px; }
+    .primary { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: -28px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; padding: 12px 24px;
+           border-radius: 12px; background: var(--accent); color: var(--accent-text); font-size: 18px; font-weight: 600;
+           text-decoration: none; border: 0; }
+    .btn:focus-visible, .lang:focus-visible, .card a:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+    .hint { color: var(--muted); font-size: 14px; margin: 0; }
+    h2 { font-size: 22px; margin: 40px 0 12px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .card h3 { margin: 0 0 4px; font-size: 16px; }
+    .card p { margin: 0 0 12px; color: var(--muted); font-size: 14px; }
+    .card a { font-weight: 600; }
+    .features { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
+    .features li { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; }
+    details { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin-bottom: 8px; }
+    summary { cursor: pointer; font-weight: 600; }
+    footer { text-align: center; color: var(--muted); font-size: 14px; padding: 24px 16px 40px; }
+    [data-lang] { display: none; }
+    html[lang="ar"] [data-lang="ar"], html[lang="en"] [data-lang="en"] { display: revert; }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <button type="button" class="lang" id="lang-toggle"><span data-lang="ar">English</span><span data-lang="en">العربية</span></button>
+    <img src="icon.svg" alt="" width="112" height="112">
+    <h1>Hawkeye Jobs</h1>
+    <p data-lang="ar">ابحث عن الوظائف الجديدة في LinkedIn وIndeed وBayt وNaukriGulf وGoogle Jobs من مكان واحد. مجاني، ومفتوح المصدر، ويعمل كاملًا على جهازك.</p>
+    <p data-lang="en">Find new jobs on LinkedIn, Indeed, Bayt, NaukriGulf and Google Jobs in one place. Free, open source, and it runs entirely on your computer.</p>
+  </header>
+
+  <main>
+    <div class="primary">
+      <a class="btn" id="main-download" href="https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest">
+        <span data-lang="ar">تنزيل Hawkeye Jobs</span><span data-lang="en">Download Hawkeye Jobs</span>
+      </a>
+      <p class="hint" id="main-hint"></p>
+    </div>
+
+    <h2><span data-lang="ar">كل الأنظمة</span><span data-lang="en">All systems</span></h2>
+    <div class="grid">
+      <div class="card">
+        <h3>macOS · Apple Silicon</h3>
+        <p data-lang="ar">أجهزة Mac بشرائح M1 وما بعدها</p><p data-lang="en">Macs with M1 or newer</p>
+        <a href="https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-macOS-AppleSilicon.dmg" dir="ltr">.dmg</a>
+      </div>
+      <div class="card">
+        <h3>macOS · Intel</h3>
+        <p data-lang="ar">أجهزة Mac الأقدم بمعالج Intel</p><p data-lang="en">Older Macs with an Intel processor</p>
+        <a href="https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-macOS-Intel.dmg" dir="ltr">.dmg</a>
+      </div>
+      <div class="card">
+        <h3>Windows</h3>
+        <p data-lang="ar">Windows 10 و11</p><p data-lang="en">Windows 10 and 11</p>
+        <a href="https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows.zip" dir="ltr">.zip</a>
+      </div>
+      <div class="card">
+        <h3>Linux</h3>
+        <p data-lang="ar">أنظمة 64-بت الحديثة</p><p data-lang="en">Modern 64-bit distributions</p>
+        <a href="https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Linux.tar.gz" dir="ltr">.tar.gz</a>
+      </div>
+    </div>
+
+    <h2><span data-lang="ar">لماذا Hawkeye Jobs؟</span><span data-lang="en">Why Hawkeye Jobs?</span></h2>
+    <ul class="features">
+      <li data-lang="ar">يبحث تلقائيًا كل بضع ساعات، ويعرض لك الوظائف الجديدة فقط.</li>
+      <li data-lang="en">Searches automatically every few hours and shows you only the new jobs.</li>
+      <li data-lang="ar">بلا خادم وبلا حساب: بياناتك تبقى على جهازك.</li>
+      <li data-lang="en">No server and no account: your data stays on your computer.</li>
+      <li data-lang="ar">يبحث بهدوء واحترام للمواقع، ويحمي حسابك في LinkedIn.</li>
+      <li data-lang="en">Searches politely, and protects your LinkedIn account.</li>
+      <li data-lang="ar">بالعربية والإنجليزية، ومجاني إلى الأبد.</li>
+      <li data-lang="en">In Arabic and English, and free forever.</li>
+    </ul>
+
+    <h2><span data-lang="ar">التشغيل أول مرة</span><span data-lang="en">First launch</span></h2>
+    <details>
+      <summary>macOS</summary>
+      <p data-lang="ar">افتح ملف ‎.dmg واسحب التطبيق إلى مجلد Applications، ثم افتحه. إذا ظهرت رسالة «لا يمكن التحقق من المطوّر»، فافتح «إعدادات النظام ← الخصوصية والأمان» واضغط «افتح على أي حال». يحدث هذا مرة واحدة فقط، لأن التطبيق المجاني غير موقَّع بشهادة مدفوعة.</p>
+      <p data-lang="en">Open the .dmg, drag the app into Applications, then open it. If macOS says it cannot verify the developer, go to System Settings → Privacy &amp; Security and click Open Anyway. This happens once, because the free app is not signed with a paid certificate.</p>
+    </details>
+    <details>
+      <summary>Windows</summary>
+      <p data-lang="ar">فكّ ضغط الملف، ثم شغّل <code>Hawkeye Jobs.exe</code> من المجلد. إذا ظهرت رسالة «حمى Windows جهاز الكمبيوتر»، فاضغط «مزيد من المعلومات» ثم «التشغيل على أي حال».</p>
+      <p data-lang="en">Extract the archive and run <code>Hawkeye Jobs.exe</code> from the folder. If Windows shows "Windows protected your PC", click More info → Run anyway.</p>
+    </details>
+    <details>
+      <summary>Linux</summary>
+      <p data-lang="ar">فكّ ضغط الملف وشغّل <code>Hawkeye Jobs/Hawkeye Jobs</code>.</p>
+      <p data-lang="en">Extract the archive and run <code>Hawkeye Jobs/Hawkeye Jobs</code>.</p>
+    </details>
+    <p class="hint" data-lang="ar">يحتاج البحث في Bayt وNaukriGulf وGoogle Jobs ومنشورات LinkedIn إلى متصفح <a href="https://www.google.com/chrome/">Google Chrome</a>.</p>
+    <p class="hint" data-lang="en">Bayt, NaukriGulf, Google Jobs and LinkedIn posts need <a href="https://www.google.com/chrome/">Google Chrome</a>.</p>
+  </main>
+
+  <footer>
+    <span data-lang="ar">مشروع خيري مفتوح المصدر ·</span><span data-lang="en">A non-profit open-source project ·</span>
+    <a href="https://github.com/Abdallahabusnineh/hawkeye-jobs">GitHub</a>
+  </footer>
+
+  <script>
+    (function () {
+      var RELEASE = "https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/";
+      var html = document.documentElement;
+      function setLang(lang) {
+        html.lang = lang;
+        html.dir = lang === "ar" ? "rtl" : "ltr";
+        try { localStorage.setItem("hawkeye-site-lang", lang); } catch (e) {}
+        hint();
+      }
+      function system() {
+        var ua = navigator.userAgent;
+        if (/Windows/i.test(ua)) return { file: "HawkeyeJobs-Windows.zip", ar: "لنظام Windows", en: "for Windows" };
+        if (/Mac/i.test(ua) && !/iPhone|iPad/i.test(ua)) return { file: "HawkeyeJobs-macOS-AppleSilicon.dmg", ar: "لأجهزة Mac بشرائح Apple (لأجهزة Intel اختر من القائمة أدناه)", en: "for Macs with Apple chips (Intel Macs: pick from the list below)" };
+        if (/Linux/i.test(ua) && !/Android/i.test(ua)) return { file: "HawkeyeJobs-Linux.tar.gz", ar: "لنظام Linux", en: "for Linux" };
+        return null;
+      }
+      function hint() {
+        var s = system();
+        document.getElementById("main-hint").textContent = s ? s[html.lang] : (html.lang === "ar" ? "اختر نظامك من القائمة أدناه." : "Pick your system from the list below.");
+      }
+      var s = system();
+      if (s) document.getElementById("main-download").href = RELEASE + s.file;
+      var saved = null;
+      try { saved = localStorage.getItem("hawkeye-site-lang"); } catch (e) {}
+      // Arabic first; English for visitors whose browser asks for English.
+      setLang(saved || ((navigator.language || "").toLowerCase().indexOf("en") === 0 ? "en" : "ar"));
+      document.getElementById("lang-toggle").addEventListener("click", function () { setLang(html.lang === "ar" ? "en" : "ar"); });
+    })();
+  </script>
+</body>
+</html>

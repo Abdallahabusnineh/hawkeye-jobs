@@ -37,7 +37,11 @@ hawkeye-jobs/
 ├── config.example.json  # Sample search settings
 ├── .env.example         # Credential template
 ├── run.sh               # Loads .env and runs the pipeline
-├── requirements.txt
+├── packaging/           # hawkeye.spec, launcher.py, icon.svg/png, smoke_test.py, RELEASE_NOTES.md
+├── site/                # Download page (GitHub Pages)
+├── .github/workflows/   # ci.yml (tests), release.yml (builds + release), pages.yml (download page)
+├── requirements.txt     # Runtime dependencies, pinned
+├── requirements-dev.txt # + test client, PyInstaller, Pillow
 └── CLAUDE.md
 ```
 
@@ -551,17 +555,21 @@ If `.PUpOsf` or `[role="list"].EDblX` selectors stop working:
 
 ## Dependencies
 
-```
-platformdirs             # Per-OS data directory
-python-jobspy==1.1.80    # LinkedIn + Indeed scraper
-pandas                   # Required by jobspy
-requests                 # HTTP utilities
-beautifulsoup4           # HTML parsing for Bayt, NaukriGulf, Google Jobs
-undetected-chromedriver  # Selenium wrapper that bypasses bot detection
-setuptools               # Required on Python 3.12+ (distutils removed)
-```
+`requirements.txt` pins every runtime dependency (exact versions), so each release is built from the same code: python-jobspy (LinkedIn + Indeed), pandas, requests, beautifulsoup4, undetected-chromedriver + selenium (Chrome sources), setuptools (distutils for undetected-chromedriver), platformdirs, fastapi + uvicorn (local API), pywebview (window; on Linux with the Qt extra), desktop-notifier, babel (country names). `requirements-dev.txt` adds httpx2 (FastAPI test client), PyInstaller and Pillow (icon conversion).
 
-Install: `pip install -r requirements.txt`
+Python 3.12: python-jobspy pins `numpy==1.26.3`, which has wheels only up to 3.12. Releases and CI use 3.12.
+
+Install: `pip install -r requirements-dev.txt`
+
+## Packaging and releases
+
+- `packaging/hawkeye.spec` — PyInstaller, one-folder build (faster start, fewer antivirus false alarms than one-file). Bundles `src/web/static` as `web/static`, Babel's CLDR data, and the packages with data files or dynamic imports (`collect_all`: jobspy, tls_client, babel, webview, desktop_notifier, undetected_chromedriver, selenium; all uvicorn submodules; winrt on Windows). tls_client ships its Go library for every OS; the spec keeps only this OS's files, because the others are not valid binaries there and stop the build. macOS gets an ad-hoc-signed `.app` bundle (`io.github.abdallahabusnineh.hawkeyejobs`).
+- `packaging/launcher.py` — the frozen entry point. It calls `multiprocessing.freeze_support()` before importing anything: helper processes (multiprocessing's resource tracker) re-run the executable, and without this each one imported the app and started another helper.
+- `app.py` in a packaged build (`app.FROZEN`): replaces missing console streams with devnull (windowed builds have none; uvicorn writes to them) and skips the repo-folder migration of a terminal-era `config.json` / `seen_jobs.json`. `--self-test` checks the bundled data and lazily imported modules (country list ≥ 200 with Arabic names, scrapers, tls_client, webview, window files) and exits 0/1; it makes no network requests.
+- `packaging/smoke_test.py` — runs `--self-test`, then starts `--no-window` on a free port and checks `/`, `/i18n/ar.json`, `/vendor/alpine.min.js` (200) and `/api/state` without the token (403).
+- `.github/workflows/release.yml` — on a `v*` tag (or by hand): tests on Linux/Windows/macOS, then builds on macos-latest (Apple Silicon), macos-15-intel, windows-latest and ubuntu-22.04 (older glibc, so the Linux build runs on more distributions), runs the smoke test, packages (`.dmg` with an Applications link, `.zip`, `.tar.gz`), and on a tag publishes a GitHub release with `SHA256SUMS.txt` and `packaging/RELEASE_NOTES.md`. Asset names have no version (`HawkeyeJobs-Windows.zip`, …) so `releases/latest/download/<name>` links on the download page never change. The tag must equal `v` + `src/version.py`.
+- The builds are not signed with a paid certificate. macOS shows "cannot verify the developer" once (System Settings → Privacy & Security → Open Anyway); Windows SmartScreen shows "More info → Run anyway". Both are explained in the release notes and on the download page.
+- `site/index.html` — the download page (no trackers, no external files). It picks the button for the visitor's system from the user agent; Arabic first, English toggle.
 
 ---
 

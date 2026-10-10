@@ -141,8 +141,40 @@ class CloseGuard:
         self.window.destroy()
 
 
+def self_test() -> list:
+    """Problems that would break a packaged build without failing at startup (missing data files,
+    native libraries, lazily imported modules). Empty list = all good. Makes no network requests."""
+    problems = []
+    try:
+        from countries import load_countries, localized_countries
+        rows = load_countries()
+        if len(rows) < 200:
+            problems.append(f"country list has only {len(rows)} entries (Babel data missing?)")
+        if {c["id"]: c["label"] for c in localized_countries("ar", rows)}.get("jo") != "الأردن":
+            problems.append("Arabic country names missing (Babel data)")
+    except Exception as exc:
+        problems.append(f"countries: {exc!r}")
+    for module in ("jobspy", "tls_client.cffi", "undetected_chromedriver", "selenium.webdriver",
+                   "webview", "desktop_notifier", "pipeline", "scraper", "bayt", "naukrigulf",
+                   "google_jobs", "linkedin_posts"):
+        try:
+            __import__(module)
+        except Exception as exc:
+            problems.append(f"import {module}: {exc!r}")
+    from web.server import STATIC_DIR
+    for name in ("index.html", "app.js", "i18n/ar.json", "i18n/en.json", "vendor/alpine.min.js"):
+        if not (STATIC_DIR / name).is_file():
+            problems.append(f"missing window file {name}")
+    return problems
+
+
 def main(argv=None) -> None:
     args = _parse(argv)
+    if args.self_test:
+        problems = self_test()
+        for problem in problems:
+            print(problem, file=sys.stderr)
+        sys.exit(1 if problems else 0)
     setup_logging()
     _prepare_data()
     parts = build(port=args.port)
@@ -183,6 +215,8 @@ def _parse(argv):
     parser = argparse.ArgumentParser(prog="app.py", description="Hawkeye Jobs desktop app")
     parser.add_argument("--no-window", action="store_true", help="serve only and print the URL")
     parser.add_argument("--port", type=int, default=None, help="fixed port (development)")
+    parser.add_argument("--self-test", action="store_true",
+                        help="check that the bundled libraries load, then exit (0 = ok)")
     return parser.parse_args(argv)
 
 

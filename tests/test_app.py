@@ -75,6 +75,17 @@ class AppTests(unittest.TestCase):
             manager.start()
         self.assertTrue(parts.server.should_exit)
 
+    def test_self_test_passes_from_source(self):
+        self.assertEqual(app.self_test(), [])
+
+    def test_self_test_option_exits_with_its_result(self):
+        from unittest.mock import patch
+        with patch.object(app, "self_test", return_value=["broken"]), \
+             patch.object(app, "setup_logging") as setup, self.assertRaises(SystemExit) as stop:
+            app.main(["--self-test"])
+        self.assertEqual(stop.exception.code, 1)
+        setup.assert_not_called()
+
     def test_close_guard_closes_at_once_when_idle(self):
         parts = MagicMock()
         parts.manager.is_running = False

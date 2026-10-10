@@ -25,9 +25,10 @@ Runtime files (`hawkeye.db`, `config.json`, `hawkeye.log`, LinkedIn profile) liv
 ## Dependencies
 
 ```bash
-pip install -r requirements.txt
-# python-jobspy==1.1.80, pandas, requests, beautifulsoup4, undetected-chromedriver, setuptools
+pip install -r requirements-dev.txt   # runtime pins (requirements.txt) + test client + PyInstaller
 ```
+
+Use Python 3.12: python-jobspy pins numpy 1.26.3 (no wheels for newer Pythons). Releases: bump `src/version.py`, push tag `v<version>`; see docs/ARCHITECTURE.md → Packaging and releases.
 
 Tests: `venv/bin/python3 -m unittest discover -s tests -v` (also runs `node --test tests/js/*.test.mjs` when node is installed)
 
@@ -84,6 +85,10 @@ Set in `.env` (gitignored): `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`. Copy 
 | `src/web/static/logic.js` | Pure UI helpers (tested with `node --test tests/js/*.test.mjs`) |
 | `src/web/static/api.js` | Local API client; moves the token from the URL to sessionStorage |
 | `src/web/static/i18n/*.json` | All UI text, formal Arabic and English (identical keys; `tests/test_frontend.py`) |
+| `packaging/hawkeye.spec` | PyInstaller build (what gets bundled); `packaging/launcher.py` is the frozen entry point |
+| `packaging/smoke_test.py` | Checks a build: `--self-test`, then start/serve |
+| `.github/workflows/release.yml` | Builds macOS/Windows/Linux on a `v*` tag and publishes the GitHub release |
+| `site/index.html` | Download page (GitHub Pages, `.github/workflows/pages.yml`) |
 
 ## Resetting
 
