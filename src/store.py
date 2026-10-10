@@ -7,8 +7,13 @@ dismissed.
 
 Tables (see docs/superpowers/specs/2026-10-10-core-pipeline-design.md §5):
     runs        — one row per search run
-    jobs        — one row per unique job URL (id = job_id(url))
+    jobs        — one row per unique job URL (id = job_id(url)); notified_at is
+                  NULL until the job has been reported (v2)
     legacy_seen — hashes imported from the old seen_jobs.json (dedup only)
+    site_requests — last request start time per host group, for throttling (v2)
+
+Schema version 2 (PRAGMA user_version): v1 = runs/jobs/legacy_seen,
+v2 adds jobs.notified_at and site_requests.
 
 Threading:
     One Store per thread (sqlite3 connections are not shared). WAL mode lets
@@ -28,7 +33,7 @@ from utils import clean_url
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 STATUSES = ("new", "saved", "applied", "dismissed")
 RUN_STATES = ("running", "done", "cancelled", "failed")
 
@@ -66,6 +71,20 @@ CREATE INDEX IF NOT EXISTS jobs_by_status_seen ON jobs (status, first_seen_at DE
 CREATE TABLE IF NOT EXISTS legacy_seen (id TEXT PRIMARY KEY);
 """
 
+# v2 step runs in one explicit transaction. Jobs that existed before v2 count as
+# already reported; on a fresh DB the UPDATE touches nothing.
+_SCHEMA_V2 = """
+BEGIN;
+ALTER TABLE jobs ADD COLUMN notified_at TEXT;
+UPDATE jobs SET notified_at = first_seen_at;
+CREATE TABLE IF NOT EXISTS site_requests (
+  site            TEXT PRIMARY KEY,
+  last_request_at REAL NOT NULL
+);
+PRAGMA user_version = 2;
+COMMIT;
+"""
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -96,9 +115,12 @@ class Store:
         version = self.conn.execute("PRAGMA user_version").fetchone()[0]
         if version >= SCHEMA_VERSION:
             return
-        self.conn.executescript(_SCHEMA)
-        self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-        self.conn.commit()
+        if version < 1:
+            self.conn.executescript(_SCHEMA)
+            self.conn.execute("PRAGMA user_version = 1")
+            self.conn.commit()
+        if version < 2:
+            self.conn.executescript(_SCHEMA_V2)
 
     def close(self) -> None:
         self.conn.close()
@@ -251,3 +273,43 @@ class Store:
             (*params, limit, offset),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    # ── reporting and request times (schema v2) ───────────────────────────
+
+    def unnotified_jobs(self, limit: int = 500) -> list:
+        """Jobs not yet reported (and not dismissed), oldest first."""
+        rows = self.conn.execute(
+            "SELECT * FROM jobs WHERE notified_at IS NULL AND status != 'dismissed' "
+            "ORDER BY first_seen_at ASC, rowid ASC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def mark_notified(self, job_ids: list) -> int:
+        """Stamp notified_at on these jobs (if still NULL). Returns rows changed."""
+        if not job_ids:
+            return 0
+        now = _now()
+        with self.conn:
+            before = self.conn.total_changes
+            self.conn.executemany(
+                "UPDATE jobs SET notified_at = ? WHERE id = ? AND notified_at IS NULL",
+                [(now, jid) for jid in job_ids],
+            )
+            return self.conn.total_changes - before
+
+    def site_last_requests(self) -> dict:
+        rows = self.conn.execute("SELECT site, last_request_at FROM site_requests").fetchall()
+        return {row["site"]: float(row["last_request_at"]) for row in rows}
+
+    def save_site_requests(self, times: dict) -> None:
+        """Upsert last request times; a stored time never moves backwards."""
+        if not times:
+            return
+        with self.conn:
+            self.conn.executemany(
+                "INSERT INTO site_requests (site, last_request_at) VALUES (?, ?) "
+                "ON CONFLICT(site) DO UPDATE SET "
+                "last_request_at = MAX(last_request_at, excluded.last_request_at)",
+                [(site, float(t)) for site, t in times.items()],
+            )

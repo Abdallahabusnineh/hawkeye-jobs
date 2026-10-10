@@ -56,7 +56,7 @@ class JobIdTests(unittest.TestCase):
 class SchemaTests(StoreTestCase):
     def test_schema_version_and_wal(self):
         conn = sqlite3.connect(self.db)
-        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 1)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
         self.assertEqual(conn.execute("PRAGMA journal_mode").fetchone()[0], "wal")
         conn.close()
 
@@ -222,6 +222,113 @@ class ConcurrencyTests(StoreTestCase):
             self.assertEqual(len(reader.list_jobs()), 1)
         finally:
             reader.close()
+
+
+
+V1_SCHEMA = """
+CREATE TABLE runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT NOT NULL, finished_at TEXT,
+  state TEXT NOT NULL CHECK (state IN ('running','done','cancelled','failed')),
+  settings_json TEXT NOT NULL, found_count INTEGER NOT NULL DEFAULT 0,
+  new_count INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE jobs (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL, url TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '', source TEXT NOT NULL,
+  location TEXT NOT NULL DEFAULT '', location_id TEXT, keyword TEXT NOT NULL DEFAULT '',
+  published TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','saved','applied','dismissed')),
+  status_changed_at TEXT, first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL,
+  first_run_id INTEGER REFERENCES runs(id));
+CREATE INDEX jobs_by_status_seen ON jobs (status, first_seen_at DESC);
+CREATE TABLE legacy_seen (id TEXT PRIMARY KEY);
+"""
+
+
+class SchemaV2Tests(StoreTestCase):
+    def test_fresh_db_has_v2_objects(self):
+        conn = sqlite3.connect(self.db)
+        self.assertEqual(conn.execute("PRAGMA user_version").fetchone()[0], 2)
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(jobs)")]
+        self.assertIn("notified_at", cols)
+        tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        self.assertIn("site_requests", tables)
+        conn.close()
+
+    def test_new_jobs_start_unnotified(self):
+        run = self.store.start_run(SETTINGS)
+        self.store.add_jobs(run, [make_job("https://a.com/1")])
+        self.assertEqual(len(self.store.unnotified_jobs()), 1)
+
+    def test_upgrade_from_v1_marks_old_jobs_notified(self):
+        path = Path(self.tmp.name) / "v1.db"
+        conn = sqlite3.connect(path)
+        conn.executescript(V1_SCHEMA)
+        conn.execute("INSERT INTO runs (started_at, state, settings_json) VALUES ('2026-01-01T00:00:00Z','done','{}')")
+        conn.execute(
+            "INSERT INTO jobs (id, title, url, source, first_seen_at, last_seen_at, first_run_id)"
+            " VALUES ('x1','Old Job','https://a.com/old','Bayt','2026-01-02T03:04:05Z','2026-01-02T03:04:05Z',1)"
+        )
+        conn.execute("PRAGMA user_version = 1")
+        conn.commit()
+        conn.close()
+        with Store(path) as store:
+            self.assertEqual(store.conn.execute("PRAGMA user_version").fetchone()[0], 2)
+            row = store.conn.execute("SELECT * FROM jobs WHERE id = 'x1'").fetchone()
+            self.assertEqual(row["notified_at"], row["first_seen_at"])
+            self.assertEqual(row["title"], "Old Job")
+            self.assertEqual(store.unnotified_jobs(), [])
+            self.assertEqual(store.site_last_requests(), {})
+
+
+class NotifiedTests(StoreTestCase):
+    def _add(self, *urls):
+        run = self.store.start_run(SETTINGS)
+        ids = []
+        for url in urls:
+            self.store.add_jobs(run, [make_job(url)])
+            ids.append(job_id(url))
+        return ids
+
+    def test_unnotified_oldest_first_excludes_dismissed_and_notified(self):
+        a, b, c, d = self._add("https://a.com/1", "https://a.com/2", "https://a.com/3", "https://a.com/4")
+        self.store.set_status(b, "dismissed")
+        self.store.mark_notified([c])
+        self.assertEqual([j["id"] for j in self.store.unnotified_jobs()], [a, d])
+
+    def test_unnotified_limit(self):
+        self._add("https://a.com/1", "https://a.com/2")
+        self.assertEqual(len(self.store.unnotified_jobs(limit=1)), 1)
+
+    def test_mark_notified_only_given_ids_and_idempotent(self):
+        a, b = self._add("https://a.com/1", "https://a.com/2")
+        self.assertEqual(self.store.mark_notified([a]), 1)
+        self.assertEqual(self.store.mark_notified([a]), 0)
+        self.assertEqual([j["id"] for j in self.store.unnotified_jobs()], [b])
+        self.assertIsNotNone(
+            self.store.conn.execute("SELECT notified_at FROM jobs WHERE id = ?", (a,)).fetchone()[0]
+        )
+
+    def test_mark_notified_empty_list(self):
+        self.assertEqual(self.store.mark_notified([]), 0)
+
+
+class SiteRequestTests(StoreTestCase):
+    def test_save_and_read(self):
+        self.store.save_site_requests({"linkedin.com": 1000.5, "bayt.com": 2000})
+        times = self.store.site_last_requests()
+        self.assertEqual(times, {"linkedin.com": 1000.5, "bayt.com": 2000.0})
+        self.assertTrue(all(isinstance(v, float) for v in times.values()))
+
+    def test_never_moves_backwards(self):
+        self.store.save_site_requests({"linkedin.com": 1000.0})
+        self.store.save_site_requests({"linkedin.com": 500.0})
+        self.assertEqual(self.store.site_last_requests()["linkedin.com"], 1000.0)
+        self.store.save_site_requests({"linkedin.com": 1500.0})
+        self.assertEqual(self.store.site_last_requests()["linkedin.com"], 1500.0)
+
+    def test_empty_dict_is_noop(self):
+        self.store.save_site_requests({})
+        self.assertEqual(self.store.site_last_requests(), {})
 
 
 if __name__ == "__main__":
