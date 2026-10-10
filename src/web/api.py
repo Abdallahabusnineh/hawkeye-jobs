@@ -11,7 +11,9 @@ from pathlib import Path
 from datetime import datetime, timezone
 from urllib.parse import urlencode, urlparse
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from typing import Any
+
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from catalog import SOURCES, plan_queries
@@ -135,17 +137,21 @@ def _str_list(value, limit):
 
 
 @router.post("/estimate")
-def estimate(request: Request, body: dict):
+def estimate(request: Request, body: Any = Body(None)):
     """How long a search with these (unsaved) settings would take, roughly. Never fails."""
+    if not isinstance(body, dict):
+        return {"queries": 0, "seconds": 0}
     keywords = _str_list(body.get("keywords"), 20)
     locations = _str_list(body.get("locations"), 300)
     sources = [s for s in _str_list(body.get("sources"), 20) if s in SOURCES]
     if not (keywords and locations and sources):
         return {"queries": 0, "seconds": 0}
     try:
-        queries = plan_queries(keywords, locations, sources)
+        labels = {c["id"]: c["label"] for c in _services(request).base_countries()}
+        queries = plan_queries(keywords, locations, sources, labels)
     except Exception:
-        log.warning("Estimate failed for %r", body, exc_info=True)
+        log.warning("Estimate failed (%d keywords, %d locations, %d sources)",
+                    len(keywords), len(locations), len(sources), exc_info=True)
         return {"queries": 0, "seconds": 0}
     return {"queries": len(queries), "seconds": estimate_seconds(queries)}
 

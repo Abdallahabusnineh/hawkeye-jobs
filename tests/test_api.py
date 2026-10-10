@@ -509,8 +509,13 @@ class EstimateApiTests(ApiTestCase):
     def test_estimate_with_missing_or_bad_input_is_zero(self):
         for body in ({}, {"keywords": [], "locations": ["jo"], "sources": ["linkedin"]},
                      {"keywords": "Java", "locations": ["jo"], "sources": ["linkedin"]},
-                     {"keywords": ["Java"], "locations": ["jo"], "sources": ["nope"]}):
+                     {"keywords": ["Java"], "locations": ["jo"], "sources": ["nope"]}, [], None):
             self.assertEqual(self.post("/api/estimate", body).json(), {"queries": 0, "seconds": 0}, body)
+
+    def test_estimate_counts_indeed_for_country_without_override(self):
+        self.services.base_countries = lambda: [{"id": "br", "label": "Brazil"}]
+        response = self.post("/api/estimate", {"keywords": ["Java"], "locations": ["br"], "sources": ["indeed"]})
+        self.assertEqual(response.json()["queries"], 1)
 
 
 class SecurityHeaderTests(ApiTestCase):
@@ -525,6 +530,9 @@ class SecurityHeaderTests(ApiTestCase):
         self.assert_secure(self.client.get("/"))
         self.assert_secure(self.get("/api/state"))
         self.assert_secure(self.client.get("/api/state"))  # 403 without the token
+        wrong_host = self.client.get("/", headers={"host": "evil.com"})
+        self.assertEqual(wrong_host.status_code, 403)
+        self.assert_secure(wrong_host)
 
 
 class ResetOrderTests(ApiTestCase):
