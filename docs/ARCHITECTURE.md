@@ -144,6 +144,20 @@ One middleware: the `Host` header must be `127.0.0.1:<port>` or `localhost:<port
 
 `POST /api/report-problem` reads the last 200 log lines, passes them through `web/redact.py` (home path and user name, e-mail addresses, `token/key/secret/password/pass` values, bearer/basic credentials, query strings of URLs), builds a prefilled GitHub issue URL and opens it in the browser; the user reviews and submits it. The URL is capped at 6000 chars by dropping the oldest log lines first.
 
+### Front-end (`src/web/static/`)
+
+No build step. `index.html` loads `app.js` (an ES module that registers the Alpine component `hawkeye` on `alpine:init`) and then the vendored Alpine.js 3.14.9 (`vendor/`, MIT licence, SHA-256 in `vendor/SHA256SUMS`, checked by `tests/test_frontend.py`).
+
+- **Token:** `api.js` `takeToken()` reads `?token=` once, stores it in `sessionStorage` and removes it from the address bar, so a reload keeps working and the token never appears in a Referer. Every call sends `X-Hawkeye-Token`; only `EventSource` uses `/api/events?token=`.
+- **Text:** every displayed word comes from `i18n/ar.json` / `i18n/en.json` (identical keys and placeholders; formal Arabic, checked for colloquial words). Plurals use `Intl.PluralRules` with `.one/.two/.few/.many/.other` keys. API error codes map to `error.*` keys in `logic.js` `apiErrorKey()`.
+- **Live progress:** `handleEvent()` folds SSE events into `run` with `logic.applyEvent()`; on every (re)connect `onopen` re-reads `/api/state` (`fromSnapshot`), so a dropped subscriber resyncs. A query that found new jobs schedules a state and list refresh 1.5 s later.
+- **Starting placeholder:** after `POST /api/runs` the UI shows a "starting" placeholder that expires after 30 s and is re-checked by a refresh.
+- **Finished runs:** run ids seen in `run_finished` / `run_error` are remembered, so a late `/api/state` snapshot cannot bring a finished run's banner back (the server clears its progress only after reporting).
+- **Boot:** if `app.js` cannot load, the boot screen reveals a bilingual "could not start" message after 10 s (CSS only; the CSP allows no inline scripts).
+- **Safety:** scraped job fields are rendered only with `x-text`; `tests/test_frontend.py` fails on HTML sinks such as `x-html` or `innerHTML`, and on remote URLs other than the two system-browser links. Links open through `POST /api/open-url`. The server adds a Content-Security-Policy (`script-src 'self' 'unsafe-eval'` for Alpine, nothing from other origins), `Referrer-Policy: no-referrer` and `Cache-Control: no-store` to every response.
+- **RTL:** `<html dir>` follows the language; CSS uses logical properties only.
+- **Wizard:** shown while `onboarding_done` is false: language → Chrome check → the Search form → first search (`finishWizard()` sets `onboarding_done`, which also enables auto-search).
+
 ### Endpoints (all under `/api`, all need the token)
 
 | Method | Path | Success | Errors |
@@ -151,6 +165,7 @@ One middleware: the `Host` header must be `127.0.0.1:<port>` or `localhost:<port
 | GET | `/state` | 200 version, onboarding, language, theme, chrome, linkedin_profile, run, job_counts, has_settings, update | |
 | GET | `/settings` | 200 search settings (empty defaults if unset) | |
 | PUT | `/settings` | 200 cleaned settings | 422 `{errors}` |
+| POST | `/estimate` | 200 `{queries, seconds}` (never fails; zeros for missing input, any body accepted) | |
 | GET | `/app-settings` | 200 | |
 | PATCH | `/app-settings` | 200 full settings | 422 `{errors}` (unknown or invalid keys) |
 | GET | `/countries?lang=ar\|en` | 200 | 422 |

@@ -29,7 +29,7 @@ pip install -r requirements.txt
 # python-jobspy==1.1.80, pandas, requests, beautifulsoup4, undetected-chromedriver, setuptools
 ```
 
-Tests: `venv/bin/python3 -m unittest discover -s tests -v`
+Tests: `venv/bin/python3 -m unittest discover -s tests -v` (also runs `node --test tests/js/*.test.mjs` when node is installed)
 
 Every test file must `import _bootstrap` (see tests/_bootstrap.py) — it points all runtime data at a temp folder; tests/test_isolation.py enforces it.
 
@@ -79,6 +79,11 @@ Set in `.env` (gitignored): `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`. Copy 
 | `src/web/api.py` | The `/api/*` endpoints |
 | `src/web/services.py` | `AppServices`: everything the API needs from outside (swappable in tests) |
 | `src/web/redact.py` | Strips personal data from the problem-report log excerpt |
+| `src/web/static/index.html` | The window's markup (Alpine.js `x-*` attributes; job text only via `x-text`) |
+| `src/web/static/app.js` | The `hawkeye` Alpine component: pages, wizard, SSE handling |
+| `src/web/static/logic.js` | Pure UI helpers (tested with `node --test tests/js/*.test.mjs`) |
+| `src/web/static/api.js` | Local API client; moves the token from the URL to sessionStorage |
+| `src/web/static/i18n/*.json` | All UI text, formal Arabic and English (identical keys; `tests/test_frontend.py`) |
 
 ## Resetting
 

@@ -69,7 +69,11 @@ Bayt.com and NaukriGulf only cover Jordan/Gulf. Other countries still search Lin
 
     venv/bin/python3 src/app.py
 
-Opens the Hawkeye Jobs window. Everything runs on your computer: the window talks to a small server on 127.0.0.1 that only this app can use. The interface is being built; downloadable installers come later.
+The window has four pages — **Jobs** (with live progress while a search runs), **Search**, **History** and **Settings** — and a short first-run wizard. Arabic (right-to-left) and English. Everything runs on your computer: the window talks to a small server on 127.0.0.1 that only this app can use. Downloadable installers come later.
+
+For UI development, serve without a window on a fixed port and open the printed URL in a browser:
+
+    HAWKEYE_DATA_DIR=/tmp/hawkeye-dev venv/bin/python3 src/app.py --no-window --port 8765
 
 ## Where your data lives
 
