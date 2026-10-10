@@ -106,6 +106,24 @@ test("filterCountries matches labels and ids, skips chosen ones, caps the list",
   assert.deepEqual(L.filterCountries(countries, "SA", []).map((c) => c.id), ["sa"]);
   assert.deepEqual(L.filterCountries(countries, "", ["jo"]).map((c) => c.id), ["sa", "remote"]);
   assert.equal(L.filterCountries(countries, "", [], 1).length, 1);
+  assert.ok(L.filterCountries(countries, "الأ", []).map((c) => c.id).includes("jo"));
+});
+
+test("filterCountries matches word starts with Arabic-aware normalisation", () => {
+  const ids = (list, q) => L.filterCountries(list, q, []).map((c) => c.id);
+  const ar = [{ id: "jo", label: "الأردن" }, { id: "sa", label: "السعودية" }, { id: "ma", label: "المغرب" },
+              { id: "mx", label: "المكسيك" }, { id: "ae", label: "الإمارات العربية المتحدة" }];
+  assert.deepEqual(ids(ar, "سعود"), ["sa"]);
+  assert.deepEqual(ids(ar, "السعودية"), ["sa"]);
+  assert.deepEqual(ids(ar, "اردن"), ["jo"]);
+  assert.deepEqual(ids(ar, "الم"), ["ma", "mx", "ae"]);
+  assert.ok(!ids(ar, "الم").includes("jo"));
+  const en = [{ id: "GB", label: "United Kingdom" }, { id: "US", label: "United States" },
+              { id: "TN", label: "Tunisia" }, { id: "RE", label: "Réunion" }];
+  assert.deepEqual(ids(en, "Uni"), ["GB", "US"]);
+  assert.deepEqual(ids(en, "reu"), ["RE"]);
+  assert.deepEqual(ids(en, "united k"), ["GB"]);
+  assert.deepEqual(ids(en, "tn"), ["TN"]);
 });
 
 test("jobsQuery builds the API path", () => {

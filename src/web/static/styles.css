@@ -88,8 +88,8 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 
 .boot, .fatal { display: grid; place-items: center; min-height: 100vh; padding: 24px; text-align: center; color: var(--muted); }
 
-.boot-slow { opacity: 0; margin-top: 16px; animation: boot-reveal 0s 10s forwards; }
-@keyframes boot-reveal { to { opacity: 1; } }
+.boot-slow { opacity: 0; visibility: hidden; margin-top: 16px; animation: boot-reveal 0s 10s forwards; }
+@keyframes boot-reveal { to { opacity: 1; visibility: visible; } }
 
 .shell {
   display: grid;
@@ -228,6 +228,8 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .run-details h2 { font-size: 16px; margin: 0 0 8px; }
 .run-details ul { list-style: none; margin: 0; padding: 0; }
 .query-row { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.query-label { flex: 1 1 auto; min-width: 0; }
+.query-outcome { flex: 0 0 auto; white-space: nowrap; text-align: end; }
 .query-row:last-child { border-bottom: 0; }
 .outcome-done { color: var(--ok); }
 .outcome-failed { color: var(--danger); }

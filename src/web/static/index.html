@@ -278,8 +278,8 @@
                 <ul>
                   <template x-for="q in history.details.queries" :key="q.idx">
                     <li class="query-row">
-                      <span x-text="queryLabel(q)"></span>
-                      <span :class="'outcome-' + q.status" x-text="queryOutcomeText(q)"></span>
+                      <span class="query-label" x-text="queryLabel(q)"></span>
+                      <span class="query-outcome" :class="'outcome-' + q.status" x-text="queryOutcomeText(q)"></span>
                     </li>
                   </template>
                 </ul>
@@ -347,7 +347,7 @@
           </div>
           <div class="setting danger-zone">
             <span x-text="t('settings.delete_all')"></span>
-            <button type="button" class="btn-danger-ghost" @click="openDeleteDialog()" x-text="t('settings.delete')"></button>
+            <button type="button" class="btn-danger-ghost" x-ref="deleteOpener" @click="openDeleteDialog()" x-text="t('settings.delete')"></button>
           </div>
         </div>
       </section>
@@ -359,7 +359,7 @@
       <h2 id="delete-title" x-text="t('settings.delete_title')"></h2>
       <p x-text="t('settings.delete_body')"></p>
       <label for="delete-confirm" x-text="t('settings.delete_type', { word: t('settings.delete_word') })"></label>
-      <input id="delete-confirm" type="text" autocomplete="off" x-ref="deleteConfirm" x-model="settingsPage.confirmText">
+      <input id="delete-confirm" type="text" autocomplete="off" x-ref="deleteConfirm" x-effect="settingsPage.confirmOpen && $nextTick(() => requestAnimationFrame(() => $el.focus()))" x-model="settingsPage.confirmText">
       <div class="actions">
         <button type="button" class="btn-danger" :disabled="!canDelete() || settingsPage.busy" @click="resetData()" x-text="t('settings.delete_confirm')"></button>
         <button type="button" class="btn-ghost" @click="closeDeleteDialog()" x-text="t('action.cancel')"></button>

@@ -558,9 +558,11 @@ function hawkeye() {
     openDeleteDialog() {
       this.settingsPage.confirmText = "";
       this.settingsPage.confirmOpen = true;
-      this.$nextTick(() => { if (this.$refs.deleteConfirm) this.$refs.deleteConfirm.focus(); });
     },
-    closeDeleteDialog() { this.settingsPage.confirmOpen = false; },
+    closeDeleteDialog() {
+      this.settingsPage.confirmOpen = false;
+      this.$nextTick(() => { if (this.$refs.deleteOpener) this.$refs.deleteOpener.focus(); });
+    },
     canDelete() { return this.settingsPage.confirmText.trim() === this.t("settings.delete_word"); },
     async resetData() {
       if (!this.canDelete()) return;

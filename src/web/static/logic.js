@@ -106,12 +106,33 @@ export function addKeyword(list, raw) {
   return { list: [...list, text], error: null };
 }
 
+function normalizeSearch(text) {
+  return String(text || "")
+    .toLocaleLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f\u064b-\u065f\u0640]/g, "")
+    .replace(/[\u0623\u0625\u0622]/g, "\u0627")
+    .replace(/\u0649/g, "\u064a")
+    .replace(/\u0629/g, "\u0647")
+    .trim();
+}
+
+function dropArticle(word) {
+  return word.startsWith("\u0627\u0644") ? word.slice(2) : word;
+}
+
 export function filterCountries(countries, query, selected, limit = 50) {
-  const needle = String(query || "").trim().toLocaleLowerCase();
+  const needle = dropArticle(normalizeSearch(query));
+  const rawQuery = String(query || "").trim().toLowerCase();
   const chosen = new Set(selected);
-  return countries
-    .filter((c) => !chosen.has(c.id) && (!needle || c.label.toLocaleLowerCase().includes(needle) || c.id.toLowerCase() === needle))
-    .slice(0, limit);
+  const matches = (c) => {
+    if (!needle) return true;
+    if (c.id.toLowerCase() === rawQuery) return true;
+    const label = normalizeSearch(c.label);
+    if (dropArticle(label).startsWith(needle)) return true;
+    return label.split(/\s+/).some((word) => dropArticle(word).startsWith(needle));
+  };
+  return countries.filter((c) => !chosen.has(c.id) && matches(c)).slice(0, limit);
 }
 
 export function defaultSources(chromeFound) {
