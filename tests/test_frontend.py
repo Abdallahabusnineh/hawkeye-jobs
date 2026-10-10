@@ -169,6 +169,19 @@ class SafetyTests(unittest.TestCase):
         self.assertIn("3.14.9", (vendor / name).read_text(encoding="utf-8"))
         self.assertIn("MIT License", (vendor / "LICENSE.md").read_text(encoding="utf-8"))
 
+    def test_js_constants_mirror_the_backend(self):
+        logic = _code("logic.js")
+
+        def array(name):
+            match = re.search(r"export const %s = \[([^\]]*)\]" % name, logic)
+            self.assertIsNotNone(match, name)
+            return [item.strip().strip("\"'") for item in match.group(1).split(",") if item.strip()]
+
+        from catalog import BROWSER_SOURCES
+        self.assertEqual(array("SOURCE_ORDER"), list(SOURCE_ORDER))
+        self.assertEqual(set(array("BROWSER_SOURCES")), set(BROWSER_SOURCES))
+        self.assertEqual([int(h) for h in array("AUTO_HOURS")], list(AUTO_HOURS))
+
 
 class JsUnitTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "node is not installed")
