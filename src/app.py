@@ -24,6 +24,13 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
 
+FROZEN = getattr(sys, "frozen", False)  # running from the packaged app (PyInstaller)
+if FROZEN:
+    # A windowed app has no console: give libraries that write to it (uvicorn) somewhere harmless.
+    for _name in ("stdout", "stderr"):
+        if getattr(sys, _name) is None:
+            setattr(sys, _name, open(os.devnull, "w", encoding="utf-8"))
+
 import uvicorn
 
 from logs import setup_logging
@@ -62,9 +69,12 @@ def window_url(port: int, token: str) -> str:
 
 
 def _prepare_data() -> None:
-    migrate_legacy_config(ROOT)
+    # The packaged app has no repo folder holding a terminal-era config.json / seen_jobs.json.
+    if not FROZEN:
+        migrate_legacy_config(ROOT)
     with Store() as store:
-        store.import_legacy_seen_file(ROOT / "seen_jobs.json")
+        if not FROZEN:
+            store.import_legacy_seen_file(ROOT / "seen_jobs.json")
 
 
 def build(port=None) -> AppParts:
@@ -150,7 +160,7 @@ def main(argv=None) -> None:
             log.exception("Reporting pending jobs failed; they will be retried at the next launch")
         url = window_url(parts.port, parts.token)
         if args.no_window:
-            print(f"Hawkeye Jobs is running at {url}  (Ctrl+C to stop)")
+            print(f"Hawkeye Jobs is running at {url}  (Ctrl+C to stop)", flush=True)
             while thread.is_alive():
                 time.sleep(0.5)
             log.error("The local server stopped unexpectedly")

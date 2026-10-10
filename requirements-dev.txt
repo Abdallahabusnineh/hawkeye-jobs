@@ -1,0 +1,5 @@
+# Tests and release builds (not needed to run the app).
+-r requirements.txt
+httpx2==2.13.1
+pyinstaller==6.22.3
+pillow==12.3.0

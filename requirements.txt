@@ -1,13 +1,17 @@
+# Runtime dependencies, pinned so every release is built from the same code.
+# python-jobspy pins numpy==1.26.3, which has wheels up to Python 3.12: build releases on 3.12.
 python-jobspy==1.1.80
-pandas
-requests
-beautifulsoup4
-undetected-chromedriver
-setuptools
-platformdirs
-fastapi
-uvicorn
-pywebview
-desktop-notifier
-babel
-httpx2
+pandas==2.3.3
+requests==2.33.1
+beautifulsoup4==4.14.3
+undetected-chromedriver==3.5.5
+selenium==4.43.0
+setuptools==82.0.1
+platformdirs==4.12.4
+fastapi==0.143.0
+uvicorn==0.54.0
+pywebview==6.2.1
+# Linux has no built-in web view: the window uses Qt WebEngine there.
+pywebview[qt]==6.2.1; sys_platform == "linux"
+desktop-notifier==6.2.0
+babel==2.18.0
