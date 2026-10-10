@@ -162,3 +162,37 @@ def load_countries(fetcher=None, cache_path: Path | None = None) -> list:
     raise CountryFetchError(
         "Could not load countries from the public API. Check your internet and try again."
     )
+
+
+_REMOTE_LABELS = {"ar": "عن بُعد", "en": "Remote"}
+
+# CLDR names this code for an unknown region; it is not a country, so keep the base label.
+_NOT_A_COUNTRY = {"ZZ"}
+
+
+def offline_countries() -> list:
+    """Remote + the countries we have site-specific mappings for — used when the country API is unreachable."""
+    from catalog import OVERRIDES
+    rows = [{"id": cid, "label": spec["label"]} for cid, spec in OVERRIDES.items()]
+    rows.sort(key=lambda c: c["label"].casefold())
+    return _with_remote(rows)
+
+
+def localized_countries(language: str, base: list) -> list:
+    """[{id, label}] in the UI language (Babel/CLDR, offline), Remote first, the rest sorted by label."""
+    try:
+        from babel import Locale
+        territories = Locale.parse(language).territories
+    except Exception:
+        territories = {}
+    rest = []
+    for c in base:
+        if c["id"] == "remote":
+            continue
+        code = c["id"].upper()
+        label = c["label"]
+        if code not in _NOT_A_COUNTRY:
+            label = territories.get(code, label)
+        rest.append({"id": c["id"], "label": label})
+    rest.sort(key=lambda c: c["label"].casefold())
+    return [{"id": "remote", "label": _REMOTE_LABELS.get(language, "Remote")}] + rest

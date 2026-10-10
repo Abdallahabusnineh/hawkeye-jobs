@@ -181,5 +181,32 @@ class CountryCachePathTests(unittest.TestCase):
             self.assertTrue((Path(tmp) / "countries_cache.json").exists())
 
 
+from countries import localized_countries, offline_countries
+
+
+class LocalizedCountriesTests(unittest.TestCase):
+    BASE = [{"id": "remote", "label": "Remote"}, {"id": "jo", "label": "Jordan"},
+            {"id": "sa", "label": "Saudi Arabia"}, {"id": "zz", "label": "Zedland"}]
+
+    def test_arabic_labels_with_remote_first(self):
+        result = localized_countries("ar", self.BASE)
+        self.assertEqual(result[0], {"id": "remote", "label": "عن بُعد"})
+        labels = {c["id"]: c["label"] for c in result}
+        self.assertEqual(labels["jo"], "الأردن")
+        self.assertEqual(labels["sa"], "المملكة العربية السعودية")
+        self.assertEqual(labels["zz"], "Zedland")  # unknown to CLDR: keep the base label
+
+    def test_english_sorted(self):
+        result = localized_countries("en", self.BASE)
+        self.assertEqual([c["id"] for c in result], ["remote", "jo", "sa", "zz"])
+        self.assertEqual(result[0]["label"], "Remote")
+
+    def test_offline_list_has_remote_and_overrides(self):
+        ids = [c["id"] for c in offline_countries()]
+        self.assertEqual(ids[0], "remote")
+        self.assertIn("jo", ids)
+        self.assertIn("ae", ids)
+
+
 if __name__ == "__main__":
     unittest.main()
