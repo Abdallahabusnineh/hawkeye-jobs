@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _bootstrap  # noqa: F401  — isolates data dirs, adds src/ to sys.path
 
 from countries import CountryFetchError, load_countries, parse_countries
 from picker import SearchSelectState, apply_search_key

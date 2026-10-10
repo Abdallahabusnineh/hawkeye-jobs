@@ -30,6 +30,8 @@ pip install -r requirements.txt
 
 Tests: `venv/bin/python3 -m unittest discover -s tests -v`
 
+Every test file must `import _bootstrap` (see tests/_bootstrap.py) — it points all runtime data at a temp folder; tests/test_isolation.py enforces it.
+
 ## Pipeline
 
 1. **`src/settings.py`** — reuse or prompt for keywords / countries / websites (`src/picker.py`). Countries come from `src/countries.py`.

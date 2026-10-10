@@ -2,7 +2,8 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _bootstrap  # noqa: F401  — isolates data dirs, adds src/ to sys.path
 
 from catalog import expand_searches, plan_queries, source_choice_label
 

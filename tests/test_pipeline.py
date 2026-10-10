@@ -9,7 +9,8 @@ from unittest import mock
 from pathlib import Path
 from urllib.parse import quote
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _bootstrap  # noqa: F401  — isolates data dirs, adds src/ to sys.path
 
 from browser import ChromeNotFound
 from linkedin_posts import LinkedInLoginRequired
