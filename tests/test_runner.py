@@ -144,6 +144,39 @@ class StartTests(RunnerTestCase):
         finally:
             other.release()
 
+    def test_exclusive_refused_while_other_lock_holder_or_run_alive(self):
+        other = RunLock(self.lock_path)
+        self.assertTrue(other.acquire())
+        try:
+            with self.assertRaises(RunInProgress):
+                with self.make().exclusive():
+                    self.fail("must not enter")
+        finally:
+            other.release()
+        hold = threading.Event()
+        self.search = FakeSearch(hold=hold)
+        manager = self.make()
+        manager.start()
+        with self.assertRaises(RunInProgress):
+            with manager.exclusive():
+                self.fail("must not enter")
+        hold.set()
+        manager.wait(5)
+
+    def test_start_refused_inside_exclusive_and_lock_released_after(self):
+        manager = self.make()
+        with manager.exclusive():
+            with self.assertRaises(RunInProgress):
+                manager.start()
+            other = RunLock(self.lock_path)
+            self.assertFalse(other.acquire())  # terminal mode is held off too
+        self.assertEqual(self.search.calls, [])
+        other = RunLock(self.lock_path)
+        self.assertTrue(other.acquire())
+        other.release()
+        manager.start()  # works again
+        manager.wait(5)
+
     def test_lock_released_after_run(self):
         manager = self.make()
         manager.start()

@@ -11,7 +11,7 @@ import re
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 # name=value / name: value / "name": "value", where the name contains a secret-ish word
 _SECRET = re.compile(
-    r"""(?i)([\w-]*(?:token|key|password|passwd|pass|secret)[\w-]*)(["']?\s*[=:]\s*)["']?[^\s,"'&;}]+["']?""")
+    r"""(?i)([\w-]*(?:token|key|secret)[\w-]*|(?<![A-Za-z0-9])(?:[\w-]*[_-])?pass(?:wd|word)?s?\b)(["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s,"'&;}]+)""")
 _BEARER = re.compile(r"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]+")
 _URL = re.compile(r"(https?://[^/\s?#]+)[^\s]*")
 

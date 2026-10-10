@@ -1,3 +1,4 @@
+import contextlib
 import sys
 import tempfile
 import unittest
@@ -9,6 +10,7 @@ import _bootstrap  # noqa: F401  — isolates data dirs, adds src/ to sys.path
 from fastapi.testclient import TestClient
 
 from store import Store
+from web.redact import redact
 from web.server import create_app
 from web.services import AppServices
 
@@ -24,6 +26,7 @@ class FakeManager:
         self.cancelled = 0
         self.queue = None
         self.subscribed = True
+        self.lock_held = False
 
     def start(self, trigger="manual"):
         from runner import NoSearchSettings, RunInProgress
@@ -33,6 +36,13 @@ class FakeManager:
             raise NoSearchSettings("none")
         self.started.append(trigger)
         return 42
+
+    @contextlib.contextmanager
+    def exclusive(self):
+        from runner import RunInProgress
+        if self.is_running or self.lock_held:
+            raise RunInProgress("busy")
+        yield
 
     def cancel(self):
         self.cancelled += 1
@@ -258,12 +268,6 @@ class WriteTests(ApiTestCase):
         self.assertFalse(self.manager.subscribed)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
-from web.redact import redact
-
 
 class RedactTests(unittest.TestCase):
     def test_redact_removes_personal_data(self):
@@ -278,6 +282,13 @@ class RedactTests(unittest.TestCase):
         self.assertIn("<user>", out)
         self.assertIn("https://www.linkedin.com", out)
 
+    def test_redact_keeps_words_that_only_contain_pass(self):
+        out = redact("bypass=1 the check passed; password = \"hunter 2\" next", home="", user="")
+        self.assertIn("bypass=1", out)
+        self.assertIn("passed", out)
+        self.assertNotIn("hunter", out)
+        self.assertNotIn("2\"", out)
+
     def test_redact_quoted_and_prefixed_secrets(self):
         out = redact('{"api_token": "abc123"} MY_SECRET=s1 Authorization: Bearer xyz987', home="", user="")
         for secret in ("abc123", "s1", "xyz987"):
@@ -291,7 +302,8 @@ class ActionTests(ApiTestCase):
     def test_open_url_only_http(self):
         self.assertEqual(self.send("POST", "/api/open-url", {"url": "https://a.com/1"}).status_code, 204)
         self.assertEqual(self.opened_urls, ["https://a.com/1"])
-        for bad in ("javascript:alert(1)", "file:///etc/passwd", "", None):
+        for bad in ("javascript:alert(1)", "file:///etc/passwd", "", None, " https://a.com", "\x01https://a.com",
+                    "https://a.com\nfoo", "https://a.com\tx", "https://a.com\x7f"):
             self.assertEqual(self.send("POST", "/api/open-url", {"url": bad}).status_code, 422)
         self.assertEqual(self.opened_urls, ["https://a.com/1"])
 
@@ -314,6 +326,25 @@ class ActionTests(ApiTestCase):
         response = self.send("POST", "/api/linkedin/login")
         self.assertEqual((response.status_code, response.json()), (409, {"error": "chrome_not_found"}))
         self.assertEqual(self.launched, [])
+
+    def test_reset_and_login_refused_while_terminal_holds_run_lock(self):
+        from run_lock import RunLock
+        from runner import RunManager
+        lock_path = Path(self.tmp.name) / "run.lock"
+        self.services.manager = RunManager(notifier=lambda jobs: True, run_search=lambda *a, **k: None,
+                                           lock=RunLock(lock_path))
+        terminal = RunLock(lock_path)
+        self.assertTrue(terminal.acquire())
+        try:
+            self.assertEqual(self.send("POST", "/api/reset", {"confirm": "DELETE"}).json(),
+                             {"error": "run_in_progress"})
+            self.assertTrue(self.db.exists())
+            response = self.send("POST", "/api/linkedin/login")
+            self.assertEqual((response.status_code, response.json()), (409, {"error": "run_in_progress"}))
+            self.assertEqual(self.launched, [])
+        finally:
+            terminal.release()
+        self.assertEqual(self.send("POST", "/api/linkedin/login").status_code, 202)
 
     def test_report_problem_builds_redacted_issue_url(self):
         (Path(self.tmp.name) / "hawkeye.log").write_text(
@@ -402,3 +433,7 @@ class ActionTests(ApiTestCase):
         self.assertEqual(victim.read_text(), "keep")
         self.assertFalse((Path(self.tmp.name) / "t.db-wal").is_symlink())
         self.assertTrue(keep.exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

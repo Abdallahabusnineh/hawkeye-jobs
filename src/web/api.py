@@ -207,8 +207,11 @@ def _parse_iso(value):
 @router.post("/open-url", status_code=204)
 def open_url(request: Request, body: dict):
     url = body.get("url")
-    parsed = urlparse(url) if isinstance(url, str) else None
-    if not parsed or parsed.scheme not in ("http", "https") or not parsed.netloc:
+    # urlsplit silently strips leading control/space chars and tabs/newlines: refuse them outright
+    if not isinstance(url, str) or any(ord(c) <= 0x20 or ord(c) == 0x7F for c in url):
+        return JSONResponse({"errors": {"url": "invalid"}}, status_code=422)
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return JSONResponse({"errors": {"url": "invalid"}}, status_code=422)
     _services(request).open_url(url)
 
@@ -222,12 +225,14 @@ def open_data_folder(request: Request):
 @router.post("/linkedin/login", status_code=202)
 def linkedin_login(request: Request):
     s = _services(request)
-    if s.manager.is_running:
+    try:
+        with s.manager.exclusive():  # the login window shares the profile a search would use
+            chrome = s.find_chrome()
+            if not chrome:
+                return JSONResponse({"error": "chrome_not_found"}, status_code=409)
+            s.launch([chrome, f"--user-data-dir={s.linkedin_profile_dir()}", "https://www.linkedin.com/login"])
+    except RunInProgress:
         return JSONResponse({"error": "run_in_progress"}, status_code=409)
-    chrome = s.find_chrome()
-    if not chrome:
-        return JSONResponse({"error": "chrome_not_found"}, status_code=409)
-    s.launch([chrome, f"--user-data-dir={s.linkedin_profile_dir()}", "https://www.linkedin.com/login"])
     return {"ok": True}
 
 
@@ -284,16 +289,18 @@ def reset(request: Request, body: dict):
     s = _services(request)
     if body.get("confirm") != "DELETE":
         return JSONResponse({"errors": {"confirm": "required"}}, status_code=422)
-    if s.manager.is_running:
+    try:
+        with s.manager.exclusive():
+            probe = s.store_factory()
+            db_path = probe.path
+            probe.close()
+            root = Path(s.data_dir()).resolve()
+            if Path(db_path).parent.resolve() != root:
+                log.warning("Reset refused: database is not directly inside the data folder")
+                return JSONResponse({"error": "outside_data_dir"}, status_code=409)
+            for suffix in ("", "-wal", "-shm"):
+                target = root / (Path(db_path).name + suffix)
+                if target.is_symlink() or target.is_file():
+                    target.unlink()  # unlink removes a symlink itself, never its target
+    except RunInProgress:
         return JSONResponse({"error": "run_in_progress"}, status_code=409)
-    probe = s.store_factory()
-    db_path = probe.path
-    probe.close()
-    root = Path(s.data_dir()).resolve()
-    if Path(db_path).parent.resolve() != root:
-        log.warning("Reset refused: database is not directly inside the data folder")
-        return JSONResponse({"error": "outside_data_dir"}, status_code=409)
-    for suffix in ("", "-wal", "-shm"):
-        target = root / (Path(db_path).name + suffix)
-        if target.is_symlink() or target.is_file():
-            target.unlink()  # unlink removes a symlink itself, never its target

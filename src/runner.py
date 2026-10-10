@@ -17,6 +17,7 @@ import logging
 import queue
 import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from run_lock import RunLock
@@ -83,6 +84,7 @@ class RunManager:
         self._cancel = None
         self._last_posts_run = None
         self._current = None
+        self._exclusive = False
 
     # ── subscribers ─────────────────────────────────────────────────────
 
@@ -145,10 +147,28 @@ class RunManager:
             self._cancel.set()
             return True
 
+    @contextmanager
+    def exclusive(self):
+        """Hold off every search (this app's and terminal mode's) while the caller does something
+        that must not overlap one, e.g. deleting the database. Raises RunInProgress if one is running."""
+        with self._state_lock:
+            if self._worker is not None and self._worker.is_alive():
+                raise RunInProgress("a search is already running in the app")
+            if not self._run_lock.acquire():
+                raise RunInProgress("a search is already running in another window or the terminal")
+            self._exclusive = True
+            try:
+                yield
+            finally:
+                self._exclusive = False
+                self._run_lock.release()
+
     # ── running ─────────────────────────────────────────────────────────
 
     def start(self, trigger: str = "manual"):
         """Start a search in the background and return its run id (None if it failed before starting)."""
+        if self._exclusive:  # checked before taking the lock so the holder's own thread cannot deadlock
+            raise RunInProgress("the app is busy with an exclusive operation")
         with self._state_lock:
             if self._worker is not None and self._worker.is_alive():
                 raise RunInProgress("a search is already running in the app")
