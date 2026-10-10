@@ -8,9 +8,9 @@ Why Selenium (not requests)?
     job data — Angular renders the cards via JavaScript. Selenium waits for the JS to run.
 
 URL pattern:
-    With location : https://www.naukrigulf.com/{keyword-slug}-jobs-in-{location_slug}
-    Without       : https://www.naukrigulf.com/{keyword-slug}-jobs
-    Example       : https://www.naukrigulf.com/flutter-developer-jobs-in-uae
+    With location : https://www.naukrigulf.com/{keyword-slug}-jobs-in-{location_slug}?sort=date
+    Without       : https://www.naukrigulf.com/{keyword-slug}-jobs?sort=date
+    Example       : https://www.naukrigulf.com/flutter-developer-jobs-in-uae?sort=date
 
 HTML selectors (last verified 2026):
     Job card     : .ng-box.srp-tuple
@@ -57,16 +57,18 @@ def _build_url(keyword: str, location_slug: str) -> str:
     If location_slug is empty or "gulf-region", returns the keyword-only URL
     (searches across the entire Gulf region).
     Otherwise appends -in-{location_slug} for a country-specific search.
+    Both forms end with ?sort=date (newest first); the default sorts by relevance
+    and fills the page with old jobs.
 
     Examples:
-        ("flutter developer", "uae")         → .../flutter-developer-jobs-in-uae
-        ("flutter engineer",  "gulf-region") → .../flutter-engineer-jobs
-        ("Mobile Developer",    "")            → .../dart-developer-jobs
+        ("flutter developer", "uae")         → .../flutter-developer-jobs-in-uae?sort=date
+        ("flutter engineer",  "gulf-region") → .../flutter-engineer-jobs?sort=date
+        ("Mobile Developer",    "")            → .../dart-developer-jobs?sort=date
     """
     kw = keyword.replace(" ", "-")
     if location_slug and location_slug not in ("gulf-region", ""):
-        return f"{BASE}/{kw}-jobs-in-{location_slug}"
-    return f"{BASE}/{kw}-jobs"
+        return f"{BASE}/{kw}-jobs-in-{location_slug}?sort=date"
+    return f"{BASE}/{kw}-jobs?sort=date"
 
 
 def _parse_naukrigulf_page(html: str, seen_urls: set, location: str, keywords: list) -> list:

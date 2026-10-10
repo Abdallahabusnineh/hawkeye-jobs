@@ -77,13 +77,21 @@ class NaukriGulfTests(unittest.TestCase):
         driver = FakeDriver(fixture("naukrigulf.html"))
         with patch("naukrigulf.wait_for", return_value=True) as wait:
             jobs = naukrigulf.fetch_naukrigulf(driver, ("java developer", "saudi-arabia"), set(), KEYWORDS)
-        self.assertEqual(driver.visited, ["https://www.naukrigulf.com/java-developer-jobs-in-saudi-arabia"])
+        self.assertEqual(driver.visited, ["https://www.naukrigulf.com/java-developer-jobs-in-saudi-arabia?sort=date"])
         wait.assert_called_once_with(driver, ".ng-box.srp-tuple", 15)
         self.assertEqual(len(jobs), 1)
         job = jobs[0]
         self.assertEqual(job["title"], "Java Developer")
         self.assertEqual(job["description"], "Acme Gulf - Riyadh - Saudi Arabia")
         self.assertEqual((job["source"], job["published"]), ("NaukriGulf", "1 day ago"))
+
+    def test_build_url_sorts_by_date_with_and_without_location(self):
+        self.assertEqual(naukrigulf._build_url("java developer", "uae"),
+                         "https://www.naukrigulf.com/java-developer-jobs-in-uae?sort=date")
+        self.assertEqual(naukrigulf._build_url("java developer", "gulf-region"),
+                         "https://www.naukrigulf.com/java-developer-jobs?sort=date")
+        self.assertEqual(naukrigulf._build_url("java developer", ""),
+                         "https://www.naukrigulf.com/java-developer-jobs?sort=date")
 
     def test_seen_urls_are_skipped(self):
         driver = FakeDriver(fixture("naukrigulf.html"))

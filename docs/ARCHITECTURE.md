@@ -220,10 +220,12 @@ Covers: Gulf-wide, UAE, Saudi Arabia, Kuwait, Qatar, Bahrain.
 def _build_url(keyword, location_slug):
     kw = keyword.replace(" ", "-")
     if location_slug not in ("gulf-region", ""):
-        return f"https://www.naukrigulf.com/{kw}-jobs-in-{location_slug}"
-    return f"https://www.naukrigulf.com/{kw}-jobs"
+        return f"https://www.naukrigulf.com/{kw}-jobs-in-{location_slug}?sort=date"
+    return f"https://www.naukrigulf.com/{kw}-jobs?sort=date"
 ```
-Example: `https://www.naukrigulf.com/flutter-developer-jobs-in-uae`
+Example: `https://www.naukrigulf.com/flutter-developer-jobs-in-uae?sort=date`
+
+`?sort=date` sorts newest first; the default sorts by relevance and fills the page with old jobs.
 
 **HTML selectors (as of 2026):**
 | Data | Selector |
