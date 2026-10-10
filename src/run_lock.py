@@ -1,6 +1,6 @@
 """
-filelock.py — One search at a time, across processes
-=====================================================
+run_lock.py — One search at a time, across processes
+====================================================
 The desktop app and terminal mode share one data folder. Two searches at once
 would double the requests to every site, so both take an exclusive OS lock on
 <data>/run.lock before searching. The lock is non-blocking: whoever comes
