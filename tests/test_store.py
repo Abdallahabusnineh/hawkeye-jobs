@@ -388,5 +388,57 @@ class SiteRequestTests(StoreTestCase):
         self.assertEqual(self.store.site_last_requests(), {})
 
 
+class _FlakyConn:
+    """Wraps a real connection; the first journal_mode=WAL execute raises 'locked'."""
+    def __init__(self, real, failures=1):
+        object.__setattr__(self, "_real", real)
+        object.__setattr__(self, "wal_calls", 0)
+        object.__setattr__(self, "_failures", failures)
+
+    def execute(self, sql, *a):
+        if "journal_mode" in sql:
+            object.__setattr__(self, "wal_calls", self.wal_calls + 1)
+            if self.wal_calls <= self._failures:
+                raise sqlite3.OperationalError("database is locked")
+        return self._real.execute(sql, *a)
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+    def __setattr__(self, name, value):
+        setattr(self._real, name, value)
+
+
+class WalRetryTests(unittest.TestCase):
+    def _open(self, failures):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        real_connect = sqlite3.connect
+        holder = {}
+
+        def connect(*a, **k):
+            holder["c"] = _FlakyConn(real_connect(*a, **k), failures)
+            return holder["c"]
+
+        with patch("store.sqlite3.connect", side_effect=connect), patch("store.time.sleep") as sleep:
+            try:
+                store = Store(Path(tmp.name) / "t.db")
+            except sqlite3.OperationalError:
+                return None, holder["c"], sleep
+        self.addCleanup(store.close)
+        return store, holder["c"], sleep
+
+    def test_retries_wal_pragma_after_locked(self):
+        store, conn, sleep = self._open(failures=1)
+        self.assertIsNotNone(store)
+        self.assertEqual(conn.wal_calls, 2)
+        sleep.assert_called_once()
+
+    def test_gives_up_after_five_attempts(self):
+        store, conn, sleep = self._open(failures=99)
+        self.assertIsNone(store)
+        self.assertEqual(conn.wal_calls, 5)
+
+
 if __name__ == "__main__":
     unittest.main()

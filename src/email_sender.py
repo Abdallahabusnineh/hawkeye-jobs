@@ -50,6 +50,12 @@ def _load_credentials():
     RECIPIENT = os.environ.get("RECIPIENT_EMAIL", GMAIL_USER)
 
 
+def email_configured() -> bool:
+    """True when GMAIL_USER and GMAIL_PASS are set."""
+    _load_credentials()
+    return bool(GMAIL_USER and GMAIL_PASS)
+
+
 def _source_color(source: str) -> str:
     """Return the hex colour for a job source badge. Falls back to #555555 for unknown sources."""
     colors = {
@@ -181,33 +187,30 @@ def _build_html(jobs: list) -> str:
     return html
 
 
-def send_email(jobs: list):
+def send_email(jobs: list) -> bool:
     """
     Send the HTML job digest via Gmail SMTP SSL (port 465).
 
     The email contains both a text/plain fallback and a text/html part.
     Credentials are read from the GMAIL_USER and GMAIL_PASS environment variables.
 
-    Skips sending if:
-        - jobs list is empty
-        - GMAIL_USER or GMAIL_PASS is not set
-
-    Raises:
-        smtplib.SMTPException if the send fails (exception is printed and re-raised
-        so it appears in the log).
-
     Args:
-        jobs : list of new job dicts to include in the digest
+        jobs : list of job dicts to include in the digest
+
+    Returns:
+        True if the email was sent, or if there was nothing to send (empty list).
+        False if email is not configured or the SMTP send failed (the reason is
+        printed; nothing is raised).
     """
     _load_credentials()
     if not jobs:
         print("[email] No new jobs — skipping email")
-        return
+        return True
 
     if not GMAIL_USER or not GMAIL_PASS:
         print("[email] ERROR: GMAIL_USER or GMAIL_PASS not set")
         print("[email] Jobs were still printed above. Copy .env.example to .env to enable email.")
-        return
+        return False
 
     subject = f"🦅 hawkeye-jobs — {len(jobs)} new job{'s' if len(jobs)>1 else ''} found"
 
@@ -228,6 +231,8 @@ def send_email(jobs: list):
             server.login(GMAIL_USER, GMAIL_PASS)
             server.sendmail(GMAIL_USER, RECIPIENT, msg.as_string())
         print(f"[email] Sent successfully to {RECIPIENT}")
+        return True
     except Exception as e:
         print(f"[email] Failed to send: {e}")
         print("[email] Jobs were still printed above. Check GMAIL_USER / GMAIL_PASS in .env.")
+        return False

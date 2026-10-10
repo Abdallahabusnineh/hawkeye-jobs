@@ -25,6 +25,7 @@ import hashlib
 import json
 import logging
 import sqlite3
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -112,8 +113,20 @@ class Store:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA busy_timeout = 5000")
         self.conn.execute("PRAGMA foreign_keys = ON")
-        self.conn.execute("PRAGMA journal_mode = WAL")
+        self._enable_wal()
         self._migrate()
+
+    def _enable_wal(self) -> None:
+        """Switch to WAL. Several processes creating a brand-new DB at once can hit
+        'database is locked' here (the switch ignores busy_timeout), so retry briefly."""
+        for attempt in range(5):
+            try:
+                self.conn.execute("PRAGMA journal_mode = WAL")
+                return
+            except sqlite3.OperationalError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.2)
 
     def _read_version(self) -> int:
         return self.conn.execute("PRAGMA user_version").fetchone()[0]

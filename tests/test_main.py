@@ -68,15 +68,73 @@ class MainTests(unittest.TestCase):
         self.env.stop()
         self.tmp.cleanup()
 
+    def _search_adding(self, jobs, state="done"):
+        """run_search stand-in that stores `jobs` the way a real run would."""
+        def fake(chosen, on_event=None, country_labels=None, store=None):
+            run_id = store.start_run(chosen)
+            added = store.add_jobs(run_id, jobs) if jobs else []
+            return RunSummary(run_id=run_id, state=state, found=len(jobs), new_jobs=added)
+        return fake
+
+    def _unnotified(self):
+        from store import Store
+        with Store() as st:
+            return st.unnotified_jobs()
+
     def test_cancelled_run_still_emails_new_jobs(self):
         job = {"title": "Java Developer", "url": "https://a.com/1", "description": "Acme", "source": "Bayt"}
-        summary = RunSummary(run_id=1, state="cancelled", found=1, new_jobs=[job])
-        with patch("main.run_search", return_value=summary), patch("main.send_email") as send:
+        with patch("main.run_search", side_effect=self._search_adding([job], "cancelled")), \
+             patch("main.email_configured", return_value=True), \
+             patch("main.send_email", return_value=True) as send:
             main.main()
-        send.assert_called_once_with([job])
+        emailed = send.call_args.args[0]
+        self.assertEqual([j["url"] for j in emailed], ["https://a.com/1"])
+        self.assertEqual(self._unnotified(), [])
+
+    def test_unreported_job_from_killed_run_is_emailed_and_marked(self):
+        from store import Store
+        with Store() as st:
+            run_id = st.start_run(SETTINGS)
+            st.add_jobs(run_id, [{"title": "Old", "url": "https://a.com/old", "description": "x", "source": "Bayt"}])
+        with patch("main.run_search", side_effect=self._search_adding([])), \
+             patch("main.email_configured", return_value=True), \
+             patch("main.send_email", return_value=True) as send:
+            main.main()
+        self.assertEqual([j["url"] for j in send.call_args.args[0]], ["https://a.com/old"])
+        self.assertEqual(self._unnotified(), [])
+
+    def test_failed_email_keeps_jobs_unnotified_and_retries_next_run(self):
+        job = {"title": "Java", "url": "https://a.com/1", "description": "x", "source": "Bayt"}
+        with patch("main.run_search", side_effect=self._search_adding([job])), \
+             patch("main.email_configured", return_value=True), \
+             patch("main.send_email", return_value=False):
+            main.main()
+        self.assertEqual(len(self._unnotified()), 1)
+        self.assertIn("will be included again next time", sys.stdout.getvalue())
+        with patch("main.run_search", side_effect=self._search_adding([])), \
+             patch("main.email_configured", return_value=True), \
+             patch("main.send_email", return_value=True) as send:
+            main.main()
+        self.assertEqual([j["url"] for j in send.call_args.args[0]], ["https://a.com/1"])
+        self.assertEqual(self._unnotified(), [])
+
+    def test_without_email_setup_terminal_print_marks_jobs(self):
+        job = {"title": "Java", "url": "https://a.com/1", "description": "x", "source": "Bayt"}
+        with patch("main.run_search", side_effect=self._search_adding([job])), \
+             patch("main.email_configured", return_value=False), \
+             patch("main.send_email") as send:
+            main.main()
+        send.assert_not_called()
+        self.assertIn("https://a.com/1", sys.stdout.getvalue())
+        self.assertEqual(self._unnotified(), [])
+        with patch("main.run_search", side_effect=self._search_adding([])), \
+             patch("main.email_configured", return_value=False):
+            main.main()
+        self.assertIn("No new jobs to report", sys.stdout.getvalue())
 
     def test_no_new_jobs_sends_nothing(self):
         with patch("main.run_search", return_value=RunSummary(1, "done", 0, [])), \
+             patch("main.email_configured", return_value=True), \
              patch("main.send_email") as send:
             main.main()
         send.assert_not_called()
@@ -93,7 +151,8 @@ class MainTests(unittest.TestCase):
             ]
 
         with patch("pipeline._default_fetchers", return_value={"linkedin": fake_linkedin}), \
-             patch("main.send_email") as send:
+             patch("main.email_configured", return_value=True), \
+             patch("main.send_email", return_value=True) as send:
             main.main()
         emailed = send.call_args.args[0]
         self.assertEqual([j["url"] for j in emailed], ["https://www.linkedin.com/jobs/view/222"])

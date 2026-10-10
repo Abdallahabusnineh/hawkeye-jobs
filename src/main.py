@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from catalog import SOURCES
 from countries import CountryFetchError, load_countries
-from email_sender import send_email
+from email_sender import email_configured, send_email
 from logs import setup_logging
 from paths import data_dir, linkedin_profile_dir
 from pipeline import run_search
@@ -117,18 +117,30 @@ def main():
                 print(line)
 
         summary = run_search(chosen, on_event=print_event, country_labels=country_labels, store=store)
+
+        if summary.state == "failed":
+            print("[main] The search stopped because of an error — see hawkeye.log in the data folder.")
+
+        # Report everything not yet reported, including jobs left by an earlier
+        # run that was killed before it got this far.
+        pending = store.unnotified_jobs()
+        if not pending:
+            print("[main] No new jobs to report")
+            return
+
+        _print_jobs(pending)
+        ids = [job["id"] for job in pending]
+        if email_configured():
+            print(f"\n[main] Sending email for {len(pending)} new jobs...")
+            if send_email(pending):
+                store.mark_notified(ids)
+            else:
+                print("[main] Email failed — these jobs will be included again next time.")
+        else:
+            # No email set up: the terminal print is the report.
+            store.mark_notified(ids)
     finally:
         store.close()
-
-    if summary.state == "failed":
-        print("[main] The search stopped because of an error — see hawkeye.log in the data folder.")
-    if not summary.new_jobs:
-        print("[main] No new jobs to report")
-        return
-
-    _print_jobs(summary.new_jobs)
-    print(f"\n[main] Sending email for {len(summary.new_jobs)} new jobs...")
-    send_email(summary.new_jobs)
 
     print("=" * 50)
     print("🦅 hawkeye-jobs done!")
