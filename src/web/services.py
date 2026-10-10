@@ -54,11 +54,8 @@ def _base_countries_factory():
         if "rows" not in cache:
             with lock:
                 if "rows" not in cache:
-                    from countries import CountryFetchError, load_countries, offline_countries
-                    try:
-                        cache["rows"] = load_countries()
-                    except CountryFetchError:
-                        cache["rows"] = offline_countries()
+                    from countries import load_countries
+                    cache["rows"] = load_countries()
         return cache["rows"]
     return base_countries
 

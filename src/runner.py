@@ -70,11 +70,8 @@ def apply_posts_gate(settings: dict, saved_iso, remembered, now: float):
 
 
 def _default_country_labels() -> dict:
-    from countries import CountryFetchError, load_countries
-    try:
-        return {c["id"]: c["label"] for c in load_countries()}
-    except CountryFetchError:
-        return {}
+    from countries import load_countries
+    return {c["id"]: c["label"] for c in load_countries()}
 
 
 class RunManager:

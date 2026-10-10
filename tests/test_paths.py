@@ -24,7 +24,6 @@ class DataDirTests(unittest.TestCase):
                 self.assertTrue(target.is_dir())
                 self.assertEqual(paths.db_path(), target / "hawkeye.db")
                 self.assertEqual(paths.config_path(), target / "config.json")
-                self.assertEqual(paths.countries_cache_path(), target / "countries_cache.json")
                 self.assertEqual(paths.log_path(), target / "hawkeye.log")
 
     def test_default_uses_platformdirs(self):

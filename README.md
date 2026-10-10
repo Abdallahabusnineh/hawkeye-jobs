@@ -7,7 +7,7 @@ Deduplicates across sources and across runs. Nothing runs in the background — 
 ## Features
 
 - Interactive checkboxes: arrows move, space selects, enter confirms
-- Country list from a public API on every `bash run.sh` run — type to search, space to select
+- Built-in world country list (offline, no network) — type to search, space to select
 - Remembers your last choices
 - Searches LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts
 - Keeps titles that match your keywords
@@ -118,7 +118,7 @@ hawkeye-jobs/
 │   ├── settings.py        # Terminal prompts + config.json
 │   ├── picker.py          # Arrow/space checkbox menus + searchable country list
 │   ├── catalog.py         # Country/source → per-site queries
-│   ├── countries.py       # REST Countries API + cache
+│   ├── countries.py       # Offline world country list (Babel/CLDR)
 │   ├── filters.py         # Title / hiring-post matching
 │   ├── scraper.py         # LinkedIn + Indeed (JobSpy)
 │   ├── bayt.py            # Bayt.com

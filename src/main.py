@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(__file__))
 
 from catalog import SOURCES
-from countries import CountryFetchError, load_countries
+from countries import load_countries
 from email_sender import email_configured, send_email
 from logs import setup_logging
 from paths import data_dir, linkedin_profile_dir
@@ -125,11 +125,7 @@ def main():
             print("[main] LinkedIn posts skipped — they already ran within the last 24 hours.")
         posts_marked = False
 
-        try:
-            countries = load_countries()
-        except CountryFetchError:
-            countries = []
-        country_labels = {c["id"]: c["label"] for c in countries}
+        country_labels = {c["id"]: c["label"] for c in load_countries()}
 
         def print_event(event):
             nonlocal posts_marked

@@ -10,9 +10,9 @@ import threading
 from pathlib import Path
 
 from catalog import SOURCE_ORDER, SOURCES, get_location, normalize_location_id, source_choice_label
-from countries import CountryFetchError, load_countries
+from countries import load_countries
 from paths import config_path
-from picker import color_error, color_hint, color_question, color_selected, confirmed_line, pick_many, pick_one, pick_searchable
+from picker import color_hint, color_question, color_selected, confirmed_line, pick_many, pick_one, pick_searchable
 
 log = logging.getLogger(__name__)
 
@@ -291,14 +291,7 @@ def _prompt_from_list(title: str, items: list) -> list:
 def _resolve_countries(countries) -> list:
     if countries is not None:
         return list(countries)
-    print(color_hint("\nLoading world countries from the public API…"))
-    try:
-        loaded = load_countries()
-    except CountryFetchError as exc:
-        print(color_error(str(exc)))
-        sys.exit(1)
-    print(color_hint(f"Loaded {len(loaded)} places (including Remote)."))
-    return loaded
+    return load_countries()
 
 
 def confirm_choices_question(kind: str, names: list, limit: int = 8) -> str:

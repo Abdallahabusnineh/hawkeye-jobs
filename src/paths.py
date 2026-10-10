@@ -40,10 +40,6 @@ def config_path() -> Path:
     return data_dir() / "config.json"
 
 
-def countries_cache_path() -> Path:
-    return data_dir() / "countries_cache.json"
-
-
 def log_path() -> Path:
     return data_dir() / "hawkeye.log"
 

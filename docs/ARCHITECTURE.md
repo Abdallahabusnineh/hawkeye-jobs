@@ -17,7 +17,7 @@ hawkeye-jobs/
 │   ├── settings.py      # Terminal prompts + config.json
 │   ├── picker.py        # Arrow/space checkbox, searchable country list, yes/no
 │   ├── catalog.py       # Country/source → per-site queries
-│   ├── countries.py     # REST Countries API + countries_cache.json
+│   ├── countries.py     # Offline world country list (Babel/CLDR)
 │   ├── filters.py       # Title / hiring-post matching
 │   ├── scraper.py       # LinkedIn + Indeed via JobSpy
 │   ├── bayt.py          # Bayt.com via Selenium
@@ -41,7 +41,7 @@ hawkeye-jobs/
 └── CLAUDE.md
 ```
 
-Runtime files live in the per-OS data directory (see src/paths.py), never in the repo: `hawkeye.db`, `config.json`, `countries_cache.json`, `hawkeye.log`, `linkedin-profile/`.
+Runtime files live in the per-OS data directory (see src/paths.py), never in the repo: `hawkeye.db`, `config.json`, `hawkeye.log`, `linkedin-profile/`.
 
 ---
 
@@ -191,7 +191,7 @@ No build step. `index.html` loads `app.js` (an ES module that registers the Alpi
 
 `collect_settings()` loads `config.json` if present and shows a Yes/No picker (`↑↓` + enter). Yes reuses it. No (or no saved file) prompts for keywords (typed), then a searchable country list (`type` to filter, `↑↓` move, space select, `*` all visible, enter confirm), then **Confirm these countries: …?** (`Yes, continue` / `No, choose again`). Same confirm step after website checkboxes (`↑↓` move, space select, `a` all, `d` remove all, enter confirm). Writes `config.json`. If stdin is not a TTY, it falls back to numbered lists and `[Y/n]` confirms.
 
-Country names are fetched live from a public country API every `bash run.sh` run (`src/countries.py` tries FIRST.org, then a GitHub countries dump, then CountriesNow). If every request fails, `countries_cache.json` from a previous successful fetch is used. If the data-dir cache does not exist yet (first run after upgrading), the legacy repo-root `countries_cache.json` is read as a fallback (read-only: never copied or written; `countries.LEGACY_CACHE`). There is no hardcoded country picker list.
+Country names come from Babel's bundled CLDR data (`src/countries.py`), so the list needs no network: `load_countries()` returns Remote plus every two-letter CLDR territory in English, minus non-places (`_NOT_A_COUNTRY`: EU, UN, pseudo-locales, Canary Islands and similar sub-areas). `localized_countries(lang, base)` relabels it in Arabic or English for the window. `_LABEL_OVERRIDES` replaces a few CLDR names (PS → Palestine / فلسطين). Older versions fetched the list from public APIs and wrote `countries_cache.json`; that file is no longer read.
 
 `config.json` shape:
 

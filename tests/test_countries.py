@@ -1,7 +1,4 @@
-import json
-import os
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -9,129 +6,36 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _bootstrap  # noqa: F401  — isolates data dirs, adds src/ to sys.path
 
-from countries import CountryFetchError, load_countries, parse_countries
+from countries import load_countries, localized_countries
 from picker import SearchSelectState, apply_search_key
 
 
-SAMPLE_API = [
-    {"name": {"common": "Jordan"}, "cca2": "JO"},
-    {"name": {"common": "Germany"}, "cca2": "DE"},
-    {"name": {"common": "United Arab Emirates"}, "cca2": "AE"},
-]
-
-
-class ParseCountriesTests(unittest.TestCase):
-    def test_parses_and_sorts_by_name(self):
-        countries = parse_countries(SAMPLE_API)
-        self.assertEqual(
-            [(c["id"], c["label"]) for c in countries],
-            [
-                ("de", "Germany"),
-                ("jo", "Jordan"),
-                ("ae", "United Arab Emirates"),
-            ],
-        )
-
-    def test_parses_first_org_payload(self):
-        payload = {
-            "status": "ok",
-            "data": {
-                "DE": {"country": "Germany", "region": "Europe"},
-                "JO": {"country": "Jordan", "region": "ME"},
-            },
-        }
-        countries = parse_countries(payload)
-        self.assertEqual(
-            [(c["id"], c["label"]) for c in countries],
-            [("de", "Germany"), ("jo", "Jordan")],
-        )
-
-    def test_strips_un_the_suffix(self):
-        payload = {
-            "data": {
-                "AE": {"country": "United Arab Emirates (the)"},
-            }
-        }
-        countries = parse_countries(payload)
-        self.assertEqual(countries[0]["label"], "United Arab Emirates")
-
-    def test_parses_countriesnow_payload(self):
-        payload = {
-            "error": False,
-            "data": [
-                {"name": "Jordan", "Iso2": "JO"},
-                {"name": "Germany", "Iso2": "DE"},
-            ],
-        }
-        countries = parse_countries(payload)
-        self.assertEqual(
-            [(c["id"], c["label"]) for c in countries],
-            [("de", "Germany"), ("jo", "Jordan")],
-        )
-
-
 class LoadCountriesTests(unittest.TestCase):
-    def test_uses_api_and_writes_cache(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            cache = Path(tmp) / "cache.json"
-            countries = load_countries(
-                fetcher=lambda url: SAMPLE_API,
-                cache_path=cache,
-            )
-            ids = [c["id"] for c in countries]
-            self.assertEqual(ids[0], "remote")
-            self.assertIn("jo", ids)
-            self.assertTrue(cache.exists())
+    def test_offline_world_list_with_remote_first(self):
+        with patch("requests.get", side_effect=AssertionError("no network")):
+            countries = load_countries()
+        ids = [c["id"] for c in countries]
+        self.assertEqual(countries[0], {"id": "remote", "label": "Remote"})
+        self.assertGreater(len(ids), 200)
+        for cid in ("jo", "ae", "de", "us", "ps", "xk"):
+            self.assertIn(cid, ids)
+        for not_a_country in ("eu", "un", "zz", "xa", "ic"):
+            self.assertNotIn(not_a_country, ids)
+        self.assertEqual(len(ids), len(set(ids)))
 
-    def test_calls_api_even_when_cache_exists(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            cache = Path(tmp) / "cache.json"
-            cache.write_text(json.dumps([{"id": "jp", "label": "Japan"}]), encoding="utf-8")
-            countries = load_countries(
-                fetcher=lambda url: SAMPLE_API,
-                cache_path=cache,
-            )
-            ids = [c["id"] for c in countries]
-            self.assertIn("jo", ids)
-            self.assertIn("de", ids)
-            self.assertNotIn("jp", ids)
+    def test_sorted_by_english_name(self):
+        labels = [c["label"] for c in load_countries()[1:]]
+        self.assertEqual(labels, sorted(labels, key=str.casefold))
 
-    def test_falls_back_to_cache_when_api_fails(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            cache = Path(tmp) / "cache.json"
-            cache.write_text(json.dumps([{"id": "jp", "label": "Japan"}]), encoding="utf-8")
+    def test_palestine_named_plainly(self):
+        labels = {c["id"]: c["label"] for c in load_countries()}
+        self.assertEqual(labels["ps"], "Palestine")
+        self.assertEqual({c["id"]: c["label"] for c in localized_countries("ar", load_countries())}["ps"], "فلسطين")
 
-            def boom(url):
-                raise RuntimeError("offline")
-
-            countries = load_countries(fetcher=boom, cache_path=cache)
-            self.assertEqual(countries[0]["id"], "remote")
-            self.assertTrue(any(c["id"] == "jp" for c in countries))
-
-    def test_raises_when_api_and_cache_fail(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            cache = Path(tmp) / "missing.json"
-
-            def boom(url):
-                raise RuntimeError("offline")
-
-            with patch("countries.LEGACY_CACHE", Path(tmp) / "no-legacy.json"), \
-                 self.assertRaises(CountryFetchError):
-                load_countries(fetcher=boom, cache_path=cache)
-
-    def test_falls_back_to_legacy_repo_root_cache_without_copying(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            legacy = Path(tmp) / "legacy.json"
-            legacy.write_text(json.dumps([{"id": "jp", "label": "Japan"}]), encoding="utf-8")
-            cache = Path(tmp) / "data" / "cache.json"
-
-            def boom(url):
-                raise RuntimeError("offline")
-
-            with patch("countries.LEGACY_CACHE", legacy):
-                countries = load_countries(fetcher=boom, cache_path=cache)
-            self.assertTrue(any(c["id"] == "jp" for c in countries))
-            self.assertFalse(cache.exists())
+    def test_every_site_mapping_is_in_the_list(self):
+        from catalog import OVERRIDES
+        ids = {c["id"] for c in load_countries()}
+        self.assertEqual(set(OVERRIDES) - ids, set())
 
 
 class SearchSelectTests(unittest.TestCase):
@@ -173,15 +77,6 @@ class SearchSelectTests(unittest.TestCase):
         self.assertEqual(state.indexes(), [0])
 
 
-class CountryCachePathTests(unittest.TestCase):
-    def test_default_cache_lives_in_data_dir(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            with patch.dict(os.environ, {"HAWKEYE_DATA_DIR": tmp}):
-                load_countries(fetcher=lambda url: SAMPLE_API)
-            self.assertTrue((Path(tmp) / "countries_cache.json").exists())
-
-
-from countries import localized_countries, offline_countries
 
 
 class LocalizedCountriesTests(unittest.TestCase):
@@ -200,12 +95,6 @@ class LocalizedCountriesTests(unittest.TestCase):
         result = localized_countries("en", self.BASE)
         self.assertEqual([c["id"] for c in result], ["remote", "jo", "sa", "zz"])
         self.assertEqual(result[0]["label"], "Remote")
-
-    def test_offline_list_has_remote_and_overrides(self):
-        ids = [c["id"] for c in offline_countries()]
-        self.assertEqual(ids[0], "remote")
-        self.assertIn("jo", ids)
-        self.assertIn("ae", ids)
 
 
 if __name__ == "__main__":

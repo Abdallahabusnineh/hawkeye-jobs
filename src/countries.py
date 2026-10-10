@@ -1,190 +1,62 @@
-"""Fetch world countries from a public API when the user runs hawkeye-jobs."""
+"""World country list, built offline from Babel's bundled CLDR data (no network)."""
 
 from __future__ import annotations
 
-import json
 import re
-from pathlib import Path
-
-from paths import countries_cache_path
-
-# Pre-data-dir location of the cache; read-only fallback for the first run after upgrading.
-LEGACY_CACHE = Path(__file__).resolve().parent.parent / "countries_cache.json"
-
-API_URLS = [
-    "https://api.first.org/data/v1/countries?limit=300",
-    "https://raw.githubusercontent.com/mledoze/countries/master/countries.json",
-    "https://countriesnow.space/api/v0.1/countries/iso",
-]
-API_URL = API_URLS[0]
 
 REMOTE = {"id": "remote", "label": "Remote"}
 
+_REMOTE_LABELS = {"ar": "عن بُعد", "en": "Remote"}
 
-class CountryFetchError(RuntimeError):
-    """Raised when the live country API fails and there is no cached list."""
+# Two-letter CLDR codes that are not places a job can be in: unions, pseudo-locales,
+# unknown region, and sub-areas whose jobs are listed under their country.
+_NOT_A_COUNTRY = {"ZZ", "EU", "EZ", "UN", "QO", "XA", "XB",
+                  "AC", "CP", "CQ", "DG", "EA", "IC", "TA"}
+
+# Names we show instead of CLDR's, per language.
+_LABEL_OVERRIDES = {"PS": {"en": "Palestine", "ar": "فلسطين"}}
 
 
 def pretty_country_name(name: str) -> str:
-    """Drop UN-style suffixes like '(the)' from official country names."""
+    """Drop UN-style suffixes like '(the)' from official country names (older saved labels)."""
     text = str(name or "").strip()
     return re.sub(r"\s*\(the\)\s*$", "", text, flags=re.IGNORECASE).strip()
 
 
-def _rows_from_payload(payload) -> list:
-    if isinstance(payload, list):
-        return payload
-    if not isinstance(payload, dict):
-        return []
-    if payload.get("success") is False:
-        return []
-    data = payload.get("data")
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        rows = []
-        for code, info in data.items():
-            if isinstance(info, dict):
-                rows.append({
-                    "name": info.get("country") or info.get("name") or "",
-                    "cca2": info.get("cca2") or code,
-                })
-            elif isinstance(info, str):
-                rows.append({"name": info, "cca2": code})
-        return rows
-    return []
-
-
-def _country_from_row(row) -> dict | None:
-    if not isinstance(row, dict):
-        return None
-    name = ""
-    nested = row.get("name")
-    if isinstance(nested, dict):
-        name = str(nested.get("common") or nested.get("official") or "").strip()
-    elif isinstance(nested, str):
-        name = nested.strip()
-    if not name:
-        name = str(row.get("country") or row.get("label") or "").strip()
-    cca2 = str(
-        row.get("cca2") or row.get("Iso2") or row.get("iso2") or row.get("code") or ""
-    ).strip().lower()
-    if not name or len(cca2) != 2:
-        return None
-    return {"id": cca2, "label": pretty_country_name(name)}
-
-
-def parse_countries(payload) -> list:
-    """Turn a public country-API payload into [{id, label}, ...] sorted by name."""
-    countries = []
-    seen = set()
-    for row in _rows_from_payload(payload):
-        item = _country_from_row(row)
-        if not item or item["id"] in seen:
-            continue
-        seen.add(item["id"])
-        countries.append(item)
-    countries.sort(key=lambda item: item["label"].lower())
-    return countries
-
-
-def _with_remote(countries: list) -> list:
-    rest = [c for c in countries if c.get("id") != "remote"]
-    return [dict(REMOTE), *[dict(c) for c in rest]]
-
-
-def _save_cache(path: Path, countries: list) -> None:
-    path.write_text(json.dumps(countries, indent=2) + "\n", encoding="utf-8")
-
-
-def _load_cache(path: Path) -> list:
-    if not path.exists():
-        return []
+def _territories(language: str) -> dict:
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
-    if not isinstance(data, list):
-        return []
-    cleaned = []
-    for row in data:
-        if not isinstance(row, dict):
-            continue
-        loc_id = str(row.get("id") or "").strip().lower()
-        label = str(row.get("label") or "").strip()
-        if loc_id and label and loc_id != "remote":
-            cleaned.append({"id": loc_id, "label": label})
-    return cleaned
+        from babel import Locale
+        return Locale.parse(language).territories
+    except Exception:
+        return {}
 
 
-def _http_fetch(url: str):
-    import requests
-
-    response = requests.get(
-        url,
-        timeout=20,
-        headers={"User-Agent": "hawkeye-jobs/1.0"},
-    )
-    response.raise_for_status()
-    payload = response.json()
-    if isinstance(payload, dict) and payload.get("success") is False:
-        raise RuntimeError("country API rejected the request")
-    return payload
+def _label(code: str, language: str, territories: dict, fallback: str) -> str:
+    override = _LABEL_OVERRIDES.get(code, {}).get(language)
+    if override:
+        return override
+    return territories.get(code, fallback)
 
 
-def load_countries(fetcher=None, cache_path: Path | None = None) -> list:
-    """
-    Return Remote + world countries from a public API.
-
-    Every `bash run.sh` run calls the API. A local cache is only used if every
-    live request fails.
-    """
-    cache_path = cache_path or countries_cache_path()
-    fetch = fetcher or _http_fetch
-    for url in API_URLS:
-        try:
-            payload = fetch(url)
-            countries = parse_countries(payload)
-            if countries:
-                try:
-                    _save_cache(cache_path, countries)
-                except OSError:
-                    pass
-                return _with_remote(countries)
-        except Exception:
-            continue
-
-    cached = _load_cache(cache_path)
-    if not cached and not cache_path.exists():
-        cached = _load_cache(LEGACY_CACHE)
-    if cached:
-        return _with_remote(cached)
-    raise CountryFetchError(
-        "Could not load countries from the public API. Check your internet and try again."
-    )
-
-
-_REMOTE_LABELS = {"ar": "عن بُعد", "en": "Remote"}
-
-# CLDR names this code for an unknown region; it is not a country, so keep the base label.
-_NOT_A_COUNTRY = {"ZZ"}
-
-
-def offline_countries() -> list:
-    """Remote + the countries we have site-specific mappings for — used when the country API is unreachable."""
-    from catalog import OVERRIDES
-    rows = [{"id": cid, "label": spec["label"]} for cid, spec in OVERRIDES.items()]
+def load_countries() -> list:
+    """Remote + every country in English, sorted by name. Offline; never fails."""
+    territories = _territories("en")
+    rows = [
+        {"id": code.lower(), "label": _label(code, "en", territories, code)}
+        for code in territories
+        if len(code) == 2 and code.isalpha() and code not in _NOT_A_COUNTRY
+    ]
+    if not rows:
+        # Babel data missing (should not happen): fall back to the countries we have site mappings for.
+        from catalog import OVERRIDES
+        rows = [{"id": cid, "label": spec["label"]} for cid, spec in OVERRIDES.items()]
     rows.sort(key=lambda c: c["label"].casefold())
-    return _with_remote(rows)
+    return [dict(REMOTE), *rows]
 
 
 def localized_countries(language: str, base: list) -> list:
     """[{id, label}] in the UI language (Babel/CLDR, offline), Remote first, the rest sorted by label."""
-    try:
-        from babel import Locale
-        territories = Locale.parse(language).territories
-    except Exception:
-        territories = {}
+    territories = _territories(language)
     rest = []
     for c in base:
         if c["id"] == "remote":
@@ -192,7 +64,7 @@ def localized_countries(language: str, base: list) -> list:
         code = c["id"].upper()
         label = c["label"]
         if code not in _NOT_A_COUNTRY:
-            label = territories.get(code, label)
+            label = _label(code, language, territories, label)
         rest.append({"id": c["id"], "label": label})
     rest.sort(key=lambda c: c["label"].casefold())
     return [{"id": "remote", "label": _REMOTE_LABELS.get(language, "Remote")}] + rest
