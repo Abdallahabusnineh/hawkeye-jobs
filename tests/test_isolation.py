@@ -1,11 +1,11 @@
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _bootstrap  # noqa: F401  — isolates data dirs, adds src/ to sys.path
-
-import platformdirs
 
 import paths
 
@@ -32,8 +32,13 @@ class IsolationTests(unittest.TestCase):
     def test_data_dir_is_in_bootstrap_temp_dir(self):
         data = paths.data_dir()
         self.assertTrue(_inside(data, _bootstrap.TEMP_ROOT), data)
-        self.assertFalse(_inside(data, platformdirs.user_data_dir("hawkeye-jobs", appauthor=False)))
+        self.assertFalse(_inside(data, _bootstrap.REAL_USER_DATA_DIR("hawkeye-jobs", appauthor=False)))
         self.assertFalse(_inside(data, REPO_ROOT))
+
+    def test_data_dir_with_cleared_environ_stays_in_temp_dir(self):
+        with patch.dict(os.environ, {}, clear=True):
+            data = paths.data_dir()
+        self.assertTrue(_inside(data, _bootstrap.TEMP_ROOT), data)
 
     def test_linkedin_profile_dir_is_in_bootstrap_temp_dir(self):
         profile = paths.linkedin_profile_dir()
