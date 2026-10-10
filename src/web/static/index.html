@@ -11,7 +11,15 @@
   <script defer src="vendor/alpine.min.js"></script>
 </head>
 <body x-data="hawkeye">
-  <div class="boot" x-show="!ready && !fatal"><p>Hawkeye Jobs</p></div>
+  <div class="boot" x-show="!ready && !fatal">
+    <div>
+      <p>Hawkeye Jobs</p>
+      <div class="boot-slow">
+        <p>تعذّر تشغيل الواجهة. أغلق التطبيق، ثم افتحه من جديد.</p>
+        <p lang="en" dir="ltr">The interface could not start. Close the app and open it again.</p>
+      </div>
+    </div>
+  </div>
 
   <div class="fatal" x-cloak x-show="fatal" role="alert">
     <div>
@@ -24,7 +32,7 @@
     <header class="topbar">
       <span class="brand">Hawkeye Jobs</span>
       <div x-show="!inWizard()">
-        <button type="button" class="btn" x-show="!run" @click="startSearch()" x-text="t('run.start')"></button>
+        <button type="button" class="btn" x-show="!run" :disabled="starting" @click="startSearch()" x-text="t('run.start')"></button>
         <button type="button" class="btn-danger" x-show="run" :disabled="!!(run && run.stopping)" @click="stopSearch()"
                 x-text="run && run.stopping ? t('run.stopping') : t('run.stop')"></button>
       </div>
@@ -201,7 +209,7 @@
           <div class="sources">
             <template x-for="id in sourceOrder" :key="id">
               <label class="source" :class="{ 'is-disabled': sourceDisabled(id) }">
-                <input type="checkbox" :checked="search.sources.includes(id)" :disabled="sourceDisabled(id)" @change="toggleSource(id)">
+                <input type="checkbox" :checked="search.sources.includes(id)" :disabled="sourceDisabled(id) && !search.sources.includes(id)" @change="toggleSource(id)">
                 <span>
                   <strong x-text="t('source.' + id)"></strong>
                   <small x-text="sourceDisabled(id) ? t('search.browser_needed') : t('source.' + id + '.hint')"></small>

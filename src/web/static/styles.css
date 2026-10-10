@@ -15,6 +15,7 @@
   --accent-text: #ffffff;
   --accent-soft: #eff6ff;
   --danger: #b91c1c;
+  --danger-text: #ffffff;
   --ok: #15803d;
   --amber: #d97706;
   --warn-bg: #fffbeb;
@@ -41,6 +42,7 @@
     --accent: #3b82f6;
     --accent-soft: #172554;
     --danger: #f87171;
+    --danger-text: #1b0606;
     --ok: #4ade80;
     --amber: #fbbf24;
     --warn-bg: #2a2108;
@@ -63,6 +65,7 @@
   --accent: #3b82f6;
   --accent-soft: #172554;
   --danger: #f87171;
+  --danger-text: #1b0606;
   --ok: #4ade80;
   --amber: #fbbf24;
   --warn-bg: #2a2108;
@@ -84,6 +87,9 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 button:disabled { opacity: .55; cursor: not-allowed; }
 
 .boot, .fatal { display: grid; place-items: center; min-height: 100vh; padding: 24px; text-align: center; color: var(--muted); }
+
+.boot-slow { opacity: 0; margin-top: 16px; animation: boot-reveal 0s 10s forwards; }
+@keyframes boot-reveal { to { opacity: 1; } }
 
 .shell {
   display: grid;
@@ -128,7 +134,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 }
 .btn { background: var(--accent); color: var(--accent-text); border: 1px solid var(--accent); padding: 7px 14px; }
 .btn-ghost { background: var(--surface); color: var(--text); border: 1px solid var(--border); padding: 6px 12px; font-weight: 500; }
-.btn-danger { background: var(--danger); color: #ffffff; border: 1px solid var(--danger); padding: 7px 14px; }
+.btn-danger { background: var(--danger); color: var(--danger-text); border: 1px solid var(--danger); padding: 7px 14px; }
 .btn-danger-ghost { background: transparent; color: var(--danger); border: 1px solid var(--danger); padding: 6px 12px; }
 .btn-small { background: var(--accent); color: var(--accent-text); border: 1px solid var(--accent); padding: 4px 10px; font-size: 13px; }
 .btn-ghost-small { background: var(--surface); border: 1px solid var(--border); padding: 4px 10px; font-size: 13px; font-weight: 500; }

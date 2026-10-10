@@ -55,6 +55,9 @@ function hawkeye() {
     wizard: { step: 1 },
     timers: { refresh: null, text: null, estimate: null, toast: null },
     jobsRequest: 0,
+    finishedRunIds: [],
+    terminalEvents: 0,
+    starting: false,
 
     async init() {
       try {
@@ -126,7 +129,7 @@ function hawkeye() {
     // ── loading ──────────────────────────────────────────────────────
     async refreshState() {
       this.state = await api.get("/api/state");
-      this.run = L.fromSnapshot(this.state.run, this.run);
+      this.run = L.fromSnapshot(this.state.run, this.run, Date.now(), this.finishedRunIds);
     },
     async loadCountries() {
       this.countries = await api.get(`/api/countries?lang=${this.lang}`);
@@ -157,7 +160,13 @@ function hawkeye() {
         this.handleEvent(event);
       };
     },
+    markFinished(runId) {
+      this.terminalEvents += 1;
+      if (typeof runId === "number") this.finishedRunIds = [...this.finishedRunIds, runId].slice(-20);
+    },
     handleEvent(event) {
+      if (event.type === "run_finished") this.markFinished(event.run_id);
+      else if (event.type === "run_error") this.markFinished(this.run ? this.run.run_id : null);
       this.run = L.applyEvent(this.run, event);
       switch (event.type) {
         case "query_done":
@@ -234,6 +243,9 @@ function hawkeye() {
         if (request !== this.jobsRequest) return;
         this.jobs.items = append ? [...this.jobs.items, ...data.jobs] : data.jobs;
         this.jobs.total = data.total;
+      } catch (error) {
+        if (request !== this.jobsRequest) return; // superseded: a newer request owns the list
+        throw error;
       } finally {
         if (request === this.jobsRequest) this.jobs.loading = false;
       }
@@ -287,7 +299,9 @@ function hawkeye() {
 
     // ── running a search ─────────────────────────────────────────────
     async startSearch() {
-      if (this.run) return;
+      if (this.run || this.starting) return;
+      this.starting = true;
+      const terminalBefore = this.terminalEvents;
       let data = null;
       try {
         data = await api.post("/api/runs");
@@ -299,10 +313,13 @@ function hawkeye() {
         }
         this.showError(error);
         return;
+      } finally {
+        this.starting = false;
       }
-      if (!this.run) {
+      if (!this.run && this.terminalEvents === terminalBefore) {
         const placeholder = L.startingRun();
         this.run = data && typeof data.run_id === "number" ? { ...placeholder, run_id: data.run_id } : placeholder;
+        setTimeout(() => this.scheduleRefresh(0), L.STARTING_TTL_MS + 1000);
       }
       this.scheduleRefresh(0); // the real snapshot (total/done) arrives even if run_started was missed
       this.go("jobs");

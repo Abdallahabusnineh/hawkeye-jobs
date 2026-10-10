@@ -75,6 +75,15 @@ test("the starting placeholder expires after 30 seconds", () => {
   assert.equal(L.applyEvent(starting, { type: "run_started", run_id: 2, total: 1 }).since, undefined);
 });
 
+test("fromSnapshot ignores a snapshot of an already finished run", () => {
+  const snap = { run_id: 7, trigger: "manual", total: 2, done: 2, found: 1, new: 1 };
+  assert.equal(L.fromSnapshot(snap, null, 0, [3, 7]), null);
+  assert.equal(L.fromSnapshot(snap, null, 0, [3]).run_id, 7);
+  const starting = L.startingRun(1000);
+  assert.equal(L.fromSnapshot(null, starting, 2000, [7]), starting);
+  assert.equal(L.fromSnapshot(null, starting, 40000, [7]), null);
+});
+
 test("progressPercent is bounded", () => {
   assert.equal(L.progressPercent(null), 0);
   assert.equal(L.progressPercent({ done: 3, total: 4 }), 75);

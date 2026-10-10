@@ -1,6 +1,6 @@
 /*
  * logic.js — Pure helpers for the Hawkeye Jobs window (no DOM, no network).
- * Unit-tested with `node --test tests/js/`. The constants mirror the backend
+ * Unit-tested with `node --test tests/js/*.test.mjs` (a directory argument fails on Node 24). The constants mirror the backend
  * (tests/test_frontend.py checks SOURCE_ORDER, BROWSER_SOURCES, AUTO_HOURS).
  */
 
@@ -77,7 +77,8 @@ export function applyEvent(run, event) {
 }
 
 // GET /api/state -> run snapshot {run_id, trigger, total, done, found, new} (no current query).
-export function fromSnapshot(snapshot, previous, now = Date.now()) {
+export function fromSnapshot(snapshot, previous, now = Date.now(), finished = []) {
+  if (snapshot && finished.includes(snapshot.run_id)) snapshot = null;
   if (!snapshot) {
     return previous && previous.run_id === null && now - previous.since < STARTING_TTL_MS ? previous : null;
   }
