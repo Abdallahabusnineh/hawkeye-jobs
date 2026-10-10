@@ -30,6 +30,13 @@ if FROZEN:
     for _name in ("stdout", "stderr"):
         if getattr(sys, _name) is None:
             setattr(sys, _name, open(os.devnull, "w", encoding="utf-8"))
+    # The bundled Python has no system certificate list, so urllib (undetected-chromedriver
+    # downloading chromedriver) failed every HTTPS request. Use certifi's list, as requests does.
+    try:
+        import certifi
+        os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+    except ImportError:
+        pass
 
 import uvicorn
 
@@ -161,6 +168,13 @@ def self_test() -> list:
             __import__(module)
         except Exception as exc:
             problems.append(f"import {module}: {exc!r}")
+    if FROZEN:
+        try:
+            import ssl
+            if not ssl.create_default_context().cert_store_stats().get("x509_ca"):
+                problems.append("no trusted certificates: urllib HTTPS (chromedriver download) would fail")
+        except Exception as exc:
+            problems.append(f"ssl: {exc!r}")
     from web.server import STATIC_DIR
     for name in ("index.html", "app.js", "i18n/ar.json", "i18n/en.json", "vendor/alpine.min.js"):
         if not (STATIC_DIR / name).is_file():

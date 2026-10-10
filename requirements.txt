@@ -3,6 +3,8 @@
 python-jobspy==1.1.80
 pandas==2.3.3
 requests==2.33.1
+# CA certificates for the packaged app (its Python has no system list; see app.py).
+certifi==2026.02.25
 beautifulsoup4==4.14.3
 undetected-chromedriver==3.5.5
 selenium==4.43.0
