@@ -1,0 +1,2 @@
+# Vendored files are checksum-pinned (tests/test_frontend.py): never convert their line endings.
+src/web/static/vendor/** -text

@@ -201,14 +201,17 @@ class ThrottleThreadTests(unittest.TestCase):
                     starts.append(time.monotonic())
 
         threads = [threading.Thread(target=worker) for _ in range(2)]
+        begin = time.monotonic()
         for t in threads:
             t.start()
         for t in threads:
             t.join()
         starts.sort()
         self.assertEqual(len(starts), 6)
-        gaps = [b - a for a, b in zip(starts, starts[1:])]
-        self.assertTrue(all(g >= gap - 0.01 for g in gaps), gaps)
+        # The k-th request may not start before k gaps have passed. Measured this way, a thread
+        # paused between its slot and the timestamp (busy CI machine) can only make a start later.
+        offsets = [round(t - begin, 3) for t in starts]
+        self.assertTrue(all(off >= k * gap - 0.01 for k, off in enumerate(offsets)), offsets)
 
 
 if __name__ == "__main__":

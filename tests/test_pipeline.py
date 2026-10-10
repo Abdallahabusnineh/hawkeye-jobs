@@ -468,12 +468,15 @@ class ThrottleTests(PipelineTestCase):
 
         self.rec.behaviour["linkedin_posts"] = stamp
         self.rec.behaviour["linkedin"] = stamp_http
+        begin = time.monotonic()
         self.run_search(settings(keywords=("Java", "Kotlin"), sources=("linkedin", "linkedin_posts")),
                         delays={"linkedin": (0.05, 0.05), "linkedin_posts": (0.1, 0.1)})
         starts.sort()
         self.assertGreaterEqual(len(starts), 4)
-        gaps = [b - a for a, b in zip(starts, starts[1:])]
-        self.assertTrue(all(g >= 0.1 - 0.01 for g in gaps), gaps)
+        # The k-th request may not start before k gaps (0.1 s, the larger one) have passed. Measured
+        # this way, a thread paused after its slot (busy CI machine) can only make a start later.
+        offsets = [round(t - begin, 3) for t in starts]
+        self.assertTrue(all(off >= k * 0.1 - 0.01 for k, off in enumerate(offsets)), offsets)
 
     def test_group_gap_is_per_field_maximum(self):
         built = []

@@ -419,6 +419,8 @@ class ActionTests(ApiTestCase):
         self.assertFalse(self.db.exists())
         self.assertEqual(self.get("/api/state").json()["job_counts"]["new"], 0)  # fresh DB on next open
 
+    @unittest.skipIf(sys.platform == "win32", "symlinks and deleting open files are POSIX behaviour; "
+                     "on Windows an open database makes reset answer files_in_use (tested below)")
     def test_reset_never_leaves_data_dir_or_follows_symlinks(self):
         outside = tempfile.TemporaryDirectory()
         self.addCleanup(outside.cleanup)

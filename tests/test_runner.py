@@ -53,6 +53,9 @@ class FakeSearch:
 class RunnerTestCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
+        # A cleanup, not tearDown: cleanups run last-in-first-out, so locks a test registers later
+        # are released before the folder is deleted (Windows cannot delete an open file).
+        self.addCleanup(self.tmp.cleanup)
         self.db = Path(self.tmp.name) / "t.db"
         self.lock_path = Path(self.tmp.name) / "run.lock"
         self.app = {"last_posts_run": None, "language": "en"}
@@ -60,9 +63,6 @@ class RunnerTestCase(unittest.TestCase):
         self.notified = []
         self.search = FakeSearch()
         self.settings = dict(SETTINGS)
-
-    def tearDown(self):
-        self.tmp.cleanup()
 
     def make(self, **kwargs):
         def saver(patch):
