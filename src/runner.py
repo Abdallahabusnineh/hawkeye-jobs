@@ -85,6 +85,7 @@ class RunManager:
         self._last_posts_run = None
         self._current = None
         self._exclusive = False
+        self._closing = False
 
     # ── subscribers ─────────────────────────────────────────────────────
 
@@ -140,6 +141,11 @@ class RunManager:
         worker.join(timeout)
         return not worker.is_alive()
 
+    def close(self) -> None:
+        """Refuse every later start() (app shutdown); a running search is not touched."""
+        with self._state_lock:
+            self._closing = True
+
     def cancel(self) -> bool:
         with self._state_lock:
             if self._worker is None or not self._worker.is_alive():
@@ -170,6 +176,8 @@ class RunManager:
         if self._exclusive:  # checked before taking the lock so the holder's own thread cannot deadlock
             raise RunInProgress("the app is busy with an exclusive operation")
         with self._state_lock:
+            if self._closing:
+                raise RunInProgress("the app is shutting down")
             if self._worker is not None and self._worker.is_alive():
                 raise RunInProgress("a search is already running in the app")
             if not self._run_lock.acquire():

@@ -119,7 +119,7 @@ Pass a `threading.Event` as `cancel`, or press Ctrl+C: a `KeyboardInterrupt` on 
 
 - `free_port()` picks a free port on 127.0.0.1; `build(port=None)` makes a per-launch token (`secrets.token_urlsafe(32)`), the `RunManager` (with `DesktopNotifier`), `AutoSearch`, the FastAPI app and a `uvicorn.Server` (host `127.0.0.1`, `access_log=False` because the token appears in `/api/events?token=`, `lifespan="off"`). It returns an `AppParts` dataclass and starts nothing.
 - `main()` runs `_prepare_data()` (legacy config import, `recover_interrupted_runs()`, legacy `seen_jobs.json` import), serves uvicorn on a daemon thread, starts `AutoSearch`, reports pending jobs once (`report_pending_now`), then opens a pywebview window on `window_url(port, token)`. `--no-window` only prints the URL (UI development, browser checks) and waits for Ctrl+C.
-- `shutdown(parts, wait_seconds=35)`: cancel the running search, wait for it (in-flight requests finish, Chrome closes), stop `AutoSearch`, close SSE subscribers, set `server.should_exit`.
+- `shutdown(parts, wait_seconds=35)`: stop `AutoSearch`, `manager.close()` (every later `start()` raises `RunInProgress`, so neither a tick nor `POST /runs` can start a new search), cancel the running search and wait for it (in-flight requests finish, Chrome closes; warns if it is still alive), close SSE subscribers, set `server.should_exit`. A failure in `report_pending_now()` at launch is logged and retried next launch; with `--no-window` a dead server thread exits non-zero.
 
 ### Server guards (`src/web/server.py`)
 
@@ -129,7 +129,7 @@ One middleware: the `Host` header must be `127.0.0.1:<port>` or `localhost:<port
 
 - `RunManager.start(trigger)` allows one search at a time: an in-process lock plus `RunLock` (`src/run_lock.py`, file `<data dir>/run.lock`, non-blocking OS lock released by the OS if the holder dies) shared with terminal mode. It runs `pipeline.run_search` on a worker thread, records each finished query in `run_queries`, keeps a `current` progress snapshot, fans events out to SSE subscribers (bounded queues; a slow subscriber is dropped and the UI reconnects) and limits LinkedIn posts to once per 24 h. It raises `RunInProgress` / `NoSearchSettings`.
 - `exclusive()` is a context manager that refuses (`RunInProgress`) while a search runs and blocks new ones inside the block. Reset and the LinkedIn login window use it.
-- `AutoSearch` ticks every 60 s and starts a `trigger="auto"` run when enabled, onboarding is done and the configured hours have passed since the last finished run. After any attempt (started or refused) it backs off a full interval.
+- `AutoSearch` ticks every 60 s and starts a `trigger="auto"` run when enabled, onboarding is done and the configured hours have passed since the last finished run. After any attempt it made (started, failed, or no settings) it backs off a full interval; when another run holds the lock it simply tries again next tick.
 - `settings.py` has a `_CONFIG_LOCK` (RLock) that serialises every write to `config.json` (search settings and the `app` section).
 
 ### Reporting and notifications

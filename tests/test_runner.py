@@ -124,6 +124,13 @@ class StartTests(RunnerTestCase):
         self.assertTrue(all(e.get("trigger") == "auto" for e in self.drain(q) if e["type"].startswith(("run_", "query_"))))
         self.assertEqual(self.search.calls[0]["trigger"], "auto")
 
+    def test_start_after_close_is_refused(self):
+        manager = self.make()
+        manager.close()
+        with self.assertRaises(RunInProgress):
+            manager.start()
+        self.assertEqual(self.search.calls, [])
+
     def test_second_start_while_running_is_refused(self):
         hold = threading.Event()
         self.search = FakeSearch(hold=hold)

@@ -92,10 +92,12 @@ def _serve(parts: AppParts) -> threading.Thread:
 
 
 def shutdown(parts, wait_seconds: float = SHUTDOWN_WAIT_SECONDS) -> None:
-    """Stop a running search gracefully, then the scheduler, event streams and server."""
-    parts.manager.cancel()
-    parts.manager.wait(wait_seconds)
+    """Stop the scheduler, refuse new searches, stop the running one gracefully, then the streams and server."""
     parts.auto.stop()
+    parts.manager.close()
+    parts.manager.cancel()
+    if not parts.manager.wait(wait_seconds):
+        log.warning("A search was still running %s s after shutdown began", wait_seconds)
     parts.manager.close_subscribers()
     parts.server.should_exit = True
 
@@ -105,15 +107,22 @@ def main(argv=None) -> None:
     setup_logging()
     _prepare_data()
     parts = build()
-    thread = _serve(parts)
-    parts.auto.start()
-    parts.manager.report_pending_now()
-    url = window_url(parts.port, parts.token)
+    thread = None
     try:
+        thread = _serve(parts)
+        parts.auto.start()
+        try:
+            parts.manager.report_pending_now()
+        except Exception:
+            log.exception("Reporting pending jobs failed; they will be retried at the next launch")
+        url = window_url(parts.port, parts.token)
         if args.no_window:
             print(f"Hawkeye Jobs is running at {url}  (Ctrl+C to stop)")
             while thread.is_alive():
                 time.sleep(0.5)
+            log.error("The local server stopped unexpectedly")
+            print("The local server stopped unexpectedly.", file=sys.stderr)
+            sys.exit(1)
         else:
             import webview
             webview.create_window(WINDOW_TITLE, url, width=1200, height=800, min_size=(360, 600))
@@ -122,7 +131,8 @@ def main(argv=None) -> None:
         pass
     finally:
         shutdown(parts)
-        thread.join(timeout=5)
+        if thread is not None:
+            thread.join(timeout=5)
 
 
 def _parse(argv):
