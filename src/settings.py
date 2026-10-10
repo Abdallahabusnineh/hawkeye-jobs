@@ -2,8 +2,10 @@
 
 import json
 import logging
+import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 from catalog import SOURCE_ORDER, SOURCES, get_location, normalize_location_id, source_choice_label
@@ -15,6 +17,31 @@ log = logging.getLogger(__name__)
 
 ROOT = Path(__file__).resolve().parent.parent
 SEARCH_KEYS = ("keywords", "locations", "sources")
+LANGUAGES = ("ar", "en")
+THEMES = ("auto", "light", "dark")
+AUTO_HOURS = (2, 4, 6, 12, 24)
+USER_APP_KEYS = ("language", "theme", "auto_search", "onboarding_done", "update_check")
+_INTERNAL_APP_KEYS = ("last_update_check", "latest_version", "last_posts_run")
+APP_DEFAULTS = {
+    "language": "ar",
+    "theme": "auto",
+    "auto_search": {"enabled": True, "hours": 6},
+    "onboarding_done": False,
+    "update_check": True,
+    "last_update_check": None,
+    "latest_version": None,
+    "last_posts_run": None,
+}
+MAX_KEYWORDS = 20
+MAX_KEYWORD_LENGTH = 100
+
+
+class SettingsError(ValueError):
+    """Invalid settings. `errors` maps each bad field to a code: required / invalid / too_long / too_many / unknown."""
+
+    def __init__(self, errors: dict):
+        super().__init__(", ".join(f"{k}: {v}" for k, v in errors.items()))
+        self.errors = errors
 
 
 def parse_selection(raw: str, count: int) -> list:
@@ -65,20 +92,133 @@ def load_config(path=None):
     }
 
 
+def _read_config_dict(path: Path) -> dict:
+    if not path.exists():
+        return {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def _write_json_atomic(path: Path, data: dict) -> None:
+    """Write to a temp file in the same folder, then rename — a crash never leaves half a file."""
+    fd, tmp = tempfile.mkstemp(prefix=".config-", suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def save_config(data: dict, path=None) -> None:
     """Write keywords/locations/sources, keeping any other keys already in the file (e.g. the app's settings)."""
     path = Path(path) if path else config_path()
-    existing = {}
-    if path.exists():
-        try:
-            loaded = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(loaded, dict):
-                existing = loaded
-        except (OSError, json.JSONDecodeError):
-            existing = {}
+    existing = _read_config_dict(path)
     for key in SEARCH_KEYS:
         existing[key] = list(data[key])
-    path.write_text(json.dumps(existing, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    _write_json_atomic(path, existing)
+
+
+def _valid_app_value(key: str, value) -> bool:
+    if key == "language":
+        return value in LANGUAGES
+    if key == "theme":
+        return value in THEMES
+    if key == "auto_search":
+        return (isinstance(value, dict) and set(value) == {"enabled", "hours"}
+                and isinstance(value["enabled"], bool) and value["hours"] in AUTO_HOURS)
+    if key in ("onboarding_done", "update_check"):
+        return isinstance(value, bool)
+    if key in _INTERNAL_APP_KEYS:
+        return value is None or isinstance(value, str)
+    return False
+
+
+def load_app_settings(path=None) -> dict:
+    """The app's settings with defaults filled in; invalid stored values fall back to defaults."""
+    path = Path(path) if path else config_path()
+    stored = _read_config_dict(path).get("app")
+    stored = stored if isinstance(stored, dict) else {}
+    result = json.loads(json.dumps(APP_DEFAULTS))  # deep copy
+    for key in APP_DEFAULTS:
+        if key in stored and _valid_app_value(key, stored[key]):
+            result[key] = stored[key]
+    return result
+
+
+def save_app_settings(patch: dict, path=None) -> dict:
+    """Validate `patch`, merge it into config.json → "app", write atomically, return the full settings."""
+    path = Path(path) if path else config_path()
+    errors = {}
+    for key, value in patch.items():
+        if key not in APP_DEFAULTS:
+            errors[key] = "unknown"
+        elif not _valid_app_value(key, value):
+            errors[key] = "invalid"
+    if errors:
+        raise SettingsError(errors)
+    data = _read_config_dict(path)
+    app = load_app_settings(path)
+    app.update(patch)
+    data["app"] = app
+    _write_json_atomic(path, data)
+    return app
+
+
+def validate_search_settings(data: dict, allowed_locations: set) -> dict:
+    """Clean and validate search settings coming from the UI. Raises SettingsError with every bad field."""
+    errors = {}
+    keywords = data.get("keywords")
+    cleaned_keywords = []
+    if not isinstance(keywords, list) or not all(isinstance(k, str) for k in keywords):
+        errors["keywords"] = "invalid"
+    else:
+        for keyword in (k.strip() for k in keywords):
+            if keyword and keyword not in cleaned_keywords:
+                cleaned_keywords.append(keyword)
+        if not cleaned_keywords:
+            errors["keywords"] = "required"
+        elif any(len(k) > MAX_KEYWORD_LENGTH for k in cleaned_keywords):
+            errors["keywords"] = "too_long"
+        elif len(cleaned_keywords) > MAX_KEYWORDS:
+            errors["keywords"] = "too_many"
+
+    locations = data.get("locations")
+    cleaned_locations = []
+    if not isinstance(locations, list) or not all(isinstance(x, str) for x in locations):
+        errors["locations"] = "invalid"
+    else:
+        for loc in (normalize_location_id(x) for x in locations):
+            if loc and loc not in cleaned_locations:
+                cleaned_locations.append(loc)
+        if not cleaned_locations:
+            errors["locations"] = "required"
+        elif any(loc not in allowed_locations for loc in cleaned_locations):
+            errors["locations"] = "invalid"
+
+    sources = data.get("sources")
+    cleaned_sources = []
+    if not isinstance(sources, list) or not all(isinstance(x, str) for x in sources):
+        errors["sources"] = "invalid"
+    else:
+        for source in sources:
+            if source not in cleaned_sources:
+                cleaned_sources.append(source)
+        if not cleaned_sources:
+            errors["sources"] = "required"
+        elif any(s not in SOURCE_ORDER for s in cleaned_sources):
+            errors["sources"] = "invalid"
+
+    if errors:
+        raise SettingsError(errors)
+    return {"keywords": cleaned_keywords, "locations": cleaned_locations, "sources": cleaned_sources}
 
 
 def migrate_legacy_config(root: Path = ROOT, target=None) -> bool:

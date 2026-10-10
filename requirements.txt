@@ -5,3 +5,9 @@ beautifulsoup4
 undetected-chromedriver
 setuptools
 platformdirs
+fastapi
+uvicorn
+pywebview
+desktop-notifier
+babel
+httpx2
