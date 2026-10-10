@@ -30,14 +30,16 @@ for package in ("jobspy", "tls_client", "babel", "webview", "desktop_notifier",
 if sys.platform == "win32":
     hiddenimports += collect_submodules("winrt")
 
-# tls_client ships its Go library for every OS; keep only the one this machine loads (the others
-# are not valid binaries here and break the build). Its .so files also look like modules to the scan.
+# tls_client ships its Go library for every OS and loads one by name at import. Bundle only this
+# OS's files, taken straight from the package folder: the others are not valid binaries here and
+# break the build, and the import scan mistakes the .so files for modules (so it may skip them).
+import tls_client
+_TLS_DIR = Path(tls_client.__file__).parent / "dependencies"
 _TLS_EXT = {"darwin": ".dylib", "win32": ".dll"}.get(sys.platform, ".so")
 hiddenimports = [h for h in hiddenimports if not h.startswith("tls_client.dependencies.tls-client")]
-_tls = [(src, dest) for src, dest in binaries + datas if "tls-client-" in Path(src).name]
-binaries = [b for b in binaries if b not in _tls]
-datas = [d for d in datas if d not in _tls]
-datas += sorted({(src, dest) for src, dest in _tls if src.endswith(_TLS_EXT)})
+binaries = [b for b in binaries if "tls-client-" not in Path(b[0]).name]
+datas = [d for d in datas if "tls-client-" not in Path(d[0]).name]
+datas += [(str(p), "tls_client/dependencies") for p in sorted(_TLS_DIR.glob("tls-client-*" + _TLS_EXT))]
 
 a = Analysis(
     [str(ROOT / "packaging" / "launcher.py")],

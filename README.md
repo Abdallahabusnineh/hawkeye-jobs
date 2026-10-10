@@ -1,25 +1,51 @@
-# hawkeye-jobs
+<p align="center">
+  <img src="packaging/icon.png" alt="Hawkeye Jobs icon" width="128" height="128">
+</p>
 
-**Download the app:** [abdallahabusnineh.github.io/hawkeye-jobs](https://abdallahabusnineh.github.io/hawkeye-jobs/) — or pick a file from the [latest release](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest) (macOS, Windows, Linux). Free, no account, runs on your computer.
+<h1 align="center">Hawkeye Jobs</h1>
 
-Job hunter, as a desktop app or in the terminal. You choose the search keywords, countries, and sources; it scrapes LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts, then emails only new listings.
+<p align="center">
+  A free, open-source job finder for LinkedIn, Indeed, Bayt, NaukriGulf and Google Jobs.<br>
+  It runs entirely on your computer: no server, no account. Arabic and English.<br>
+  <b>تطبيق مجاني ومفتوح المصدر للبحث عن الوظائف، يعمل كاملًا على جهازك، بالعربية والإنجليزية.</b>
+</p>
 
-Deduplicates across sources and across runs. Nothing runs in the background — you start it when you want results.
+<p align="center">
+  <a href="https://abdallahabusnineh.github.io/hawkeye-jobs/"><b>Download</b></a> ·
+  <a href="https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest">Latest release</a> ·
+  <a href="docs/ARCHITECTURE.md">How it works</a>
+</p>
+
+| Jobs (Arabic) | Search |
+|---|---|
+| ![Jobs page in Arabic](docs/screenshots/jobs-ar.png) | ![Search page in Arabic](docs/screenshots/search-ar.png) |
+
+![Jobs page in English, dark theme](docs/screenshots/jobs-en-dark.png)
+
+<sub>Screenshots use sample jobs.</sub>
+
+## Download
+
+| System | File |
+|---|---|
+| macOS (Apple M1 or newer) | [HawkeyeJobs-macOS-AppleSilicon.dmg](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-macOS-AppleSilicon.dmg) |
+| macOS (Intel) | [HawkeyeJobs-macOS-Intel.dmg](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-macOS-Intel.dmg) |
+| Windows 10 / 11 | [HawkeyeJobs-Windows.zip](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows.zip) |
+| Linux (x86-64) | [HawkeyeJobs-Linux.tar.gz](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Linux.tar.gz) |
+
+The app is not signed with a paid certificate, so the first launch shows a warning: on macOS open **System Settings → Privacy & Security → Open Anyway**; on Windows click **More info → Run anyway**. Bayt, NaukriGulf, Google Jobs and LinkedIn posts need [Google Chrome](https://www.google.com/chrome/).
 
 ## Features
 
-- Interactive checkboxes: arrows move, space selects, enter confirms
-- Built-in world country list (offline, no network) — type to search, space to select
-- Remembers your last choices
-- Searches LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts
-- Keeps titles that match your keywords
-- Only includes jobs posted in the last 7 days
-- Prints new jobs in the terminal and emails an HTML digest
-- Remembers every job it has found (with a status: new / saved / applied / dismissed) so you are not notified twice
-- Waits politely between requests to each site so your accounts and connection are not flagged
-- Ctrl+C stops a search cleanly; jobs found so far are kept
+- **Only new jobs.** Every job it finds is remembered (new / saved / applied / not interested), so you never see the same posting twice.
+- **Searches for you.** Automatic search every few hours, with a desktop notification when new jobs appear; or start one yourself and watch live progress.
+- **Six sources, one list:** LinkedIn jobs, Indeed, Bayt.com, NaukriGulf, Google Jobs and LinkedIn hiring posts. Titles must match your keywords; only jobs from the last 7 days.
+- **Every country**, with names in Arabic and English (built in, no network).
+- **Polite and safe.** Waits between requests to each site so your connection and LinkedIn account are not flagged; LinkedIn posts run at most once a day.
+- **Private.** Nothing leaves your computer except the searches, a daily update check (can be turned off), and pages you open.
+- **Terminal mode** too: prompts in the terminal and emails an HTML digest of new jobs.
 
-## Requirements
+## Requirements (run from source)
 
 - Python 3.12 (python-jobspy pins numpy 1.26.3, which has no wheels for newer Pythons)
 - Google Chrome (required for Bayt, NaukriGulf, Google Jobs, LinkedIn posts)
@@ -28,10 +54,10 @@ Deduplicates across sources and across runs. Nothing runs in the background — 
 ## Setup
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/hawkeye-jobs.git
+git clone https://github.com/Abdallahabusnineh/hawkeye-jobs.git
 cd hawkeye-jobs
 python3 -m venv venv
-venv/bin/pip install -r requirements.txt
+venv/bin/python3 -m pip install -r requirements.txt
 cp .env.example .env
 ```
 

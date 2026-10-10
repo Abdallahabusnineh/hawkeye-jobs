@@ -32,3 +32,4 @@ build/
 
 # Local scratch from Claude Code workflows (brainstorm mockups, SDD ledgers)
 .superpowers/
+*.bak-*
