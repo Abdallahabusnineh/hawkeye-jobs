@@ -289,6 +289,12 @@ class RedactTests(unittest.TestCase):
         self.assertNotIn("hunter", out)
         self.assertNotIn("2\"", out)
 
+    def test_redact_password_variants(self):
+        for name in ("smtpPassword", "mypassword", "password_hash", "db_pass_2", "GMAIL_PASS", "gmail-pass", "pass"):
+            out = redact(f"{name}=hunter2 ok", home="", user="")
+            self.assertNotIn("hunter2", out, name)
+            self.assertIn("ok", out)
+
     def test_redact_quoted_and_prefixed_secrets(self):
         out = redact('{"api_token": "abc123"} MY_SECRET=s1 Authorization: Bearer xyz987', home="", user="")
         for secret in ("abc123", "s1", "xyz987"):
