@@ -19,6 +19,10 @@ Lanes never touch the Store and never call on_event: they push messages onto a
 queue, and the thread that called run_search() does all saving and reporting.
 So on_event always runs on the caller's thread, in order.
 
+Spacing also holds between runs: run_search() primes each host group's Throttle
+from Store.site_last_requests() before the lanes start and saves the last request
+time per group after they are joined (best effort; the lanes never touch the Store).
+
 Cancellation: set the `cancel` event (the terminal does this on Ctrl+C). Each
 lane stops before its next query, so cancel takes at most one in-flight query.
 """
@@ -127,6 +131,43 @@ def _make_throttles(delays) -> dict:
         groups[group] = (max(low, gap[0]), max(high, gap[1]))
     built = {group: Throttle(*gap) for group, gap in groups.items()}
     return {source: built[SITE_GROUPS.get(source, source)] for source in delays}
+
+
+def _group_throttles(throttles) -> dict:
+    """host group -> its shared Throttle."""
+    return {SITE_GROUPS.get(source, source): throttle for source, throttle in throttles.items()}
+
+
+def _prime_throttles(store, groups) -> None:
+    try:
+        saved = store.site_last_requests()
+    except Exception:
+        log.exception("Could not read the last request times")
+        return
+    for group, throttle in groups.items():
+        if group in saved:
+            throttle.prime(saved[group])
+
+
+def _save_request_times(store, groups, cancel) -> None:
+    """Best effort: record when each site was last hit. Requests that were sent count
+    even if the run was cancelled or failed."""
+    times = {}
+    for group, throttle in groups.items():
+        stamp = throttle.last_request_wall()
+        if stamp is not None:
+            times[group] = stamp
+    if not times:
+        return
+    for _ in range(3):
+        try:
+            store.save_site_requests(times)
+            return
+        except KeyboardInterrupt:
+            cancel.set()
+        except Exception:
+            log.exception("Could not save the last request times")
+            return
 
 
 def _back_off(throttles, source) -> None:
@@ -277,6 +318,7 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
     fetchers = fetchers or _default_fetchers()
     driver_factory = driver_factory or _default_driver_factory
     throttles = _make_throttles(POLITE_DELAYS if delays is None else delays)
+    groups = _group_throttles(throttles)
     emit = _make_emitter(on_event)
     keywords = list(settings["keywords"])
 
@@ -291,6 +333,7 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
 
     http_queries = [q for q in queries if q["source"] in HTTP_SOURCES]
     browser_queries = [q for q in queries if q["source"] in BROWSER_SOURCES]
+    _prime_throttles(store, groups)
     out = queue.Queue()
     lanes = []
     if http_queries:
@@ -347,6 +390,8 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
         state = "failed"
     finally:
         _join_lanes(lanes, cancel)
+
+    _save_request_times(store, groups, cancel)
 
     # Tail: a Ctrl+C here must not leave the run 'running' or skip run_finished.
     for _ in range(3):

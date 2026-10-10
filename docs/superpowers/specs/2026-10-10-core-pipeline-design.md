@@ -348,7 +348,7 @@ Each lane waits on a `Throttle` (`src/throttle.py`) before every query: a random
 
 - **Host groups:** throttles are keyed by `pipeline.SITE_GROUPS` (`linkedin` and `linkedin_posts` both map to `linkedin.com`), built once in `run_search` and shared by both lanes. Slots are reserved under a lock, so two lanes never get requests closer than the gap, including on the user's own LinkedIn account. A group uses the per-field largest (min, max) among its sources, so linkedin.com gets 10-20 s.
 - **Back-off:** when a query fails (not on cancel), its group's gap doubles for the rest of the run, capped at 4x (`Throttle.back_off()`).
-- **Known limit:** spacing does not persist across separate `run_search` calls (a new run starts with fresh throttles); the upcoming app should keep this in mind when it allows back-to-back runs.
+- **Across runs:** spacing persists. Before the lanes start, `run_search` reads `store.site_last_requests()` and `prime()`s each host group's throttle with its saved Unix time, so the first request of a new run waits out the remaining gap. After the lanes are joined it saves `throttle.last_request_wall()` per group with `store.save_site_requests()` (table `site_requests`; the time never moves backwards). The save is best effort (failures are logged, Ctrl+C is retried) and also happens when the run is cancelled or failed, since requests that were sent still count. Lanes never touch the store; priming and saving run on the calling thread. `delays={}` throttles nothing and saves nothing.
 
 | Source | Gap (seconds, min-max) |
 |---|---|

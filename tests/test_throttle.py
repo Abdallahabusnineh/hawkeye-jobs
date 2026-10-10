@@ -15,11 +15,15 @@ class FakeTime:
 
     def __init__(self):
         self.now = 1000.0
+        self.wall_offset = 1_700_000_000.0  # wall time = monotonic now + offset
         self.sleeps = []
         self.on_sleep = None
 
     def clock(self):
         return self.now
+
+    def wall(self):
+        return self.now + self.wall_offset
 
     def sleep(self, seconds):
         self.sleeps.append(seconds)
@@ -41,12 +45,51 @@ class ThrottleTests(unittest.TestCase):
             return b
 
         return Throttle(low, high, clock=self.time.clock, sleep=self.time.sleep,
-                        rand=rand or default_rand)
+                        rand=rand or default_rand, wall=self.time.wall)
 
     def test_first_wait_returns_true_without_sleeping(self):
         throttle = self.make()
         self.assertTrue(throttle.wait())
         self.assertEqual(self.time.sleeps, [])
+
+    def test_primed_two_seconds_ago_waits_the_remaining_gap(self):
+        throttle = self.make(5, 5)
+        throttle.prime(self.time.wall() - 2)
+        self.assertTrue(throttle.wait())
+        self.assertAlmostEqual(sum(self.time.sleeps), 3)
+
+    def test_primed_long_ago_does_not_wait(self):
+        throttle = self.make(5, 5)
+        throttle.prime(self.time.wall() - 3600)
+        self.assertTrue(throttle.wait())
+        self.assertEqual(self.time.sleeps, [])
+
+    def test_never_primed_first_wait_is_immediate(self):
+        throttle = self.make(5, 5)
+        self.assertIsNone(throttle.last_request_wall())
+        throttle.wait()
+        self.assertEqual(self.time.sleeps, [])
+
+    def test_last_request_wall_round_trips_after_wait(self):
+        throttle = self.make(5, 5)
+        expected = self.time.wall()
+        throttle.wait()
+        self.assertAlmostEqual(throttle.last_request_wall(), expected)
+        self.time.advance(10)
+        throttle.wait()
+        self.assertAlmostEqual(throttle.last_request_wall(), self.time.wall())
+
+    def test_last_request_wall_reports_a_primed_time(self):
+        throttle = self.make(5, 5)
+        stamp = self.time.wall() - 2
+        throttle.prime(stamp)
+        self.assertAlmostEqual(throttle.last_request_wall(), stamp)
+
+    def test_future_prime_counts_as_just_now(self):
+        throttle = self.make(5, 5)
+        throttle.prime(self.time.wall() + 9999)
+        self.assertTrue(throttle.wait())
+        self.assertAlmostEqual(sum(self.time.sleeps), 5)
 
     def test_second_wait_sleeps_the_remaining_gap(self):
         throttle = self.make(5, 5)

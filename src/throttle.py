@@ -14,6 +14,10 @@ calls wait() before every query; threads reserve slots under a lock so two lanes
 never get slots closer than the gap. After a failed query pipeline.py calls
 back_off(), which doubles the gap (capped at 4x). Delays are tuned in
 pipeline.POLITE_DELAYS.
+
+Spacing also holds between runs: pipeline.py saves last_request_wall() per host
+group in the Store when a run ends and prime()s the next run's throttles with it,
+so a run started right after another still waits out the gap.
 """
 
 import random
@@ -28,12 +32,13 @@ class Throttle:
     """Keeps a random minimum gap between the START of consecutive requests to one site."""
 
     def __init__(self, min_seconds, max_seconds, clock=time.monotonic, sleep=time.sleep,
-                 rand=random.uniform):
+                 rand=random.uniform, wall=time.time):
         self.min_seconds = min_seconds
         self.max_seconds = max_seconds
         self._clock = clock
         self._sleep = sleep
         self._rand = rand
+        self._wall = wall
         self._last_start = None  # start time of the most recently reserved slot
         self._factor = 1
         self._lock = threading.Lock()
@@ -42,6 +47,21 @@ class Throttle:
         """Double the gap for the rest of this Throttle's life, up to 4x the original."""
         with self._lock:
             self._factor = min(self._factor * 2, _MAX_BACKOFF)
+
+    def prime(self, last_request_wall: float) -> None:
+        """Tell the throttle a request to this site started at this Unix time (e.g. in an
+        earlier run), so the next wait() honours the remaining gap. A time in the
+        future counts as "just now"."""
+        with self._lock:
+            elapsed = max(0.0, self._wall() - last_request_wall)
+            self._last_start = self._clock() - elapsed
+
+    def last_request_wall(self):
+        """Unix time of the most recently reserved slot, or None if never used or primed."""
+        with self._lock:
+            if self._last_start is None:
+                return None
+            return self._wall() - (self._clock() - self._last_start)
 
     def wait(self, cancel=None) -> bool:
         """Block until this site may be hit again. Returns False if `cancel` was set

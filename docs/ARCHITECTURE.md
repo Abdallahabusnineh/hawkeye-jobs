@@ -40,7 +40,7 @@ Runtime files live in the per-OS data directory (see src/paths.py), never in the
 
 ## Pipeline Flow (`src/main.py` → `src/pipeline.py`)
 
-`main.py` does: `setup_logging()` → `migrate_legacy_config()` → open `Store` → `recover_interrupted_runs()` → `import_legacy_seen_file()` → print `Data folder: ...` → `collect_settings()` → `run_search(settings, on_event=print, store=store)` → print and email `summary.new_jobs`. The store is closed in a `finally`. Ctrl+C is handled inside `run_search` (see Cancel).
+`main.py` does: `setup_logging()` → `migrate_legacy_config()` → open `Store` → `recover_interrupted_runs()` → `import_legacy_seen_file()` → print `Data folder: ...` → `collect_settings()` → `run_search(settings, on_event=print, store=store)` → report `store.unnotified_jobs()`: print them, email them when email is configured, and `mark_notified` them only after the email succeeds (or right after printing when email is not set up). This also re-reports jobs left by an earlier run that was killed before reporting. The store is closed in a `finally`. Ctrl+C is handled inside `run_search` (see Cancel).
 
 `run_search(settings, on_event, cancel, *, country_labels, store, fetchers, driver_factory) -> RunSummary(run_id, state, found, new_jobs)`:
 
@@ -50,7 +50,7 @@ Runtime files live in the per-OS data directory (see src/paths.py), never in the
    - **HTTP lane** — `linkedin`, `indeed` (JobSpy, no browser).
    - **Browser lane** — `bayt`, `naukrigulf`, `google_jobs`, `linkedin_posts` (one Chrome driver for the whole lane).
 4. Lanes never touch the Store and never call `on_event`. They push messages on a queue. The thread that called `run_search` drains it: it sets each job's `keyword` and `location_id`, calls `store.add_jobs()` for that query (so a crash or Ctrl+C keeps everything saved so far), and emits events. `on_event` therefore always runs on the caller's thread. If `on_event` raises, the error is logged and ignored.
-5. `store.finish_run()` records the final state, then `run_finished` is emitted. If `run_search` created its own Store, it closes it.
+5. After the lanes are joined, the last request time per host group is saved (see Polite throttling), then `store.finish_run()` records the final state, then `run_finished` is emitted. If `run_search` created its own Store, it closes it.
 
 Each lane keeps its own `seen_urls` set (cross-source duplicates within a lane); cross-run dedup is the Store's job.
 
@@ -85,7 +85,7 @@ Each lane waits on a `Throttle` (`src/throttle.py`) before every query: a random
 
 - **Host groups:** throttles are keyed by `pipeline.SITE_GROUPS` (`linkedin` and `linkedin_posts` both map to `linkedin.com`), built once in `run_search` and shared by both lanes. Slots are reserved under a lock, so two lanes never get requests closer than the gap, including on the user's own LinkedIn account. A group uses the per-field largest (min, max) among its sources, so linkedin.com gets 10-20 s.
 - **Back-off:** when a query fails (not on cancel), its group's gap doubles for the rest of the run, capped at 4x (`Throttle.back_off()`).
-- **Known limit:** spacing does not persist across separate `run_search` calls (a new run starts with fresh throttles); the upcoming app should keep this in mind when it allows back-to-back runs.
+- **Across runs:** spacing persists. Before the lanes start, `run_search` reads `store.site_last_requests()` and `prime()`s each host group's throttle with its saved Unix time, so the first request of a new run waits out the remaining gap. After the lanes are joined it saves `throttle.last_request_wall()` per group with `store.save_site_requests()` (table `site_requests`; the time never moves backwards). The save is best effort (failures are logged, Ctrl+C is retried) and also happens when the run is cancelled or failed, since requests that were sent still count. Lanes never touch the store; priming and saving run on the calling thread. `delays={}` throttles nothing and saves nothing.
 
 | Source | Gap (seconds, min-max) |
 |---|---|
@@ -100,7 +100,7 @@ Values live in `pipeline.POLITE_DELAYS`. `run_search(..., delays={...})` overrid
 
 ### Cancel
 
-Pass a `threading.Event` as `cancel`, or press Ctrl+C: a `KeyboardInterrupt` on the calling thread sets the event instead of aborting. Each lane checks it before its next query, so cancel takes at most one in-flight query. Lanes are always joined (the Chrome driver is quit), the run is recorded as `cancelled`, and `run_finished` is still emitted. Jobs saved so far are kept, and `main.py` prints and emails them.
+Pass a `threading.Event` as `cancel`, or press Ctrl+C: a `KeyboardInterrupt` on the calling thread sets the event instead of aborting. Each lane checks it before its next query, so cancel takes at most one in-flight query. Lanes are always joined (the Chrome driver is quit), the run is recorded as `cancelled`, and `run_finished` is still emitted. Jobs saved so far are kept, and `main.py` reports them (see Pipeline Flow).
 
 ---
 
@@ -351,12 +351,15 @@ Replaces the old `tracker.py` / `seen_jobs.json`. Keeps every job found, so hist
 
 **Tables** (`PRAGMA user_version` = `SCHEMA_VERSION`, created on first open):
 - `runs` — one row per search: `started_at`, `finished_at`, `state`, `settings_json`, `found_count`, `new_count`. States: `running`, `done`, `cancelled`, `failed`.
-- `jobs` — one row per unique URL. `id` = `job_id(url)` = MD5 of `clean_url(url).strip().rstrip("/")` (same as the old tracker). Columns: `title`, `url`, `description`, `source`, `location`, `location_id`, `keyword`, `published`, `status`, `status_changed_at`, `first_seen_at`, `last_seen_at`, `first_run_id`.
+- `jobs` — one row per unique URL. `id` = `job_id(url)` = MD5 of `clean_url(url).strip().rstrip("/")` (same as the old tracker). Columns: `title`, `url`, `description`, `source`, `location`, `location_id`, `keyword`, `published`, `status`, `status_changed_at`, `first_seen_at`, `last_seen_at`, `first_run_id`, `notified_at` (NULL until the job has been reported; schema v2 stamps jobs that existed before the upgrade with `first_seen_at`).
+- `site_requests` — `site` (host group, e.g. `bayt.com`) and `last_request_at` (Unix seconds of the last request start); used to keep polite spacing between runs.
 - `legacy_seen` — hashes imported from the old `seen_jobs.json`; used for dedup only.
 
 **Statuses:** `new`, `saved`, `applied`, `dismissed` (`set_status`; `list_jobs` hides dismissed unless asked).
 
 **`add_jobs(run_id, jobs) -> list`** is called once per query. A job whose id is in `legacy_seen` is skipped. A job already in `jobs` only gets `last_seen_at` updated. Otherwise it is inserted with status `new`. It returns only the genuinely new jobs (each with an `id`), which are what the terminal prints and emails.
+
+**Reporting:** a job is marked seen as soon as its query finishes, but reported separately. `unnotified_jobs(limit=500)` returns jobs with `notified_at IS NULL` and status not `dismissed`, oldest first; `mark_notified(ids)` stamps them (idempotent, returns rows changed). `site_last_requests()` / `save_site_requests(times)` read and upsert `site_requests` (an upsert never moves a time backwards).
 
 **Legacy import:** `import_legacy_seen_file(path)` reads `seen_jobs.json` into `legacy_seen`; it is safe to call every start and never modifies or deletes the file. `settings.migrate_legacy_config()` likewise copies the repo-root `config.json` into the data dir once.
 
@@ -394,9 +397,11 @@ Builds an HTML email with:
 | NaukriGulf | `#FF6B35` (orange) |
 | Glassdoor | `#0CAA41` (green) |
 
-**`send_email(jobs: list)`**
+**`email_configured() -> bool`** is true when `GMAIL_USER` and `GMAIL_PASS` are set.
 
-Sends both `text/plain` (fallback) and `text/html` parts. Raises the SMTP exception if sending fails (so the error appears in the log).
+**`send_email(jobs: list) -> bool`**
+
+Sends both `text/plain` (fallback) and `text/html` parts. Returns `True` when sent (or when `jobs` is empty), `False` when not configured or SMTP fails; `main.py` marks jobs notified only on `True`.
 
 ---
 

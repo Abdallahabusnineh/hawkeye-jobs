@@ -428,6 +428,12 @@ class ThrottleTests(PipelineTestCase):
             def back_off(self):
                 pass
 
+            def prime(self, last_request_wall):
+                pass
+
+            def last_request_wall(self):
+                return None
+
         fetched_while_waited = []
 
         def check(driver, args):
@@ -522,3 +528,85 @@ class ThrottleTests(PipelineTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpacingAcrossRunsTests(PipelineTestCase):
+    def test_second_run_waits_for_the_gap_left_by_the_first(self):
+        runs = [[], []]
+        current = [0]
+
+        def stamp(driver, args):
+            runs[current[0]].append(time.monotonic())
+            return [job_for("bayt", args)]
+
+        self.rec.behaviour["bayt"] = stamp
+        delays = {"bayt": (1.0, 1.0)}  # longer than the 0.2 s run-end poll, so only priming can make the gap
+        self.run_search(settings(keywords=("Java",), sources=("bayt",)), delays=delays)
+        current[0] = 1
+        self.run_search(settings(keywords=("Kotlin",), sources=("bayt",)), delays=delays)
+        self.assertTrue(runs[0] and runs[1])
+        self.assertGreaterEqual(runs[1][0] - runs[0][-1], 0.99)
+
+    def test_run_saves_last_request_per_host_group(self):
+        before = time.time()
+        self.run_search(settings(sources=("bayt",)), delays={"bayt": (0.01, 0.01)})
+        saved = self.store.site_last_requests()
+        self.assertEqual(list(saved), ["bayt.com"])
+        self.assertGreaterEqual(saved["bayt.com"], before - 0.01)
+        self.assertLessEqual(saved["bayt.com"], time.time())
+
+    def test_no_delays_saves_nothing(self):
+        self.run_search(settings(sources=("bayt",)), delays={})
+        self.assertEqual(self.store.site_last_requests(), {})
+
+    def test_cancelled_run_still_saves_requests_that_were_sent(self):
+        cancel = threading.Event()
+
+        def cancel_on_first(driver, args):
+            cancel.set()
+            return [job_for("bayt", args)]
+
+        self.rec.behaviour["bayt"] = cancel_on_first
+        summary = self.run_search(settings(keywords=("Java", "Kotlin"), sources=("bayt",)),
+                                  cancel=cancel, delays={"bayt": (0.01, 0.01)})
+        self.assertEqual(summary.state, "cancelled")
+        self.assertIn("bayt.com", self.store.site_last_requests())
+
+    def test_saved_time_primes_the_throttle(self):
+        starts = []
+
+        def stamp(driver, args):
+            starts.append(time.time())
+            return [job_for("bayt", args)]
+
+        self.rec.behaviour["bayt"] = stamp
+        saved_at = time.time()
+        self.store.save_site_requests({"bayt.com": saved_at})
+        self.run_search(settings(sources=("bayt",)), delays={"bayt": (0.3, 0.3)})
+        self.assertGreaterEqual(starts[0] - saved_at, 0.29)
+
+    def test_failing_save_does_not_break_the_run(self):
+        with mock.patch.object(self.store, "save_site_requests", side_effect=sqlite3.OperationalError("locked")):
+            summary = self.run_search(settings(sources=("bayt",)), delays={"bayt": (0.01, 0.01)})
+        self.assertEqual(summary.state, "done")
+        self.assertEqual(self.types()[-1], "run_finished")
+
+    def test_failing_read_does_not_break_the_run(self):
+        with mock.patch.object(self.store, "site_last_requests", side_effect=sqlite3.OperationalError("locked")):
+            summary = self.run_search(settings(sources=("bayt",)), delays={"bayt": (0.01, 0.01)})
+        self.assertEqual(summary.state, "done")
+
+    def test_keyboard_interrupt_during_save_is_retried(self):
+        real = self.store.save_site_requests
+        calls = []
+
+        def flaky(times):
+            calls.append(times)
+            if len(calls) == 1:
+                raise KeyboardInterrupt
+            real(times)
+
+        with mock.patch.object(self.store, "save_site_requests", side_effect=flaky):
+            summary = self.run_search(settings(sources=("bayt",)), delays={"bayt": (0.01, 0.01)})
+        self.assertEqual(summary.state, "done")
+        self.assertIn("bayt.com", self.store.site_last_requests())
