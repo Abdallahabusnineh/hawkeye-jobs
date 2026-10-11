@@ -86,6 +86,71 @@ class AppTests(unittest.TestCase):
         self.assertEqual(stop.exception.code, 1)
         setup.assert_not_called()
 
+    def test_second_launch_shows_the_running_window_and_exits(self):
+        from unittest.mock import patch
+        instance = MagicMock()
+        instance.acquire.return_value = False
+        with patch.object(app, "setup_logging"), patch.object(app, "SingleInstance", return_value=instance), \
+                patch.object(app, "build") as build:
+            app.main([])
+        instance.ask_running_copy_to_show.assert_called_once()
+        build.assert_not_called()
+
+    def test_background_launch_while_running_exits_quietly(self):
+        from unittest.mock import patch
+        instance = MagicMock()
+        instance.acquire.return_value = False
+        with patch.object(app, "setup_logging"), patch.object(app, "SingleInstance", return_value=instance), \
+                patch.object(app, "build") as build:
+            app.main(["--background"])
+        instance.ask_running_copy_to_show.assert_not_called()
+        build.assert_not_called()
+
+    def test_close_hides_the_window_when_keep_running(self):
+        parts = MagicMock()
+        parts.manager.is_running = True
+        window = MagicMock()
+        hidden = []
+        guard = app.CloseGuard(parts, window, keep_running=lambda: True, on_hidden=lambda: hidden.append(1))
+        self.assertFalse(guard.on_closing())
+        window.hide.assert_called_once()
+        self.assertEqual(hidden, [1])
+        parts.manager.cancel.assert_not_called()   # the search goes on in the background
+
+    def test_quit_closes_even_when_keep_running(self):
+        parts = MagicMock()
+        parts.manager.is_running = False
+        window = MagicMock()
+        guard = app.CloseGuard(parts, window, keep_running=lambda: True)
+        guard.quit()
+        window.destroy.assert_called_once()
+        self.assertTrue(guard.on_closing())         # a close request after Quit is not turned into a hide
+        window.hide.assert_not_called()
+
+    def test_quit_during_a_search_stops_it_in_a_visible_window_then_closes(self):
+        import threading
+        parts = MagicMock()
+        parts.manager.is_running = True
+        window = MagicMock()
+        closed = threading.Event()
+        window.destroy.side_effect = closed.set
+        guard = app.CloseGuard(parts, window, wait_seconds=3, keep_running=lambda: True)
+        shown = []
+        guard.show = lambda: shown.append(1)
+        guard.quit()
+        self.assertTrue(closed.wait(5))
+        self.assertEqual(shown, [1])
+        self.assertIn("hawkeye-closing", window.evaluate_js.call_args[0][0])
+        parts.manager.cancel.assert_called_once()
+        guard.quit()                                 # a second Quit while stopping does nothing more
+        self.assertEqual(window.destroy.call_count, 1)
+
+    def test_hidden_hint_names_the_right_place(self):
+        self.assertIn("شريط القوائم", app.hidden_hint("ar", "darwin"))
+        self.assertIn("الساعة", app.hidden_hint("ar", "win32"))
+        self.assertIn("menu bar", app.hidden_hint("en", "darwin"))
+        self.assertIn("clock", app.hidden_hint("en", "linux"))
+
     def test_close_guard_closes_at_once_when_idle(self):
         parts = MagicMock()
         parts.manager.is_running = False
@@ -118,6 +183,7 @@ class AppTests(unittest.TestCase):
         thread = MagicMock()
         thread.is_alive.return_value = False
         with patch.object(app, "setup_logging"), patch.object(app, "_prepare_data"), \
+                patch.object(app, "SingleInstance"), \
                 patch.object(app, "build", return_value=parts), patch.object(app, "_serve", return_value=thread), \
                 patch.object(app, "shutdown") as shut, self.assertLogs("app", "ERROR"), \
                 patch("builtins.print"), patch("sys.stderr"):
@@ -140,6 +206,7 @@ class AppTests(unittest.TestCase):
         thread = MagicMock()
         thread.is_alive.return_value = False
         with patch.object(app, "setup_logging"), patch.object(app, "_prepare_data"), \
+                patch.object(app, "SingleInstance"), \
                 patch.object(app, "build", return_value=parts) as build, \
                 patch.object(app, "_serve", return_value=thread), patch.object(app, "shutdown"), \
                 self.assertLogs("app", "ERROR"), patch("builtins.print"), patch("sys.stderr"):

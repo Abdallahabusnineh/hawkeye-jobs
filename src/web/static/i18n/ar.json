@@ -174,6 +174,11 @@
   "settings.check_updates": "التحقق من التحديثات",
   "settings.download_update": "تنزيل التحديث",
   "settings.update_check": "التحقق من التحديثات مرة يوميًا",
+  "settings.keep_running": "إبقاء التطبيق يعمل في الخلفية عند إغلاق النافذة",
+  "settings.keep_running_hint": "يواصل البحث التلقائي وإرسال الإشعارات. للإنهاء الكامل استخدم «إنهاء» من أيقونته.",
+  "settings.keep_running_unavailable": "غير متاح على هذا النظام: إغلاق النافذة يُنهي التطبيق.",
+  "settings.start_at_login": "تشغيل Hawkeye Jobs عند بدء تشغيل الجهاز",
+  "settings.start_at_login_hint": "يبدأ في الخلفية دون فتح النافذة.",
   "settings.update_available": "الإصدار {version} متاح.",
   "settings.up_to_date": "لديك أحدث إصدار.",
   "settings.update_disabled": "التحقق اليومي من التحديثات متوقف.",
@@ -200,5 +205,6 @@
   "wizard.recheck": "التحقق مجددًا",
   "wizard.ready_title": "كل شيء جاهز",
   "wizard.ready_body": "يستغرق البحث الأول بضع دقائق. يمكنك استخدام التطبيق أثناء البحث، وتظهر الوظائف الجديدة فور العثور عليها.",
-  "wizard.start": "ابدأ البحث الأول"
+  "wizard.start": "ابدأ البحث الأول",
+  "error.autostart_failed": "تعذّر تغيير إعداد التشغيل مع الجهاز. حاول مرة أخرى."
 }

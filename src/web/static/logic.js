@@ -175,7 +175,7 @@ export function jobVisible(status, filter) {
 // ── codes -> i18n keys ───────────────────────────────────────────────
 
 const KNOWN_ERRORS = ["run_in_progress", "no_settings", "not_running", "chrome_not_found", "outside_data_dir",
-                      "files_in_use", "not_found", "forbidden"];
+                      "files_in_use", "not_found", "forbidden", "autostart_failed"];
 
 export function apiErrorKey(status, body) {
   let code = body && body.error;

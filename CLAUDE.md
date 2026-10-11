@@ -75,6 +75,7 @@ Set in `.env` (gitignored): `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`. Copy 
 | `src/reporting.py` | Report new jobs through a notifier, then mark them reported |
 | `src/notify.py` | Desktop notifications (never fails the run) |
 | `src/run_lock.py` | `RunLock`: cross-process lock on `<data dir>/run.lock` |
+| `src/background.py` | Start at login (`Autostart`) and one running app per user (`SingleInstance`); the tray and hide-on-close live in `app.py` |
 | `src/version.py` | `__version__`, shown in Settings and compared with GitHub releases |
 | `src/web/server.py` | FastAPI app: Host/token guards, static UI |
 | `src/web/api.py` | The `/api/*` endpoints |

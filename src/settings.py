@@ -22,18 +22,22 @@ SEARCH_KEYS = ("keywords", "locations", "sources")
 LANGUAGES = ("ar", "en")
 THEMES = ("auto", "light", "dark")
 AUTO_HOURS = (2, 4, 6, 12, 24)
-USER_APP_KEYS = ("language", "theme", "auto_search", "job_age_days", "onboarding_done", "update_check")
-_INTERNAL_APP_KEYS = ("last_update_check", "latest_version", "last_posts_run")
+USER_APP_KEYS = ("language", "theme", "auto_search", "job_age_days", "keep_running", "start_at_login",
+                 "onboarding_done", "update_check")
+_INTERNAL_APP_KEYS = ("last_update_check", "latest_version", "last_posts_run", "background_hint_shown")
 APP_DEFAULTS = {
     "language": "ar",
     "theme": "auto",
     "auto_search": {"enabled": True, "hours": 6},
     "job_age_days": DEFAULT_JOB_AGE_DAYS,  # show jobs posted within this many days (utils.JOB_AGE_CHOICES)
+    "keep_running": True,       # closing the window hides it; the app keeps searching from the tray
+    "start_at_login": False,    # an OS login item starts the app hidden (background.Autostart)
     "onboarding_done": False,
     "update_check": True,
     "last_update_check": None,
     "latest_version": None,
     "last_posts_run": None,
+    "background_hint_shown": None,  # when we first told the user the app keeps running after close
 }
 # One lock for every read-modify-write of config.json (API threads + the run worker both save).
 _CONFIG_LOCK = threading.RLock()
@@ -142,7 +146,7 @@ def _valid_app_value(key: str, value) -> bool:
                 and isinstance(value["enabled"], bool) and value["hours"] in AUTO_HOURS)
     if key == "job_age_days":
         return value in JOB_AGE_CHOICES and not isinstance(value, bool)
-    if key in ("onboarding_done", "update_check"):
+    if key in ("onboarding_done", "update_check", "keep_running", "start_at_login"):
         return isinstance(value, bool)
     if key in _INTERNAL_APP_KEYS:
         return value is None or isinstance(value, str)

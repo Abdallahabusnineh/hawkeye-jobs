@@ -534,6 +534,11 @@ function hawkeye() {
         this.applyTheme();
       }
     },
+    backgroundTray() { return !!(this.state && this.state.background && this.state.background.tray); },
+    backgroundAutostart() { return !!(this.state && this.state.background && this.state.background.autostart); },
+    async setStartAtLogin(on, input) {
+      if (!(await this.patchApp({ start_at_login: on }))) input.checked = !on;  // the OS refused: show the real state
+    },
     async setUpdateCheck(on) {
       if (await this.patchApp({ update_check: on })) this.settingsPage.update = null;
     },

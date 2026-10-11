@@ -78,6 +78,9 @@ class AppServices:
     launch: Callable
     fetch_latest_release: Callable
     version: str
+    show_window: Callable = lambda: None           # set by app.py once the window exists
+    background: Callable = lambda: {"tray": False, "autostart": False}  # what this system supports
+    set_start_at_login: Callable = lambda enabled: None
     clock: Callable = time.time
     os_name: str = field(default_factory=lambda: f"{platform.system()} {platform.release()}")
     home: str = field(default_factory=lambda: str(Path.home()))

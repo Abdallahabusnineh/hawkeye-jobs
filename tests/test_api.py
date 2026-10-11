@@ -68,7 +68,8 @@ class ApiTestCase(unittest.TestCase):
         self.config = {"keywords": ["Java"], "locations": ["jo"], "sources": ["bayt"]}
         self.app_settings = {"language": "ar", "theme": "auto", "auto_search": {"enabled": True, "hours": 6},
                              "onboarding_done": True, "update_check": True, "last_update_check": None,
-                             "latest_version": None, "last_posts_run": None}
+                             "latest_version": None, "last_posts_run": None, "job_age_days": 14,
+                             "keep_running": True, "start_at_login": False, "background_hint_shown": None}
         self.opened_urls, self.opened_paths, self.launched = [], [], []
         self.release = {"tag_name": "v1.0.0"}
         self.manager = FakeManager()
@@ -570,3 +571,40 @@ class ResetOrderTests(ApiTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BackgroundApiTests(ApiTestCase):
+    def send(self, method, path, json=None):
+        return self.client.request(method, path, headers={"X-Hawkeye-Token": TOKEN}, json=json)
+
+    def test_window_show_calls_the_app(self):
+        shown = []
+        self.services.show_window = lambda: shown.append(1)
+        self.assertEqual(self.send("POST", "/api/window/show").status_code, 204)
+        self.assertEqual(shown, [1])
+
+    def test_window_show_needs_the_token(self):
+        self.assertEqual(self.client.post("/api/window/show").status_code, 403)
+
+    def test_state_reports_what_the_system_supports(self):
+        self.services.background = lambda: {"tray": True, "autostart": True}
+        self.assertEqual(self.get("/api/state").json()["background"], {"tray": True, "autostart": True})
+
+    def test_start_at_login_is_applied_to_the_system(self):
+        applied = []
+        self.services.set_start_at_login = applied.append
+        response = self.send("PATCH", "/api/app-settings", {"start_at_login": True})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["start_at_login"])
+        self.assertEqual(applied, [True])
+        self.send("PATCH", "/api/app-settings", {"keep_running": False})   # other keys leave it alone
+        self.assertEqual(applied, [True])
+
+    def test_start_at_login_failure_reverts_the_setting(self):
+        def boom(enabled):
+            raise PermissionError("no")
+        self.services.set_start_at_login = boom
+        with self.assertLogs("web.api", "ERROR"):
+            response = self.send("PATCH", "/api/app-settings", {"start_at_login": True})
+        self.assertEqual((response.status_code, response.json()), (500, {"error": "autostart_failed"}))
+        self.assertFalse(self.get("/api/app-settings").json()["start_at_login"])

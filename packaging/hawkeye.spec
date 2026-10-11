@@ -16,7 +16,7 @@ SRC = ROOT / "src"
 NAME = "Hawkeye Jobs"
 VERSION = re.search(r'__version__ = "([^"]+)"', (SRC / "version.py").read_text()).group(1)
 
-datas = [(str(SRC / "web" / "static"), "web/static")]
+datas = [(str(SRC / "web" / "static"), "web/static"), (str(ROOT / "packaging" / "icon.png"), ".")]
 binaries = []
 hiddenimports = collect_submodules("uvicorn")
 
@@ -29,6 +29,9 @@ for package in ("jobspy", "tls_client", "babel", "webview", "desktop_notifier",
     hiddenimports += h
 if sys.platform == "win32":
     hiddenimports += collect_submodules("winrt")
+# pystray picks its tray backend at runtime.
+hiddenimports += {"darwin": ["pystray._darwin"], "win32": ["pystray._win32"]}.get(
+    sys.platform, ["pystray._xorg", "pystray._appindicator", "pystray._gtk"])
 
 # tls_client ships its Go library for every OS and loads one by name at import. Bundle only this
 # OS's files, taken straight from the package folder: the others are not valid binaries here and

@@ -355,6 +355,22 @@
             </label>
           </div>
           <div class="setting">
+            <label class="switch">
+              <input type="checkbox" :checked="!!appSettings.keep_running" :disabled="!backgroundTray()"
+                     @change="patchApp({ keep_running: $event.target.checked })">
+              <span x-text="t('settings.keep_running')"></span>
+            </label>
+            <span class="hint" x-text="backgroundTray() ? t('settings.keep_running_hint') : t('settings.keep_running_unavailable')"></span>
+          </div>
+          <div class="setting" x-show="backgroundAutostart()">
+            <label class="switch">
+              <input type="checkbox" :checked="!!appSettings.start_at_login"
+                     @change="setStartAtLogin($event.target.checked, $event.target)">
+              <span x-text="t('settings.start_at_login')"></span>
+            </label>
+            <span class="hint" x-text="t('settings.start_at_login_hint')"></span>
+          </div>
+          <div class="setting">
             <span x-text="t('settings.problem')"></span>
             <button type="button" class="btn-ghost" @click="reportProblem()" x-text="t('action.report_problem')"></button>
           </div>

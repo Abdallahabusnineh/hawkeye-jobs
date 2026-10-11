@@ -40,6 +40,15 @@ class DesktopNotifier:
                 self._backend = False
         return self._backend
 
+    def send_text(self, message: str) -> None:
+        """A plain notification from the app (never raises)."""
+        backend = self._get_backend()
+        if backend:
+            try:
+                backend.send(title=APP_NAME, message=message)
+            except Exception:
+                log.warning("Could not show a desktop notification", exc_info=True)
+
     def __call__(self, jobs) -> bool:
         if not jobs:
             return True

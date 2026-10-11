@@ -174,6 +174,11 @@
   "settings.check_updates": "Check for updates",
   "settings.download_update": "Download the update",
   "settings.update_check": "Check for updates once a day",
+  "settings.keep_running": "Keep running in the background when the window is closed",
+  "settings.keep_running_hint": "Automatic search and notifications continue. To quit completely, use Quit from its icon.",
+  "settings.keep_running_unavailable": "Not available on this system: closing the window quits the app.",
+  "settings.start_at_login": "Open Hawkeye Jobs when the computer starts",
+  "settings.start_at_login_hint": "It starts in the background without opening the window.",
   "settings.update_available": "Version {version} is available.",
   "settings.up_to_date": "You have the latest version.",
   "settings.update_disabled": "The daily update check is off.",
@@ -200,5 +205,6 @@
   "wizard.recheck": "Check again",
   "wizard.ready_title": "Ready to start",
   "wizard.ready_body": "The first search takes a few minutes. You can keep using the app while it runs; new jobs appear as soon as they are found.",
-  "wizard.start": "Start the first search"
+  "wizard.start": "Start the first search",
+  "error.autostart_failed": "Could not change the start-at-login setting. Please try again."
 }

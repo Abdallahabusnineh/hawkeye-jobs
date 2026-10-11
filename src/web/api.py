@@ -65,6 +65,7 @@ def get_state(request: Request):
         "has_settings": s.load_config() is not None,
         "update": {"available": bool(latest) and _version_tuple(latest) > _version_tuple(s.version),
                    "latest": latest},
+        "background": s.background(),
     }
 
 
@@ -161,10 +162,20 @@ def patch_app_settings(request: Request, body: dict):
     unknown = {key: "unknown" for key in body if key not in USER_APP_KEYS}
     if unknown:
         return JSONResponse({"errors": unknown}, status_code=422)
+    s = _services(request)
     try:
-        return _services(request).save_app_settings(body)
+        before = s.load_app_settings()
+        saved = s.save_app_settings(body)
     except SettingsError as exc:
         return JSONResponse({"errors": exc.errors}, status_code=422)
+    if "start_at_login" in body and body["start_at_login"] != before["start_at_login"]:
+        try:
+            s.set_start_at_login(body["start_at_login"])
+        except Exception:
+            log.exception("Could not change the login item")
+            s.save_app_settings({"start_at_login": before["start_at_login"]})
+            return JSONResponse({"error": "autostart_failed"}, status_code=500)
+    return saved
 
 
 @router.patch("/jobs/{job_id}")
@@ -248,6 +259,12 @@ def open_url(request: Request, body: dict):
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return JSONResponse({"errors": {"url": "invalid"}}, status_code=422)
     _services(request).open_url(url)
+
+
+@router.post("/window/show", status_code=204)
+def show_window(request: Request):
+    """Bring the window back (a second launch of the app asks the running one; see background.py)."""
+    _services(request).show_window()
 
 
 @router.post("/open-data-folder", status_code=204)
