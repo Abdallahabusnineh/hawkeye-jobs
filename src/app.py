@@ -285,11 +285,16 @@ def self_test() -> list:
         problems.append(f"countries: {exc!r}")
     for module in ("jobspy", "tls_client.cffi", "undetected_chromedriver", "selenium.webdriver",
                    "webview", "desktop_notifier", "pipeline", "scraper", "bayt", "naukrigulf",
-                   "google_jobs", "linkedin_posts", "pystray", "PIL.Image"):
+                   "google_jobs", "linkedin_posts", "PIL.Image"):
         try:
             __import__(module)
         except Exception as exc:
             problems.append(f"import {module}: {exc!r}")
+    # Importing pystray connects to the display (fails on a headless Linux machine, where the app
+    # simply runs without a tray), so only check that it is bundled.
+    import importlib.util
+    if importlib.util.find_spec("pystray") is None:
+        problems.append("pystray is missing (tray icon)")
     if FROZEN:
         try:
             import ssl
