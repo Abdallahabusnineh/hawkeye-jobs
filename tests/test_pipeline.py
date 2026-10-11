@@ -179,6 +179,14 @@ class HappyPathTests(PipelineTestCase):
         summary = self.run_search(settings(), on_event=broken)
         self.assertEqual(summary.state, "done")
 
+    def test_job_age_is_set_for_the_run(self):
+        import utils
+        self.addCleanup(utils.set_job_age_days, utils.DEFAULT_JOB_AGE_DAYS)
+        self.run_search(settings(sources=("linkedin",)), job_age_days=30)
+        self.assertEqual(utils.job_age_days(), 30)
+        self.run_search(settings(sources=("linkedin",)))
+        self.assertEqual(utils.job_age_days(), utils.DEFAULT_JOB_AGE_DAYS)
+
     def test_trigger_is_recorded_on_the_run(self):
         summary = self.run_search(settings(sources=("linkedin",)), trigger="auto")
         self.assertEqual(self.store.list_runs()[0]["id"], summary.run_id)

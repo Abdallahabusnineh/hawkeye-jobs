@@ -34,6 +34,7 @@ import threading
 from dataclasses import dataclass, field
 
 from browser import ChromeNotFound
+from utils import set_job_age_days
 from catalog import BROWSER_SOURCES, SOURCE_ORDER, plan_queries
 from linkedin_posts import LinkedInLoginRequired
 from store import Store
@@ -315,7 +316,7 @@ def _make_emitter(on_event):
 
 def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=None,
                store=None, fetchers=None, driver_factory=None, delays=None,
-               trigger="manual") -> RunSummary:
+               trigger="manual", job_age_days=None) -> RunSummary:
     """
     Run one search. settings = {"keywords", "locations", "sources"}.
 
@@ -330,8 +331,12 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
     the largest of their gaps.
 
     `trigger` is recorded on the run (`manual`, `auto` or `terminal`).
+
+    `job_age_days` (7, 14 or 30; None → the default) is how old a job may be. It is set
+    for this run in utils (see utils.set_job_age_days); LinkedIn posts keep their own week.
     """
     cancel = cancel or threading.Event()
+    set_job_age_days(job_age_days)
     owns_store = store is None
     store = store or Store()
     fetchers = fetchers or _default_fetchers()

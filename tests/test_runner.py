@@ -30,7 +30,7 @@ class FakeSearch:
 
     def __call__(self, settings, on_event=None, cancel=None, *, country_labels=None, store=None, trigger="manual",
                  **kwargs):
-        self.calls.append({"settings": settings, "trigger": trigger})
+        self.calls.append({"settings": settings, "trigger": trigger, "job_age_days": kwargs.get("job_age_days")})
         run_id = store.start_run(settings, trigger=trigger)
         on_event({"type": "run_started", "run_id": run_id, "total": 2})
         q = {"index": 0, "source": "bayt", "keyword": "Java", "location_id": "jo"}
@@ -123,6 +123,13 @@ class StartTests(RunnerTestCase):
         manager.wait(5)
         self.assertTrue(all(e.get("trigger") == "auto" for e in self.drain(q) if e["type"].startswith(("run_", "query_"))))
         self.assertEqual(self.search.calls[0]["trigger"], "auto")
+
+    def test_search_uses_the_saved_job_age(self):
+        self.app["job_age_days"] = 30
+        manager = self.make()
+        manager.start()
+        manager.wait(5)
+        self.assertEqual(self.search.calls[0]["job_age_days"], 30)
 
     def test_start_after_close_is_refused(self):
         manager = self.make()

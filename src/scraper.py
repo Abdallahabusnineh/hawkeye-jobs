@@ -6,7 +6,7 @@ ONE search and raises on any error; pipeline.py loops over the queries and
 decides what to do with failures.
 
 Titles are kept only if they match the user's keywords (is_relevant_job) and
-were posted within 7 days (is_recent).
+were posted within the user's job-age window (is_recent).
 """
 
 import logging
@@ -15,12 +15,11 @@ from datetime import datetime, timezone
 from jobspy import scrape_jobs
 
 from filters import is_relevant_job
-from utils import MAX_AGE_DAYS, clean_url, is_recent
+from utils import clean_url, is_recent, job_age_days
 
 log = logging.getLogger(__name__)
 
 RESULTS_WANTED = 10
-HOURS_OLD = MAX_AGE_DAYS * 24
 
 
 def _parse_jobs(jobs, seen_urls, location, keywords):
@@ -65,7 +64,7 @@ def fetch_linkedin(args: dict, seen_urls: set, keywords: list) -> list:
         search_term=args["term"],
         location=args["location"],
         results_wanted=RESULTS_WANTED,
-        hours_old=HOURS_OLD,
+        hours_old=job_age_days() * 24,
     )
     return _parse_jobs(jobs, seen_urls, args["location"], keywords)
 
@@ -77,7 +76,7 @@ def fetch_indeed(args: dict, seen_urls: set, keywords: list) -> list:
         search_term=args["term"],
         location=args["location"],
         results_wanted=RESULTS_WANTED,
-        hours_old=HOURS_OLD,
+        hours_old=job_age_days() * 24,
         country_indeed=args["country"],
     )
     return _parse_jobs(jobs, seen_urls, args["location"], keywords)

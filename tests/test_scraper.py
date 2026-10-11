@@ -22,6 +22,9 @@ ROWS = [
 
 class FetchLinkedInTests(unittest.TestCase):
     def test_parses_filters_and_passes_args(self):
+        import utils
+        utils.set_job_age_days(7)
+        self.addCleanup(utils.set_job_age_days, utils.DEFAULT_JOB_AGE_DAYS)
         with patch("scraper.scrape_jobs", return_value=pd.DataFrame(ROWS)) as scrape_jobs:
             jobs = scraper.fetch_linkedin({"term": "Java", "location": "Jordan"}, set(), ["Java Developer"])
         self.assertEqual([j["url"] for j in jobs], ["https://www.linkedin.com/jobs/view/1"])
@@ -32,6 +35,14 @@ class FetchLinkedInTests(unittest.TestCase):
         self.assertEqual(kwargs["site_name"], ["linkedin"])
         self.assertEqual((kwargs["search_term"], kwargs["location"]), ("Java", "Jordan"))
         self.assertEqual((kwargs["results_wanted"], kwargs["hours_old"]), (10, 168))
+
+    def test_job_age_setting_reaches_jobspy(self):
+        import utils
+        utils.set_job_age_days(30)
+        self.addCleanup(utils.set_job_age_days, utils.DEFAULT_JOB_AGE_DAYS)
+        with patch("scraper.scrape_jobs", return_value=pd.DataFrame([])) as scrape_jobs:
+            scraper.fetch_linkedin({"term": "Java", "location": "Jordan"}, set(), ["Java"])
+        self.assertEqual(scrape_jobs.call_args.kwargs["hours_old"], 720)
 
     def test_skips_urls_already_seen_in_this_lane(self):
         seen = {"https://www.linkedin.com/jobs/view/1"}

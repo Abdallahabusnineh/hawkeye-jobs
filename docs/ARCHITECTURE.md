@@ -415,22 +415,23 @@ Strips: `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `
 
 Example: `https://indeed.com/viewjob?jk=abc123&utm_source=google` → `https://indeed.com/viewjob?jk=abc123`
 
-**`is_recent(date_str: str, today=None) -> bool`**
+**`is_recent(date_str: str, today=None, max_days=None) -> bool`**
 
-Returns `True` if the job was posted within 7 days. `MAX_AGE_DAYS = 7`. `today` (a date) is injectable for tests; dates are compared as UTC calendar dates.
+Returns `True` if the job was posted within N days, where N (`max_days`, default `job_age_days()`) is the user's **job age** setting: 7, 14 (default) or 30 (`JOB_AGE_CHOICES`, `DEFAULT_JOB_AGE_DAYS`; app setting `job_age_days`, chosen on the Search page). `run_search(..., job_age_days=)` calls `set_job_age_days()` at the start of each run; the setting is module-level because one search runs at a time per process. JobSpy gets `hours_old = job_age_days() * 24`. It applies to LinkedIn jobs, Indeed, Bayt and NaukriGulf; LinkedIn posts keep LinkedIn's own past-week filter, and Google Jobs shows no dates. Why 14 by default: Bayt and NaukriGulf post far less often than LinkedIn and most of their open jobs are 1–4 weeks old, so a 7-day window often showed nothing from them; dedup means a wider window only adds to the first search. `today` (a date) is injectable for tests; dates are compared as UTC calendar dates.
 
 Handles multiple formats:
 | Input format | Example | Behavior |
 |---|---|---|
 | Empty / None / NaN | `""`, `"none"`, `"nan"` | `True` (benefit of the doubt) |
 | Immediate | `"just now"`, `"today"`, `"moments ago"` | `True` |
-| Hours ago | `"3 hours ago"` | `True` if ≤ 7 x 24 |
-| Days ago | `"1 day ago"`, `"7 days ago"` | `True` if ≤ 7 |
-| Weeks ago | `"1 week ago"` | `True` if ≤ 1 (`"2 weeks ago"` is `False`) |
+| Hours ago | `"3 hours ago"` | `True` if ≤ N x 24 |
+| Days ago | `"1 day ago"`, `"7 days ago"` | `True` if ≤ N |
+| Weeks ago | `"2 weeks ago"` | `True` if weeks x 7 ≤ N |
+| Months ago | `"1 month ago"` | `True` if months x 30 ≤ N (so only with N = 30) |
 | Yesterday | `"yesterday"` | `True` |
-| Old markers | `"30+ days ago"`, `"1 month ago"`, `"1 year ago"` | `False` |
-| Day-month | `"29 Apr"`, `"1 May"` | Calendar dates, `True` if ≤ 7 days (future dates roll back a year) |
-| ISO date | `"2026-05-04"` | Calendar dates, `True` if ≤ 7 days (a time part is ignored) |
+| Old markers | `"30+ days ago"`, `"1 year ago"` | `False` |
+| Day-month | `"29 Apr"`, `"1 May"` | Calendar dates, `True` if ≤ N days (future dates roll back a year) |
+| ISO date | `"2026-05-04"` | Calendar dates, `True` if ≤ N days (a time part is ignored) |
 | Unparseable | anything else | `True` |
 
 ---

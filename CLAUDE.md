@@ -38,7 +38,7 @@ Every test file must `import _bootstrap` (see tests/_bootstrap.py) — it points
 
 1. **`src/settings.py`** — reuse or prompt for keywords / countries / websites (`src/picker.py`). Countries come from `src/countries.py`.
 2. **`src/catalog.py`** — expand those choices into per-site queries.
-3. **`src/scraper.py`** — JobSpy `fetch_linkedin` / `fetch_indeed` (no browser). 7-day window.
+3. **`src/scraper.py`** — JobSpy `fetch_linkedin` / `fetch_indeed` (no browser). Job-age window from the user's setting (7/14/30 days, `utils.set_job_age_days`).
 4. **`src/browser.py`** + Selenium scrapers when those sources are selected:
    - `src/bayt.py` — Bayt.com (Jordan + Gulf only)
    - `src/naukrigulf.py` — NaukriGulf (Gulf only)

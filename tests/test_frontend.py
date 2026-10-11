@@ -21,6 +21,7 @@ import _bootstrap  # noqa: F401  — isolates data dirs, adds src/ to sys.path
 
 from catalog import SOURCE_ORDER
 from settings import AUTO_HOURS, THEMES
+from utils import JOB_AGE_CHOICES
 
 ROOT = Path(__file__).resolve().parent.parent
 STATIC = ROOT / "src" / "web" / "static"
@@ -111,6 +112,7 @@ class DictionaryTests(unittest.TestCase):
         families += [f"jobs.filter.{f}" for f in ("new", "saved", "applied", "all")]
         families += [f"jobs.empty.{f}" for f in ("new", "saved", "applied", "all", "text")]
         families += [f"hours.{h}" for h in AUTO_HOURS]
+        families += [f"age.{d}" for d in JOB_AGE_CHOICES]
         families += [f"theme.{t}" for t in THEMES]
         families += [f"history.trigger.{t}" for t in ("manual", "auto", "terminal")]
         families += [f"history.state.{s}" for s in ("running", "done", "cancelled", "failed")]
@@ -181,6 +183,7 @@ class SafetyTests(unittest.TestCase):
         self.assertEqual(array("SOURCE_ORDER"), list(SOURCE_ORDER))
         self.assertEqual(set(array("BROWSER_SOURCES")), set(BROWSER_SOURCES))
         self.assertEqual([int(h) for h in array("AUTO_HOURS")], list(AUTO_HOURS))
+        self.assertEqual([int(d) for d in array("JOB_AGE_DAYS")], list(JOB_AGE_CHOICES))
 
 
 class JsUnitTests(unittest.TestCase):

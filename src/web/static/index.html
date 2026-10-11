@@ -229,6 +229,19 @@
         </div>
 
         <div class="panel">
+          <h2 x-text="t('search.title_age')"></h2>
+          <div class="row">
+            <label for="job-age" x-text="t('search.age_label')"></label>
+            <select id="job-age" x-model.number="search.jobAge">
+              <template x-for="d in jobAges" :key="d">
+                <option :value="d" :selected="d === search.jobAge" x-text="t('age.' + d)"></option>
+              </template>
+            </select>
+            <span class="hint" x-text="t('search.age_note')"></span>
+          </div>
+        </div>
+
+        <div class="panel">
           <h2 x-text="t('search.title_4')"></h2>
           <div class="row">
             <label class="switch">

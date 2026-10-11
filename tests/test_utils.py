@@ -12,11 +12,21 @@ TODAY = date(2026, 10, 10)
 
 
 class IsRecentTests(unittest.TestCase):
+    """The one-week window; JobAgeTests covers 14 and 30 days."""
+
+    def setUp(self):
+        utils.set_job_age_days(7)
+        self.addCleanup(utils.set_job_age_days, utils.DEFAULT_JOB_AGE_DAYS)
+
     def check(self, text, expected):
         self.assertEqual(utils.is_recent(text, today=TODAY), expected, text)
 
-    def test_window_is_seven_days(self):
-        self.assertEqual(utils.MAX_AGE_DAYS, 7)
+    def test_choices_and_default(self):
+        self.assertEqual(utils.JOB_AGE_CHOICES, (7, 14, 30))
+        self.assertEqual(utils.DEFAULT_JOB_AGE_DAYS, 14)
+        self.assertEqual(utils.set_job_age_days(None), 14)
+        self.assertEqual(utils.set_job_age_days(5), 14)   # not a choice → default
+        self.assertEqual(utils.set_job_age_days(30), 30)
         self.assertFalse(hasattr(utils, "is_within_48h"))
 
     def test_unknown_values_are_kept(self):
@@ -45,6 +55,19 @@ class IsRecentTests(unittest.TestCase):
         self.check("1 month ago", False)
         self.check("1 year ago", False)
         self.check("30+ days ago", False)
+
+    def test_two_weeks_and_a_month(self):
+        cases = {
+            14: {"14 days ago": True, "15 days ago": False, "2 weeks ago": True, "3 weeks ago": False,
+                 "336 hours ago": True, "1 month ago": False, "26 Sep": True, "25 Sep": False},
+            30: {"30 days ago": True, "31 days ago": False, "4 weeks ago": True, "5 weeks ago": False,
+                 "1 month ago": True, "2 months ago": False, "30+ days ago": False, "1 year ago": False},
+        }
+        for days, expected in cases.items():
+            for text, result in expected.items():
+                self.assertEqual(utils.is_recent(text, today=TODAY, max_days=days), result, (days, text))
+                utils.set_job_age_days(days)
+                self.assertEqual(utils.is_recent(text, today=TODAY), result, (days, text, "setting"))
 
     def test_day_month_uses_calendar_dates(self):
         self.check("3 Oct", True)       # 7 days

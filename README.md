@@ -43,7 +43,7 @@ The app is not signed with a paid certificate, so the first launch shows a warni
 
 - **Only new jobs.** Every job it finds is remembered (new / saved / applied / not interested), so you never see the same posting twice.
 - **Searches for you.** Automatic search every few hours, with a desktop notification when new jobs appear; or start one yourself and watch live progress.
-- **Six sources, one list:** LinkedIn jobs, Indeed, Bayt.com, NaukriGulf, Google Jobs and LinkedIn hiring posts. Titles must match your keywords; only jobs from the last 7 days.
+- **Six sources, one list:** LinkedIn jobs, Indeed, Bayt.com, NaukriGulf, Google Jobs and LinkedIn hiring posts. Titles must match your keywords; you choose how recent: the last week, two weeks (default) or month.
 - **Every country**, with names in Arabic and English (built in, no network).
 - **Polite and safe.** Waits between requests to each site so your connection and LinkedIn account are not flagged; LinkedIn posts run at most once a day.
 - **Private.** Nothing leaves your computer except the searches, a daily update check (can be turned off), and pages you open.

@@ -255,7 +255,8 @@ class RunManager:
                 self._publish({**event, "trigger": trigger})
 
             self._run_search(settings, on_event=on_event, cancel=self._cancel, country_labels=labels,
-                             store=store, trigger=trigger)
+                             store=store, trigger=trigger,
+                             job_age_days=self._app_settings_loader().get("job_age_days"))
             result = report_pending(store, self._notifier)
             self._publish({"type": "jobs_reported", "count": result.reported, "more_waiting": result.more_waiting})
         except Exception:

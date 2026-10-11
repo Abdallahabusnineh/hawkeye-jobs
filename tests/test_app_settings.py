@@ -34,6 +34,15 @@ class AppSettingsTests(unittest.TestCase):
         self.assertFalse(app["onboarding_done"])
         self.assertTrue(app["update_check"])
         self.assertIsNone(app["last_posts_run"])
+        self.assertEqual(app["job_age_days"], 14)
+
+    def test_job_age_accepts_only_the_choices(self):
+        for days in (7, 14, 30):
+            self.assertEqual(settings.save_app_settings({"job_age_days": days}, self.path)["job_age_days"], days)
+        for bad in (10, 0, "14", True, None):
+            with self.assertRaises(settings.SettingsError) as ctx:
+                settings.save_app_settings({"job_age_days": bad}, self.path)
+            self.assertEqual(ctx.exception.errors, {"job_age_days": "invalid"})
 
     def test_invalid_stored_values_fall_back_to_defaults(self):
         self.path.write_text(json.dumps({"app": {"language": "fr", "auto_search": {"enabled": "yes", "hours": 5}}}),

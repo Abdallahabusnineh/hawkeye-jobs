@@ -70,11 +70,26 @@ class MainTests(unittest.TestCase):
 
     def _search_adding(self, jobs, state="done"):
         """run_search stand-in that stores `jobs` the way a real run would."""
-        def fake(chosen, on_event=None, country_labels=None, store=None, trigger="manual"):
+        def fake(chosen, on_event=None, country_labels=None, store=None, trigger="manual", job_age_days=None):
             run_id = store.start_run(chosen, trigger=trigger)
             added = store.add_jobs(run_id, jobs) if jobs else []
             return RunSummary(run_id=run_id, state=state, found=len(jobs), new_jobs=added)
         return fake
+
+    def test_terminal_uses_the_saved_job_age(self):
+        from settings import save_app_settings
+        save_app_settings({"job_age_days": 30})
+        seen = {}
+
+        def fake(chosen, job_age_days=None, store=None, **kw):
+            seen["age"] = job_age_days
+            run_id = store.start_run(chosen, trigger="terminal")
+            return RunSummary(run_id=run_id, state="done", found=0, new_jobs=[])
+        with patch("main.run_search", side_effect=fake), \
+             patch("main.collect_settings", return_value=dict(SETTINGS)), \
+             patch("main.send_email"), patch.dict("os.environ", {"GMAIL_USER": "", "GMAIL_PASS": ""}):
+            main.main()
+        self.assertEqual(seen["age"], 30)
 
     def _unnotified(self):
         from store import Store

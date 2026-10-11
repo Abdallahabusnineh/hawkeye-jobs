@@ -1,7 +1,7 @@
 /*
  * logic.js — Pure helpers for the Hawkeye Jobs window (no DOM, no network).
  * Unit-tested with `node --test tests/js/*.test.mjs` (a directory argument fails on Node 24). The constants mirror the backend
- * (tests/test_frontend.py checks SOURCE_ORDER, BROWSER_SOURCES, AUTO_HOURS).
+ * (tests/test_frontend.py checks SOURCE_ORDER, BROWSER_SOURCES, AUTO_HOURS, JOB_AGE_DAYS).
  */
 
 export const STATUSES = ["new", "saved", "applied", "dismissed"];
@@ -9,6 +9,7 @@ export const FILTERS = ["new", "saved", "applied", "all"];
 export const SOURCE_ORDER = ["linkedin", "indeed", "bayt", "naukrigulf", "google_jobs", "linkedin_posts"];
 export const BROWSER_SOURCES = ["bayt", "naukrigulf", "google_jobs", "linkedin_posts"];
 export const AUTO_HOURS = [2, 4, 6, 12, 24];
+export const JOB_AGE_DAYS = [7, 14, 30];
 export const MAX_KEYWORDS = 20;
 export const MAX_KEYWORD_LENGTH = 100;
 

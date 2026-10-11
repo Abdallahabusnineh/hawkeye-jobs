@@ -35,6 +35,7 @@ function hawkeye() {
     filters: L.FILTERS,
     sourceOrder: L.SOURCE_ORDER,
     autoHours: L.AUTO_HOURS,
+    jobAges: L.JOB_AGE_DAYS,
     themes: ["auto", "light", "dark"],
     chromeUrl: CHROME_URL,
     releasesUrl: RELEASES_URL,
@@ -50,7 +51,7 @@ function hawkeye() {
     jobs: { filter: "new", text: "", items: [], total: 0, loading: false },
     search: {
       keywords: [], locations: [], sources: [], keywordInput: "", countryQuery: "", countryOpen: false,
-      auto: { enabled: true, hours: 6 }, errors: {}, estimate: null, saving: false,
+      auto: { enabled: true, hours: 6 }, jobAge: 14, errors: {}, estimate: null, saving: false,
     },
     history: { runs: [], selectedId: null, details: null, loading: false, loaded: false },
     settingsPage: { update: null, checking: false, confirmOpen: false, confirmText: "", busy: false },
@@ -157,6 +158,7 @@ function hawkeye() {
       this.search.locations = [...saved.locations];
       this.search.sources = saved.sources.length ? L.orderSources(saved.sources) : L.defaultSources(this.chromeFound());
       this.search.auto = { enabled: !!app.auto_search.enabled, hours: Number(app.auto_search.hours) };
+      this.search.jobAge = Number(app.job_age_days) || 14;
       this.requestEstimate();
     },
 
@@ -460,6 +462,7 @@ function hawkeye() {
         this.search.errors = {};
         this.appSettings = await api.patch("/api/app-settings", {
           auto_search: { enabled: !!this.search.auto.enabled, hours: Number(this.search.auto.hours) },
+          job_age_days: Number(this.search.jobAge),
         });
         await this.refreshState();
       } catch (error) {

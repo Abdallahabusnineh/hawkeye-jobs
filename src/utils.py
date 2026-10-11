@@ -7,7 +7,7 @@ Contains two functions used by every scraper:
                       the same job linked from different platforms hashes to the same ID.
 
     is_recent()     — returns True if a date string represents a posting within
-                      the last 7 days (MAX_AGE_DAYS). Handles multiple real-world date formats
+                      the user's job-age window (7/14/30 days). Handles multiple real-world date formats
                       found across LinkedIn, Indeed, Bayt, NaukriGulf, and Google Jobs.
 
 Imported by: scraper.py, bayt.py, naukrigulf.py, store.py
@@ -17,7 +17,23 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
 import re
 
-MAX_AGE_DAYS = 7  # jobs older than this are filtered out
+# How old a job may be (days since posted). The user picks it in the window (Search → job age);
+# run_search() sets it for the run. One search runs at a time per process (run_lock), so a
+# module-level value is enough and saves threading it through every site's fetcher.
+JOB_AGE_CHOICES = (7, 14, 30)
+DEFAULT_JOB_AGE_DAYS = 14
+_job_age_days = DEFAULT_JOB_AGE_DAYS
+
+
+def set_job_age_days(days) -> int:
+    """Use `days` for the coming search (one of JOB_AGE_CHOICES; anything else → the default)."""
+    global _job_age_days
+    _job_age_days = days if days in JOB_AGE_CHOICES else DEFAULT_JOB_AGE_DAYS
+    return _job_age_days
+
+
+def job_age_days() -> int:
+    return _job_age_days
 
 
 def clean_url(url: str) -> str:
@@ -53,9 +69,10 @@ def clean_url(url: str) -> str:
         return url
 
 
-def is_recent(date_str: str, today=None) -> bool:
+def is_recent(date_str: str, today=None, max_days=None) -> bool:
     """
-    Return True if the job was posted within the last MAX_AGE_DAYS (7) days.
+    Return True if the job was posted within the last `max_days` days (default: job_age_days(),
+    the user's setting — 7, 14 or 30).
 
     Handles the variety of date formats returned by different job boards:
 
@@ -64,13 +81,14 @@ def is_recent(date_str: str, today=None) -> bool:
         Empty / None / NaN   "", "none", "nan"    True  (benefit of the doubt)
         Immediate            "just now", "today"  True
         Yesterday            "yesterday"          True
-        Hours ago            "3 hours ago"        True if ≤ 7 x 24
-        Days ago             "5 days ago"         True if ≤ 7
-        Weeks ago            "1 week ago"         True if ≤ 1 ("2 weeks ago" is False)
+        (N = max_days: 7, 14 or 30)
+        Hours ago            "3 hours ago"        True if ≤ N x 24
+        Days ago             "5 days ago"         True if ≤ N
+        Weeks ago            "2 weeks ago"        True if weeks x 7 ≤ N
+        Months ago           "1 month ago"        True if months x 30 ≤ N (only the 30-day window)
         Old markers          "30+ days ago"       False (any "+")
-                             "1 month ago"        False
                              "1 year ago"         False
-        Day-month string     "8 Oct", "8 October" Calendar dates: True if today - date ≤ 7 days
+        Day-month string     "8 Oct", "8 October" Calendar dates: True if today - date ≤ N days
         ISO date / datetime  "2026-10-08"         Calendar dates (a time part is ignored)
         Unparseable          anything else        True  (benefit of the doubt)
 
@@ -86,6 +104,7 @@ def is_recent(date_str: str, today=None) -> bool:
     """
     if not date_str or str(date_str).lower() in ("none", "nan", "n/a", "-"):
         return True
+    max_days = max_days or job_age_days()
 
     s = str(date_str).lower().strip()
 
@@ -103,14 +122,17 @@ def is_recent(date_str: str, today=None) -> bool:
         return False                          # "30+ days ago" (not an ISO "+03:00" offset)
     m = re.search(r"(\d+)\s*(?:hour|hr)", s)
     if m:
-        return int(m.group(1)) <= MAX_AGE_DAYS * 24
+        return int(m.group(1)) <= max_days * 24
     m = re.search(r"(\d+)\s*day", s)
     if m:
-        return int(m.group(1)) <= MAX_AGE_DAYS
+        return int(m.group(1)) <= max_days
     if "week" in s:
         m = re.search(r"(\d+)\s*week", s)
-        return (int(m.group(1)) if m else 1) <= 1
-    if "month" in s or "year" in s:
+        return (int(m.group(1)) if m else 1) * 7 <= max_days
+    if "month" in s:
+        m = re.search(r"(\d+)\s*month", s)
+        return (int(m.group(1)) if m else 1) * 30 <= max_days
+    if "year" in s:
         return False
 
     # "8 Oct" / "8 October" pattern
@@ -124,12 +146,12 @@ def is_recent(date_str: str, today=None) -> bool:
                 parsed = parsed.replace(year=today.year - 1)
             except ValueError:                # 29 Feb rolled back into a non-leap year
                 return False
-        return (today - parsed).days <= MAX_AGE_DAYS
+        return (today - parsed).days <= max_days
 
     # ISO date "2026-10-08" (optionally with a time part)
     try:
         parsed = datetime.fromisoformat(date_str.strip()).date()
-        return (today - parsed).days <= MAX_AGE_DAYS
+        return (today - parsed).days <= max_days
     except ValueError:
         pass
 
