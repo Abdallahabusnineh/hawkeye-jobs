@@ -416,9 +416,16 @@ class ThrottleTests(PipelineTestCase):
 
     def test_cancel_during_throttle_wait_in_browser_lane(self):
         cancel = threading.Event()
-        timer = threading.Timer(0.3, cancel.set)
-        self.addCleanup(timer.cancel)
-        timer.start()
+
+        def first_query_then_cancel_soon(driver, args):
+            # Cancel while the lane waits out the 30 s gap before the second query. Timed from the
+            # first query, not from the test start, so a slow machine cannot cancel before it.
+            timer = threading.Timer(0.3, cancel.set)
+            self.addCleanup(timer.cancel)
+            timer.start()
+            return [job_for("bayt", args)]
+
+        self.rec.behaviour["bayt"] = first_query_then_cancel_soon
         started = time.monotonic()
         summary = self.run_search(settings(keywords=("Java", "Kotlin"), sources=("bayt",)),
                                   cancel=cancel, delays={"bayt": (30, 30)})
@@ -597,7 +604,8 @@ class SpacingAcrossRunsTests(PipelineTestCase):
         saved_at = time.time()
         self.store.save_site_requests({"bayt.com": saved_at})
         self.run_search(settings(sources=("bayt",)), delays={"bayt": (0.3, 0.3)})
-        self.assertGreaterEqual(starts[0] - saved_at, 0.29)
+        # 0.3 s gap; the slack covers Windows' coarse wall clock (~16 ms). Unprimed, it would be ~0.
+        self.assertGreaterEqual(starts[0] - saved_at, 0.27)
 
     def test_failing_save_does_not_break_the_run(self):
         with mock.patch.object(self.store, "save_site_requests", side_effect=sqlite3.OperationalError("locked")):
