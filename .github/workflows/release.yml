@@ -31,6 +31,7 @@ jobs:
           - os: ubuntu-22.04
             artifact: linux
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 240  # macOS notarization can take hours for a new developer account
     # Release builds for macOS run in the protected "release-signing" environment: its secrets
     # (Developer ID certificate, notarization password) exist only there, every use waits for the
     # owner's approval, and only v* tags may deploy to it. Other builds never see them.
