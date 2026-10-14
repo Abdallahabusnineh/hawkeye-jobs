@@ -22,19 +22,28 @@ jobs:
         include:
           - os: macos-latest
             artifact: macos-applesilicon
+            sign: true
           - os: macos-15-intel
             artifact: macos-intel
+            sign: true
           - os: windows-latest
             artifact: windows
           - os: ubuntu-22.04
             artifact: linux
     runs-on: ${{ matrix.os }}
+    # Release builds for macOS run in the protected "release-signing" environment: its secrets
+    # (Developer ID certificate, notarization password) exist only there, every use waits for the
+    # owner's approval, and only v* tags may deploy to it. Other builds never see them.
+    environment: ${{ matrix.sign && startsWith(github.ref, 'refs/tags/') && 'release-signing' || '' }}
+    env:
+      SIGN: ${{ matrix.sign && startsWith(github.ref, 'refs/tags/') && 'yes' || 'no' }}
+      APPLE_TEAM_ID: 5QK2GF6VU8
     defaults:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
           cache: pip
@@ -51,11 +60,47 @@ jobs:
           fi
           echo "APP_VERSION=$version" >> "$GITHUB_ENV"
 
+      - name: Import the signing certificate (macOS releases)
+        if: env.SIGN == 'yes'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERT_P12" ] || [ -z "$MACOS_CERT_PASSWORD" ]; then
+            echo "Signing secrets are missing: refusing to publish an unsigned macOS release."; exit 1
+          fi
+          # A throwaway keychain that exists only for this job; deleted in the last step.
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(openssl rand -hex 24)"
+          echo "::add-mask::$keychain_password"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          printf '%s' "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          identity="$(security find-identity -v -p codesigning "$keychain" | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"')"
+          if [ -z "$identity" ]; then echo "No Developer ID Application identity in the certificate."; exit 1; fi
+          echo "MACOS_SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PATH=$keychain" >> "$GITHUB_ENV"
+
       - name: Build
         run: python -m PyInstaller packaging/hawkeye.spec --noconfirm
 
       - name: Smoke test (starts, serves the window, quits)
         run: python packaging/smoke_test.py
+
+      - name: Notarize the app (macOS releases)
+        if: env.SIGN == 'yes'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          ditto -c -k --keepParent "dist/Hawkeye Jobs.app" "$RUNNER_TEMP/app.zip"
+          bash packaging/macos/notarize.sh "$RUNNER_TEMP/app.zip"
+          xcrun stapler staple "dist/Hawkeye Jobs.app"
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
@@ -66,6 +111,24 @@ jobs:
           cp -R "dist/Hawkeye Jobs.app" staging/
           ln -s /Applications staging/Applications
           hdiutil create -volname "Hawkeye Jobs" -srcfolder staging -ov -format UDZO "out/$asset"
+          echo "MAC_ASSET=out/$asset" >> "$GITHUB_ENV"
+
+      - name: Sign and notarize the disk image (macOS releases)
+        if: env.SIGN == 'yes'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          codesign --sign "$MACOS_SIGN_IDENTITY" --timestamp "$MAC_ASSET"
+          bash packaging/macos/notarize.sh "$MAC_ASSET"
+          xcrun stapler staple "$MAC_ASSET"
+          # What a user's Mac will check: the app inside opens without any warning.
+          spctl --assess --type open --context context:primary-signature --verbose "$MAC_ASSET"
+          spctl --assess --type execute --verbose "dist/Hawkeye Jobs.app"
+
+      - name: Remove the signing keychain
+        if: always() && env.KEYCHAIN_PATH != ''
+        run: security delete-keychain "$KEYCHAIN_PATH" || true
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
@@ -99,7 +162,7 @@ jobs:
           mv dist/HawkeyeJobs-Linux.AppImage out/
           python packaging/smoke_test.py out/HawkeyeJobs-Linux.AppImage
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ matrix.artifact }}
           path: out/*
@@ -112,8 +175,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: assets
           merge-multiple: true

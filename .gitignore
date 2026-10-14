@@ -33,3 +33,10 @@ build/
 # Local scratch from Claude Code workflows (brainstorm mockups, SDD ledgers)
 .superpowers/
 *.bak-*
+
+# Signing material: never commit
+*.p12
+*.cer
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile

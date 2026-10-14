@@ -5,6 +5,7 @@
 # Output: dist/Hawkeye Jobs.app (macOS) or dist/Hawkeye Jobs/ (Windows, Linux).
 # One folder, not one file: it starts faster and antivirus tools flag it less.
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -14,6 +15,10 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 ROOT = Path(SPECPATH).resolve().parent
 SRC = ROOT / "src"
 NAME = "Hawkeye Jobs"
+# macOS release builds: sign every binary with the Developer ID and the Hardened Runtime (needed for
+# notarization). Unset → unsigned build (PyInstaller's ad-hoc signature), as for local development.
+SIGN_IDENTITY = os.environ.get("MACOS_SIGN_IDENTITY") or None
+ENTITLEMENTS = str(ROOT / "packaging" / "macos" / "entitlements.plist") if SIGN_IDENTITY else None
 VERSION = re.search(r'__version__ = "([^"]+)"', (SRC / "version.py").read_text()).group(1)
 
 datas = [(str(SRC / "web" / "static"), "web/static"), (str(ROOT / "packaging" / "icon.png"), ".")]
@@ -63,6 +68,8 @@ exe = EXE(
     name=NAME,
     console=False,
     icon=str(ROOT / "packaging" / "icon.png"),
+    codesign_identity=SIGN_IDENTITY,
+    entitlements_file=ENTITLEMENTS,
 )
 coll = COLLECT(exe, a.binaries, a.datas, name=NAME)
 
@@ -72,6 +79,8 @@ if sys.platform == "darwin":
         name=f"{NAME}.app",
         icon=str(ROOT / "packaging" / "icon.png"),
         bundle_identifier="io.github.abdallahabusnineh.hawkeyejobs",
+        codesign_identity=SIGN_IDENTITY,
+        entitlements_file=ENTITLEMENTS,
         version=VERSION,
         info_plist={
             "CFBundleDisplayName": NAME,
