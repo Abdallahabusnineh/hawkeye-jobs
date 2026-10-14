@@ -31,11 +31,15 @@ import shutil
 import subprocess
 import sys
 
+import logging
+
 import undetected_chromedriver as uc
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+
+log = logging.getLogger(__name__)
 
 MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 MAC_CHROME_USER = "~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
@@ -109,6 +113,8 @@ def _detect_chrome_major(chrome_path=None):
 
 def wait_for(driver, css: str, timeout: float) -> bool:
     """Wait until an element matching `css` exists. False on timeout — the caller parses whatever loaded."""
+    if hasattr(driver, "wait_css"):  # cdp_browser.CdpDriver
+        return driver.wait_css(css, timeout)
     try:
         WebDriverWait(driver, timeout, poll_frequency=0.25).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, css))
@@ -120,7 +126,32 @@ def wait_for(driver, css: str, timeout: float) -> bool:
 
 def create_driver(headless=False, user_data_dir=None):
     """
-    Create and return a configured undetected-chromedriver instance.
+    Start Chrome for the browser sources: undetected-chromedriver (the tested, normal path), or —
+    when that cannot start — Chrome driven directly over its DevTools protocol (cdp_browser).
+
+    The fallback exists for PCs where chromedriver cannot run: Windows Smart App Control blocks
+    the patched chromedriver as an unsigned file, and a failed chromedriver download stops it
+    too. HAWKEYE_BROWSER=cdp forces the fallback (testing).
+    """
+    chrome = find_chrome()
+    if not chrome:
+        raise ChromeNotFound("Google Chrome (or Chromium) is not installed")
+    if os.environ.get("HAWKEYE_BROWSER", "").lower() != "cdp":
+        try:
+            return _create_uc_driver(chrome, headless, user_data_dir)
+        except Exception:
+            log.warning("undetected-chromedriver could not start; using Chrome over DevTools instead",
+                        exc_info=True)
+    from cdp_browser import CdpDriver
+    profile = os.path.expanduser(str(user_data_dir)) if user_data_dir else None
+    driver = CdpDriver(chrome, user_data_dir=profile, headless=headless)
+    driver.set_page_load_timeout(30)
+    return driver
+
+
+def _create_uc_driver(chrome, headless=False, user_data_dir=None):
+    """
+    Create and return a configured undetected-chromedriver instance (create_driver's normal path).
 
     Args:
         headless (bool): Run Chrome with no visible window.
@@ -137,13 +168,7 @@ def create_driver(headless=False, user_data_dir=None):
         --disable-blink-features=AutomationControlled : removes the "Chrome is controlled by
                                             automated software" flag from the browser
 
-    Raises:
-        ChromeNotFound: neither Google Chrome nor Chromium is installed.
     """
-    chrome = find_chrome()
-    if not chrome:
-        raise ChromeNotFound("Google Chrome (or Chromium) is not installed")
-
     opts = uc.ChromeOptions()
     if headless:
         opts.add_argument("--headless=new")

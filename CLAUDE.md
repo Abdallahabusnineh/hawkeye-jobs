@@ -65,6 +65,7 @@ Set in `.env` (gitignored): `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`. Copy 
 | `src/google_jobs.py` | Google Jobs selectors |
 | `src/linkedin_posts.py` | LinkedIn post selectors |
 | `src/browser.py` | Chrome discovery (`find_chrome`), auto-detected version, `wait_for`, persistent profile |
+| `src/cdp_browser.py` | Fallback when chromedriver cannot run (Smart App Control): Chrome over DevTools, no chromedriver |
 | `src/pipeline.py` | Run orchestration, events, cancel |
 | `src/store.py` | SQLite schema, job statuses, dedup |
 | `src/paths.py` | Data directory and file locations |

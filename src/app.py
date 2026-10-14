@@ -285,7 +285,7 @@ def self_test() -> list:
         problems.append(f"countries: {exc!r}")
     for module in ("jobspy", "tls_client.cffi", "undetected_chromedriver", "selenium.webdriver",
                    "webview", "desktop_notifier", "pipeline", "scraper", "bayt", "naukrigulf",
-                   "google_jobs", "linkedin_posts", "PIL.Image"):
+                   "google_jobs", "linkedin_posts", "PIL.Image", "cdp_browser", "websocket"):
         try:
             __import__(module)
         except Exception as exc:

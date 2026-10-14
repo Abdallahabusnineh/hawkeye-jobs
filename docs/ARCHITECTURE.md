@@ -276,6 +276,8 @@ def create_driver(headless=False, user_data_dir=None) -> uc.Chrome   # raises Ch
 
 ---
 
+
+**Fallback: `src/cdp_browser.py` (`CdpDriver`).** `create_driver()` tries undetected-chromedriver first (unchanged, the tested path). If it cannot start — Windows Smart App Control blocks the patched chromedriver as an unsigned file ("An Application Control policy has blocked this file"), or the chromedriver download fails — it logs a warning and starts Chrome itself with `--remote-debugging-port` and drives it over the DevTools WebSocket (`websocket-client`, a Selenium dependency), so no extra executable runs. `CdpDriver` implements only the WebDriver subset the scrapers use (`get`, `page_source`, `title`, `current_url`, `execute_script`, `window_handles`, `switch_to.window`, `close`, `quit`, `set_page_load_timeout`) plus `wait_css()`, which `wait_for()` uses. It never sends `Runtime.enable`/`Page.enable` and Chrome runs without `--enable-automation`, so `navigator.webdriver` is false. Measured side by side on the same searches (Bayt UAE/Jordan, NaukriGulf UAE, Google Jobs UAE/Jordan), both paths returned the same job counts with no block pages. `HAWKEYE_BROWSER=cdp` forces the fallback for testing.
 ### `src/bayt.py` — Bayt.com Scraper
 
 Covers: Jordan, UAE, Saudi Arabia, Kuwait, Qatar, Oman, Bahrain.
