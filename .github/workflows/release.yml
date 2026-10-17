@@ -101,7 +101,15 @@ jobs:
         run: |
           ditto -c -k --keepParent "dist/Hawkeye Jobs.app" "$RUNNER_TEMP/app.zip"
           bash packaging/macos/notarize.sh "$RUNNER_TEMP/app.zip"
-          bash packaging/macos/staple.sh "dist/Hawkeye Jobs.app"
+          # Notarization is what matters; stapling only lets a first launch work offline. Some
+          # runners cannot reach Apple's ticket service (CloudKit -1005), so warn instead of failing:
+          # the Mac fetches the ticket online at first launch.
+          if bash packaging/macos/staple.sh "dist/Hawkeye Jobs.app"; then
+            echo "APP_STAPLED=yes" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Notarized, but the app could not be stapled (Apple's ticket service unreachable from this runner)."
+            echo "APP_STAPLED=no" >> "$GITHUB_ENV"
+          fi
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
@@ -122,10 +130,15 @@ jobs:
         run: |
           codesign --sign "$MACOS_SIGN_IDENTITY" --timestamp "$MAC_ASSET"
           bash packaging/macos/notarize.sh "$MAC_ASSET"
-          bash packaging/macos/staple.sh "$MAC_ASSET"
-          # What a user's Mac will check: the app inside opens without any warning.
-          spctl --assess --type open --context context:primary-signature --verbose "$MAC_ASSET"
-          spctl --assess --type execute --verbose "dist/Hawkeye Jobs.app"
+          if bash packaging/macos/staple.sh "$MAC_ASSET" && [ "$APP_STAPLED" = "yes" ]; then
+            # What a user's Mac will check: the app inside opens without any warning.
+            spctl --assess --type open --context context:primary-signature --verbose "$MAC_ASSET"
+            spctl --assess --type execute --verbose "dist/Hawkeye Jobs.app"
+          else
+            # Both notarizations were Accepted (notarize.sh fails otherwise). spctl would need the
+            # same unreachable service, so the online check happens on the user's Mac instead.
+            echo "::warning::Notarized, but not stapled; skipping the offline Gatekeeper check on this runner."
+          fi
 
       - name: Remove the signing keychain
         if: always() && env.KEYCHAIN_PATH != ''
