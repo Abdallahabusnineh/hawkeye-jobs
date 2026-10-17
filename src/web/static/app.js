@@ -195,6 +195,9 @@ function hawkeye() {
         case "login_required":
           this.notify("warn", "notice.login_required", {}, { label: "linkedin.login", run: () => this.linkedinLogin() });
           break;
+        case "profile_in_use":
+          this.notify("warn", "notice.profile_in_use");
+          break;
         case "browser_failed":
           this.notify("warn", L.browserNoticeKey(event.reason), {}, event.reason === "chrome_not_found"
             ? { label: "action.download_chrome", run: () => this.openUrl(CHROME_URL) }

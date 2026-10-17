@@ -77,8 +77,9 @@ class Recorder:
         result.update({s: self.browser(s) for s in ("bayt", "naukrigulf", "google_jobs", "linkedin_posts")})
         return result
 
-    def driver_factory(self):
+    def driver_factory(self, use_profile=True):
         driver = FakeDriver()
+        driver.use_profile = use_profile
         self.drivers.append(driver)
         return driver
 
@@ -669,6 +670,28 @@ class EstimateTests(unittest.TestCase):
     def test_estimate_of_nothing_is_zero(self):
         from pipeline import estimate_seconds
         self.assertEqual(estimate_seconds([]), 0)
+
+
+class ProfileInUseTests(PipelineTestCase):
+    def test_login_window_open_skips_posts_and_runs_other_sites_without_the_profile(self):
+        summary = self.run_search(settings(sources=("bayt", "linkedin_posts")), profile_in_use=lambda: True)
+        self.assertEqual(summary.state, "done")
+        self.assertEqual(len(self.of_type("profile_in_use")), 1)
+        skipped = self.of_type("query_skipped")
+        self.assertTrue(skipped and all(e["source"] == "linkedin_posts" for e in skipped))
+        self.assertTrue(all(e["reason"] == "profile_in_use" for e in skipped))
+        self.assertEqual([d.use_profile for d in self.rec.drivers], [False])   # Bayt still ran
+        self.assertEqual(self.of_type("browser_failed"), [])
+
+    def test_only_posts_selected_starts_no_chrome(self):
+        self.run_search(settings(sources=("linkedin_posts",)), profile_in_use=lambda: True)
+        self.assertEqual(self.rec.drivers, [])
+        self.assertEqual(len(self.of_type("profile_in_use")), 1)
+
+    def test_free_profile_changes_nothing(self):
+        self.run_search(settings(sources=("bayt", "linkedin_posts")), profile_in_use=lambda: False)
+        self.assertEqual(self.of_type("profile_in_use"), [])
+        self.assertEqual([d.use_profile for d in self.rec.drivers], [True])
 
 
 if __name__ == "__main__":

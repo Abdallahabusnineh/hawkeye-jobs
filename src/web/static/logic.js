@@ -188,7 +188,7 @@ export function apiErrorKey(status, body) {
 export function queryOutcome(query) {
   if (query.status === "done") return { key: "history.q.done", params: { found: query.found, new: query.new } };
   if (query.status === "failed") return { key: "history.q.failed", params: {} };
-  const reason = ["login_required", "browser_unavailable"].includes(query.detail) ? query.detail : "other";
+  const reason = ["login_required", "browser_unavailable", "profile_in_use"].includes(query.detail) ? query.detail : "other";
   return { key: `history.q.skipped.${reason}`, params: {} };
 }
 

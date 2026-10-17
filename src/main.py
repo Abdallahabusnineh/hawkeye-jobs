@@ -80,6 +80,9 @@ def format_event(event: dict, country_labels=None):
             f'  Log in once: open Chrome with --user-data-dir="{linkedin_profile_dir()}", '
             "sign in to LinkedIn, then close it."
         )
+    if kind == "profile_in_use":
+        return ("⚠ The LinkedIn login window is still open, so LinkedIn posts were skipped.\n"
+                "  Close that Chrome window, then search again.")
     if kind == "browser_failed":
         return _BROWSER_FAILED.get(event["reason"], f"⚠ Browser problem: {event['reason']}")
     if kind == "run_finished":

@@ -116,7 +116,7 @@ class DictionaryTests(unittest.TestCase):
         families += [f"theme.{t}" for t in THEMES]
         families += [f"history.trigger.{t}" for t in ("manual", "auto", "terminal")]
         families += [f"history.state.{s}" for s in ("running", "done", "cancelled", "failed")]
-        families += [f"history.q.skipped.{r}" for r in ("login_required", "browser_unavailable", "other")]
+        families += [f"history.q.skipped.{r}" for r in ("login_required", "browser_unavailable", "profile_in_use", "other")]
         families += [f"notice.browser.{r}" for r in ("chrome_not_found", "start_failed", "crashed")]
         families += [f"errors.keywords.{c}" for c in ("invalid", "required", "too_long", "too_many")]
         families += [f"errors.locations.{c}" for c in ("invalid", "required")]

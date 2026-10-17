@@ -105,11 +105,18 @@ def _default_fetchers() -> dict:
     }
 
 
-def _default_driver_factory():
+def _default_driver_factory(use_profile=True):
     from browser import create_driver
     from paths import linkedin_profile_dir
 
-    return create_driver(headless=False, user_data_dir=str(linkedin_profile_dir()))
+    return create_driver(headless=False, user_data_dir=str(linkedin_profile_dir()) if use_profile else None)
+
+
+def _default_profile_in_use() -> bool:
+    from browser import profile_in_use
+    from paths import linkedin_profile_dir
+
+    return profile_in_use(linkedin_profile_dir())
 
 
 def _query_fields(query: dict) -> dict:
@@ -223,7 +230,8 @@ def _http_lane(queries, fetchers, keywords, cancel, out, throttles) -> None:
         out.put(("done", query, jobs))
 
 
-def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out, throttles) -> None:
+def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out, throttles,
+                  profile_in_use=_default_profile_in_use) -> None:
     seen_urls = set()
     driver = None
     restarts_left = 1
@@ -231,6 +239,24 @@ def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out, thro
     try:
         if cancel.is_set():
             return
+        try:
+            busy = profile_in_use()
+        except Exception:
+            log.debug("Could not check the LinkedIn profile lock", exc_info=True)
+            busy = False
+        if busy:
+            # The "Log in to LinkedIn" window still holds the profile, so Chrome cannot start on it.
+            # Skip LinkedIn posts (they need that login) and run the other sites on a fresh profile.
+            log.warning("The LinkedIn profile is in use (login window open?); skipping LinkedIn posts")
+            posts = [q for q in queries if q["source"] == "linkedin_posts"]
+            if posts:
+                out.put(("event", {"type": "profile_in_use"}))
+                _skip_all(posts, "profile_in_use", out)
+            queries = [q for q in queries if q["source"] != "linkedin_posts"]
+            if not queries:
+                return
+            plain_factory = driver_factory
+            driver_factory = lambda: plain_factory(use_profile=False)  # noqa: E731
         try:
             driver = driver_factory()
         except ChromeNotFound:
@@ -316,7 +342,7 @@ def _make_emitter(on_event):
 
 def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=None,
                store=None, fetchers=None, driver_factory=None, delays=None,
-               trigger="manual", job_age_days=None) -> RunSummary:
+               trigger="manual", job_age_days=None, profile_in_use=None) -> RunSummary:
     """
     Run one search. settings = {"keywords", "locations", "sources"}.
 
@@ -367,7 +393,8 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
             name="hawkeye-http-lane", daemon=True))
     if browser_queries:
         lanes.append(threading.Thread(
-            target=_browser_lane, args=(browser_queries, fetchers, driver_factory, keywords, cancel, out, throttles),
+            target=_browser_lane, args=(browser_queries, fetchers, driver_factory, keywords, cancel, out, throttles,
+                                        profile_in_use or _default_profile_in_use),
             name="hawkeye-browser-lane", daemon=True))
     for lane in lanes:
         lane.start()

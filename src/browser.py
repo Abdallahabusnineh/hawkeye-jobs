@@ -32,6 +32,7 @@ import subprocess
 import sys
 
 import logging
+from pathlib import Path
 
 import undetected_chromedriver as uc
 from selenium.common.exceptions import TimeoutException
@@ -109,6 +110,41 @@ def _detect_chrome_major(chrome_path=None):
         return None
     match = re.search(r"(\d+)\.\d+\.\d+", out)
     return int(match.group(1)) if match else None
+
+
+def profile_in_use(user_data_dir) -> bool:
+    """True if a running Chrome holds this profile (e.g. the "Log in to LinkedIn" window is still
+    open). Chrome lets one process use a profile; a second one started on it exits at once.
+
+    macOS/Linux: SingletonLock is a symlink to "<host>-<pid>"; only a live pid counts (a crashed
+    Chrome leaves a stale link). Windows: Chrome keeps "lockfile" open exclusively.
+    """
+    path = Path(str(user_data_dir))
+    if sys.platform == "win32":
+        lock = path / "lockfile"
+        if not lock.exists():
+            return False
+        try:
+            os.close(os.open(lock, os.O_RDWR))
+            return False
+        except OSError:
+            return True
+    try:
+        target = os.readlink(path / "SingletonLock")
+    except OSError:
+        return False
+    pid = target.rpartition("-")[2]
+    if not pid.isdigit():
+        return False
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # alive, owned by someone else
+    except OSError:
+        return False
+    return True
 
 
 def wait_for(driver, css: str, timeout: float) -> bool:

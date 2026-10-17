@@ -391,7 +391,7 @@ Scrapes LinkedIn's **global content search** (feed posts) — *not* the Jobs boa
 
 **Hiring filter:** `filters.is_hiring_post()` ignores signals that appear only inside a pile of 3+ consecutive hashtags (`#opentowork #jobsearch #hiring …`), which job seekers and unrelated posts add for reach; a hashtag inside a sentence ("We're #hiring a …") still counts.
 
-**The login window must be closed before a search.** Chrome lets one process use a profile at a time; while the "Log in to LinkedIn" window is open, the search Chrome exits at once and the browser sources are skipped (`browser_unavailable`).
+**Login window still open.** Chrome lets one process use a profile at a time; while the "Log in to LinkedIn" window is open, a search Chrome on that profile exits at once. `browser.profile_in_use()` detects it (macOS/Linux: the `SingletonLock` symlink names a live pid — a stale link from a crashed Chrome does not count; Windows: `lockfile` is held exclusively). `_browser_lane` then emits `profile_in_use`, skips the LinkedIn post queries (`skipped`, reason `profile_in_use`, shown in the window and in History) and runs the other browser sources on a fresh temporary profile (`driver_factory(use_profile=False)`), so Bayt, NaukriGulf and Google Jobs are not lost. Skipped posts do not count toward the once-a-day posts limit.
 
 **First-time setup:**
 ```bash
