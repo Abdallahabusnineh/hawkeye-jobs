@@ -387,6 +387,12 @@ Scrapes LinkedIn's **global content search** (feed posts) — *not* the Jobs boa
 
 **Authentication (required):** LinkedIn shows an auth wall to anonymous visitors. The scraper reuses a **persistent Chrome profile** created by `create_driver(user_data_dir=...)`. The pipeline passes `paths.linkedin_profile_dir()`, resolved in this order: `LINKEDIN_PROFILE_DIR` if set; else the old `~/.hawkeye-linkedin-profile` if it exists (so existing users stay logged in); else `<data dir>/linkedin-profile`. Log into LinkedIn **once by hand** in that profile; the session cookie is reused every run. If logged out, `fetch_linkedin_posts()` raises `LinkedInLoginRequired` (checked before and after the wait); the pipeline emits `login_required`, skips the remaining post queries, and carries on with the other sources.
 
+**Markup (October 2026):** LinkedIn's search results no longer carry `data-urn="urn:li:activity:…"` or the `feed-shared-update-v2` / `update-components-*` classes, and there is no link to the post itself. Posts are `[data-view-name="feed-full-update"]`; text is every `[data-view-name="feed-commentary"]` inside; the author is `[data-view-name="feed-actor"]` (its `aria-label`, cut at `•`); the relative time is the first text node like `now`, `22m`, `3h`, `2d`. `_parse_new_markup()` handles this; the old selectors remain as a fallback (`_parse_posts_page()` picks whichever the page has; `CARD_SELECTOR` waits for either). Since there is no post link, a post's URL is the author's recent activity (`/in/<id>/recent-activity/all/`, or `/company/<id>/posts/`) plus `#hawkeye-<16-hex fingerprint of author + text>`, so every post stays one distinct job (`clean_url` keeps fragments) and "Open posting" lands near it. LinkedIn also drops the `datePosted` parameter on redirect, so recency rests on `_post_is_recent()`.
+
+**Hiring filter:** `filters.is_hiring_post()` ignores signals that appear only inside a pile of 3+ consecutive hashtags (`#opentowork #jobsearch #hiring …`), which job seekers and unrelated posts add for reach; a hashtag inside a sentence ("We're #hiring a …") still counts.
+
+**The login window must be closed before a search.** Chrome lets one process use a profile at a time; while the "Log in to LinkedIn" window is open, the search Chrome exits at once and the browser sources are skipped (`browser_unavailable`).
+
 **First-time setup:**
 ```bash
 # Open Chrome with the same profile the automation uses, sign into LinkedIn, then close it.

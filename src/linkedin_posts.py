@@ -50,6 +50,7 @@ Job dict schema (same shape as every other scraper):
 """
 
 import logging
+import hashlib
 import re
 import time
 from datetime import datetime, timezone
@@ -65,7 +66,10 @@ log = logging.getLogger(__name__)
 _MAX_SCROLLS = 4          # how many times to scroll to lazy-load more posts
 _SCROLL_PAUSE = 2.0       # seconds to wait after each scroll
 POSTS_WAIT_SECONDS = 15
-CARD_SELECTOR = 'div[data-urn*="urn:li:activity"]'
+# LinkedIn's current search results (2026) mark each post with data-view-name="feed-full-update";
+# the older markup used data-urn="urn:li:activity:…". Wait for either.
+NEW_CARD = '[data-view-name="feed-full-update"]'
+CARD_SELECTOR = 'div[data-urn*="urn:li:activity"], ' + NEW_CARD
 
 
 class LinkedInLoginRequired(RuntimeError):
@@ -118,9 +122,74 @@ def _is_logged_out(driver) -> bool:
     return any(x in cur for x in ("/login", "/authwall", "/checkpoint", "linkedin.com/uas"))
 
 
+_REL_TIME = re.compile(r"^(now|\d+\s*(?:s|m|min|h|hr|d|w|mo|yr|y))$", re.IGNORECASE)
+
+
+def _post_url(card, post_text: str) -> str:
+    """The new markup has no link to the post itself. Link to the author's recent activity (the post
+    is near the top, being recent) and add a fragment fingerprinting the post, so each post stays a
+    distinct job in the store (clean_url keeps fragments)."""
+    profile = ""
+    for a in card.select("a[href]"):
+        href = a.get("href", "").split("?")[0]
+        if "linkedin.com/in/" in href or "linkedin.com/company/" in href:
+            profile = href.rstrip("/") + "/"
+            break
+    fingerprint = hashlib.sha1(f"{profile}|{' '.join(post_text.split())[:500]}".encode("utf-8")).hexdigest()[:16]
+    if "/company/" in profile:
+        base = profile + "posts/"
+    elif profile:
+        base = profile + "recent-activity/all/"
+    else:
+        words = " ".join(post_text.split()[:8])
+        base = f"https://www.linkedin.com/search/results/content/?keywords={quote(words)}"
+    return f"{base}#hawkeye-{fingerprint}"
+
+
+def _parse_new_markup(soup, seen_urls: set, keyword: str, keywords: list) -> list:
+    """LinkedIn's 2026 search results: data-view-name attributes, no activity URNs."""
+    result = []
+    for card in soup.select(NEW_CARD):
+        try:
+            post_text = " ".join(t.get_text(" ", strip=True)
+                                 for t in card.select('[data-view-name="feed-commentary"]'))
+            if not is_hiring_post(post_text, keywords):
+                continue
+            actor = card.select_one('[data-view-name="feed-actor"]')
+            author = ""
+            if actor is not None:
+                label = actor.get("aria-label", "") or actor.get_text(" ", strip=True)
+                author = re.split(r"\s+•|\s{2,}\d", label)[0].strip()
+            author = author or "LinkedIn member"
+            rel = next((s for s in card.stripped_strings if _REL_TIME.match(s.strip())), "")
+            if not _post_is_recent(rel):
+                continue
+            url = _post_url(card, post_text)
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
+            hook = " ".join(post_text.split())
+            title = (hook[:90] + "…") if len(hook) > 90 else hook
+            result.append({
+                "title": title or f"{author} is hiring",
+                "url": url,
+                "description": f"{author} · LinkedIn hiring post",
+                "source": "LinkedIn Post",
+                "keyword": keyword,
+                "location": "",
+                "published": rel,
+                "date_found": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            })
+        except Exception:
+            continue
+    return result
+
+
 def _parse_posts_page(html: str, seen_urls: set, keyword: str, keywords: list) -> list:
-    """Parse a LinkedIn content-search results page into job dicts."""
+    """Parse a LinkedIn content-search results page into job dicts (current or older markup)."""
     soup = BeautifulSoup(html, "html.parser")
+    if soup.select_one(NEW_CARD) is not None:
+        return _parse_new_markup(soup, seen_urls, keyword, keywords)
     result = []
 
     containers = soup.select('div[data-urn*="urn:li:activity"]')

@@ -54,6 +54,14 @@ class HiringPostTests(unittest.TestCase):
             )
         )
 
+    def test_hiring_only_in_a_hashtag_pile_does_not_count(self):
+        post = "Five Flutter tips for clean state. #flutter #opentowork #jobsearch #hiring #techjobs"
+        self.assertFalse(is_hiring_post(post, ["Flutter Developer"]))
+
+    def test_hashtag_inside_a_sentence_still_counts(self):
+        self.assertTrue(is_hiring_post("We're #hiring a Flutter developer. #mobile #apps #jobs",
+                                       ["Flutter Developer"]))
+
     def test_rejects_keyword_without_hiring_signal(self):
         self.assertFalse(
             is_hiring_post("I love flutter programming", ["Flutter Developer"])
