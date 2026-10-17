@@ -35,7 +35,7 @@
 
 **Windows, easiest:** open PowerShell and paste `irm https://abdallahabusnineh.github.io/hawkeye-jobs/install.ps1 | iex` — same idea: installs and opens the app, with no warning.
 
-**Mac, easiest:** open Terminal and paste `curl -fsSL https://abdallahabusnineh.github.io/hawkeye-jobs/install.sh | bash` — it downloads the right build, checks its checksum, installs it to Applications and opens it, with no warning.
+**Mac, from Terminal (optional):** `curl -fsSL https://abdallahabusnineh.github.io/hawkeye-jobs/install.sh | bash` downloads the right build, checks its checksum, installs it to Applications and opens it.
 
 The macOS app is signed and notarized by Apple, so it opens with no warning. The Windows version is not signed, so the first launch shows a warning: click **More info → Run anyway**. Bayt, NaukriGulf, Google Jobs and LinkedIn posts need [Google Chrome](https://www.google.com/chrome/).
 
