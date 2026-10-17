@@ -165,6 +165,22 @@ jobs:
           python packaging/smoke_test.py "$env:LOCALAPPDATA\Programs\Hawkeye Jobs\Hawkeye Jobs.exe"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Package (Microsoft Store)
+        if: runner.os == 'Windows'
+        run: python packaging/windows/build_msix.py --out store/HawkeyeJobs-Windows-Store.msix
+      - name: Store package test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: pwsh packaging/windows/test_msix.ps1 store/HawkeyeJobs-Windows-Store.msix
+      # Not a release asset: it is unsigned until the Store signs it. Upload it in Partner Center
+      # (Hawkeye Jobs > Packages) from this run's "microsoft-store" artifact.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: runner.os == 'Windows'
+        with:
+          name: microsoft-store
+          path: store/HawkeyeJobs-Windows-Store.msix
+          if-no-files-found: error
+
       - name: Package (Linux)
         if: runner.os == 'Linux'
         env:
@@ -195,7 +211,9 @@ jobs:
           path: assets
           merge-multiple: true
       - name: Checksums
-        run: cd assets && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+        run: |
+          rm -f assets/*.msix  # the Store package goes to Partner Center, not to the release
+          cd assets && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -9,6 +9,8 @@ see app.py for the tray icon. This module holds the parts that do not need a GUI
     macOS   ~/Library/LaunchAgents/<id>.plist   (RunAtLoad)
     Windows HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run  "Hawkeye Jobs"
     Linux   ~/.config/autostart/hawkeye-jobs.desktop
+    Microsoft Store app: the package's StartupTask (packaged.py), since a package's
+    registry writes never reach the real Run key
   It points at the current executable, so it is rewritten at every launch while
   enabled (the user may have moved the app).
 
@@ -52,11 +54,16 @@ def launch_command() -> list:
 class Autostart:
     """Start the app at login. `platform`, `home` and `registry` are injectable for tests."""
 
-    def __init__(self, platform=None, home=None, registry=None, command=None):
+    def __init__(self, platform=None, home=None, registry=None, command=None, store_task=None):
         self.platform = platform or sys.platform
         self.home = Path(home) if home else Path.home()
         self._registry = registry
         self._command = command
+        if store_task is None and self.platform == "win32" and platform is None:
+            import packaged
+            if packaged.is_packaged():
+                store_task = packaged.StoreStartupTask()
+        self._store_task = store_task  # set → the Microsoft Store app: use its StartupTask
 
     @property
     def supported(self) -> bool:
@@ -81,6 +88,8 @@ class Autostart:
 
     # ── public ──
     def is_enabled(self) -> bool:
+        if self._store_task is not None:
+            return self._store_task.is_enabled()
         try:
             if self.platform == "darwin":
                 return self._plist().is_file()
@@ -94,6 +103,9 @@ class Autostart:
             return False
 
     def enable(self) -> None:
+        if self._store_task is not None:
+            self._store_task.enable()
+            return
         cmd = self.command()
         if self.platform == "darwin":
             path = self._plist()
@@ -115,6 +127,9 @@ class Autostart:
                 "X-GNOME-Autostart-enabled=true\n", encoding="utf-8")
 
     def disable(self) -> None:
+        if self._store_task is not None:
+            self._store_task.disable()
+            return
         try:
             if self.platform == "darwin":
                 self._plist().unlink(missing_ok=True)

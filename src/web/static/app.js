@@ -130,6 +130,7 @@ function hawkeye() {
     chromeFound() { return !!(this.state && this.state.chrome && this.state.chrome.found); },
     version() { return this.state ? this.state.version : ""; },
     updateAvailable() { return !!(this.state && this.state.update && this.state.update.available); },
+    storeApp() { return !!(this.state && this.state.update && this.state.update.store); },  // Microsoft Store: it updates the app
     count(status) { return (this.state && this.state.job_counts && this.state.job_counts[status]) || 0; },
     go(page) {
       this.page = page;

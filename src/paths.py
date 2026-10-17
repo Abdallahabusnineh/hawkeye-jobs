@@ -8,6 +8,9 @@ never in the repo:
     Windows : C:\\Users\\<user>\\AppData\\Local\\hawkeye-jobs
     Linux   : ~/.local/share/hawkeye-jobs   (honours XDG_DATA_HOME)
 
+The Microsoft Store app (an MSIX package) uses its package's own folder instead,
+%LOCALAPPDATA%\\Packages\\<family>\\LocalState (see packaged.py).
+
 Set HAWKEYE_DATA_DIR to use another folder. Paths are resolved on every call
 (not at import time) so tests and the app can change the env var.
 """
@@ -17,6 +20,8 @@ from pathlib import Path
 
 import platformdirs
 
+import packaged
+
 APP_NAME = "hawkeye-jobs"
 
 
@@ -25,10 +30,18 @@ def data_dir() -> Path:
     override = os.environ.get("HAWKEYE_DATA_DIR", "").strip()
     if override:
         path = Path(override).expanduser()
+    elif packaged.package_family_name():
+        path = packaged.local_state_dir(packaged.package_family_name())
     else:
         path = Path(platformdirs.user_data_dir(APP_NAME, appauthor=False))
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def unpackaged_data_dir() -> Path:
+    """Where the GitHub installer / zip keeps its data. The Store app copies it once (app.py), so
+    moving to the Store version keeps the user's jobs and settings."""
+    return Path(platformdirs.user_data_dir(APP_NAME, appauthor=False))
 
 
 def db_path() -> Path:

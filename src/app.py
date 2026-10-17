@@ -45,7 +45,7 @@ from background import Autostart, SingleInstance
 from logs import setup_logging
 from notify import DesktopNotifier
 from runner import AutoSearch, RunManager
-from settings import load_app_settings, migrate_legacy_config
+from settings import load_app_settings, migrate_legacy_config, save_app_settings
 from store import Store
 from web.server import create_app
 from web.services import AppServices
@@ -90,7 +90,37 @@ def _remove_old_linkedin_profile() -> None:
         log.info("Removed the old LinkedIn login profile at %s", folder)
 
 
+def _import_unpackaged_data() -> None:
+    """Store app, first launch: copy the jobs and settings of an earlier install from GitHub (its
+    own data folder; see packaged.py) so moving to the Store version loses nothing."""
+    import sqlite3
+
+    import packaged
+    import paths
+    if not packaged.is_packaged() or os.environ.get("HAWKEYE_DATA_DIR", "").strip():
+        return
+    new, old = paths.data_dir(), paths.unpackaged_data_dir()
+    if new.resolve() == old.resolve() or (new / "hawkeye.db").exists() or (new / "config.json").exists():
+        return
+    try:
+        if (old / "hawkeye.db").is_file():
+            # The backup API copies a consistent database even while the other install is open.
+            source = sqlite3.connect(f"{(old / 'hawkeye.db').as_uri()}?mode=ro", uri=True)
+            target = sqlite3.connect(new / "hawkeye.db")
+            try:
+                source.backup(target)
+            finally:
+                target.close()
+                source.close()
+        if (old / "config.json").is_file():
+            shutil.copy2(old / "config.json", new / "config.json")
+        log.info("Imported the data of the earlier install from %s", old)
+    except Exception:
+        log.exception("Could not import the data of the earlier install from %s", old)
+
+
 def _prepare_data() -> None:
+    _import_unpackaged_data()
     # The packaged app has no repo folder holding a terminal-era config.json / seen_jobs.json.
     if not FROZEN:
         migrate_legacy_config(ROOT)
@@ -283,6 +313,36 @@ def _mac_dock(visible: bool) -> None:
         AppHelper.callAfter(app.activateIgnoringOtherApps_, True)
 
 
+def _packaged_problems() -> list:
+    """Windows: the WinRT modules the Microsoft Store app needs. With HAWKEYE_EXPECT_PACKAGED=1 (the
+    release workflow, running the installed MSIX) also check that it really runs as the package."""
+    problems = []
+    for module in ("winrt.windows.applicationmodel", "winrt.windows.applicationmodel.activation"):
+        try:
+            __import__(module)
+        except Exception as exc:
+            problems.append(f"import {module}: {exc!r}")
+    if os.environ.get("HAWKEYE_EXPECT_PACKAGED") == "1":
+        import packaged
+        family = packaged.package_family_name()
+        if not family:
+            problems.append("not running as the MSIX package")
+        else:
+            folder = packaged.local_state_dir(family)
+            try:  # the data folder the app uses outside the smoke test (which sets HAWKEYE_DATA_DIR)
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / "self-test.tmp").write_text("ok", encoding="utf-8")
+                (folder / "self-test.tmp").unlink()
+            except OSError as exc:
+                problems.append(f"package data folder {folder}: {exc!r}")
+            try:
+                packaged.StoreStartupTask()._task()
+            except Exception as exc:
+                problems.append(f"startup task: {exc!r}")
+            packaged.launched_at_login()  # must not raise
+    return problems
+
+
 def self_test() -> list:
     """Problems that would break a packaged build without failing at startup (missing data files,
     native libraries, lazily imported modules). Empty list = all good. Makes no network requests."""
@@ -315,6 +375,8 @@ def self_test() -> list:
                 problems.append("no trusted certificates: urllib HTTPS (chromedriver download) would fail")
         except Exception as exc:
             problems.append(f"ssl: {exc!r}")
+    if sys.platform == "win32":
+        problems += _packaged_problems()
     if not _icon_path().is_file():
         problems.append("missing tray icon (icon.png)")
     from web.server import STATIC_DIR
@@ -322,6 +384,20 @@ def self_test() -> list:
         if not (STATIC_DIR / name).is_file():
             problems.append(f"missing window file {name}")
     return problems
+
+
+def _refresh_login_item() -> None:
+    """Rewrite the login item if it is on: the app may have moved since it was written."""
+    from packaged import StartupTaskBlocked
+    try:
+        if load_app_settings()["start_at_login"]:
+            Autostart().apply(True)
+    except StartupTaskBlocked:
+        # Turned off in Windows Settings (Store app): show the switch as off, as it really is.
+        log.info("Start at login was turned off in Windows Settings")
+        save_app_settings({"start_at_login": False})
+    except Exception:
+        log.exception("Could not refresh the login item")
 
 
 def main(argv=None) -> None:
@@ -332,6 +408,10 @@ def main(argv=None) -> None:
             print(problem, file=sys.stderr)
         sys.exit(1 if problems else 0)
     setup_logging()
+    if not args.background:
+        import packaged
+        # The Store app's StartupTask cannot pass --background: ask Windows how we were started.
+        args.background = packaged.launched_at_login()
     instance = SingleInstance()
     if not instance.acquire():
         # Already running (perhaps hidden in the tray): bring that window up instead of a second app.
@@ -346,11 +426,7 @@ def main(argv=None) -> None:
     try:
         thread = _serve(parts)
         instance.publish(parts.port, parts.token)
-        try:
-            if load_app_settings()["start_at_login"]:
-                Autostart().apply(True)  # the app may have moved since the login item was written
-        except Exception:
-            log.exception("Could not refresh the login item")
+        _refresh_login_item()
         try:
             parts.manager.recover_interrupted()
         except Exception:

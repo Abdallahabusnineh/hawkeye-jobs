@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSIX manifest for the Microsoft Store build (packaging/windows/build_msix.py fills in {version}).
+  Identity and PublisherDisplayName come from Partner Center (Hawkeye Jobs > Product identity) and
+  must match it exactly. The Store re-signs the package with Microsoft's certificate.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap5="http://schemas.microsoft.com/appx/manifest/uap/windows10/5"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap5 desktop rescap">
+
+  <Identity
+    Name="abdallahabusnineh.HawkeyeJobs"
+    Publisher="CN=C6E75268-01DD-4536-94C5-AC3A8C2B5762"
+    Version="{version}"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Hawkeye Jobs</DisplayName>
+    <PublisherDisplayName>abdallah abusnineh</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+    <Resource Language="ar" />
+  </Resources>
+
+  <Applications>
+    <Application Id="HawkeyeJobs" Executable="Hawkeye Jobs.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Hawkeye Jobs"
+        Description="Free, open-source job finder: new jobs from many sites in one place."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+      </uap:VisualElements>
+      <Extensions>
+        <!-- Start at login. Off until the user turns it on in Settings (packaged.StoreStartupTask);
+             TaskId must match packaged.STARTUP_TASK_ID. -->
+        <desktop:Extension Category="windows.startupTask" Executable="Hawkeye Jobs.exe" EntryPoint="Windows.FullTrustApplication">
+          <desktop:StartupTask TaskId="HawkeyeJobsAtLogin" Enabled="false" DisplayName="Hawkeye Jobs" />
+        </desktop:Extension>
+        <!-- hawkeye-jobs.exe on PATH: lets the release workflow's smoke test start the installed package. -->
+        <uap5:Extension Category="windows.appExecutionAlias" Executable="Hawkeye Jobs.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap5:AppExecutionAlias>
+            <uap5:ExecutionAlias Alias="hawkeye-jobs.exe" />
+          </uap5:AppExecutionAlias>
+        </uap5:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

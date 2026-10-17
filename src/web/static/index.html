@@ -332,12 +332,13 @@
           <div class="setting">
             <span x-text="t('settings.version', { version: version() })"></span>
             <span class="setting-value">
-              <span class="hint" x-text="updateText()"></span>
-              <button type="button" class="btn-ghost" :disabled="settingsPage.checking" @click="checkUpdate()" x-text="t('settings.check_updates')"></button>
+              <span class="hint" x-show="storeApp()" x-text="t('settings.store_updates')"></span>
+              <span class="hint" x-show="!storeApp()" x-text="updateText()"></span>
+              <button type="button" class="btn-ghost" x-show="!storeApp()" :disabled="settingsPage.checking" @click="checkUpdate()" x-text="t('settings.check_updates')"></button>
               <button type="button" class="btn" x-show="updateAvailable()" @click="openUrl(releasesUrl)" x-text="t('settings.download_update')"></button>
             </span>
           </div>
-          <div class="setting">
+          <div class="setting" x-show="!storeApp()">
             <label class="switch">
               <input type="checkbox" :checked="!!appSettings.update_check" @change="setUpdateCheck($event.target.checked)">
               <span x-text="t('settings.update_check')"></span>

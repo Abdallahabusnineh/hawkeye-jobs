@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from catalog import SOURCES, plan_queries
 from countries import localized_countries
+from packaged import StartupTaskBlocked
 from pipeline import estimate_seconds
 from runner import NoSearchSettings, RunInProgress
 from settings import LANGUAGES, USER_APP_KEYS, SettingsError, validate_search_settings
@@ -57,8 +58,8 @@ def get_state(request: Request):
         "run": s.manager.current,
         "job_counts": counts,
         "has_settings": s.load_config() is not None,
-        "update": {"available": bool(latest) and _version_tuple(latest) > _version_tuple(s.version),
-                   "latest": latest},
+        "update": {"available": not s.store and bool(latest) and _version_tuple(latest) > _version_tuple(s.version),
+                   "latest": latest, "store": s.store},
         "background": s.background(),
     }
 
@@ -171,6 +172,10 @@ def patch_app_settings(request: Request, body: dict):
     if "start_at_login" in body and body["start_at_login"] != before["start_at_login"]:
         try:
             s.set_start_at_login(body["start_at_login"])
+        except StartupTaskBlocked:
+            log.info("Start at login is turned off in Windows Settings; only the user can turn it on there")
+            s.save_app_settings({"start_at_login": before["start_at_login"]})
+            return JSONResponse({"error": "autostart_blocked"}, status_code=409)
         except Exception:
             log.exception("Could not change the login item")
             s.save_app_settings({"start_at_login": before["start_at_login"]})
@@ -307,6 +312,8 @@ def check_update(request: Request, force: bool = Query(False)):
     """The latest release on GitHub, cached for 24 h. force=1 (the Settings button) asks again unless
     the last check was under a minute ago — otherwise the button showed a day-old answer."""
     s = _services(request)
+    if s.store:
+        return {"available": False, "store": True}  # the Microsoft Store updates the app itself
     app = s.load_app_settings()
     if not app["update_check"]:
         return {"available": False, "disabled": True}

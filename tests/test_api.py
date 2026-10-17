@@ -158,7 +158,7 @@ class ReadTests(ApiTestCase):
         self.assertIsNone(state["run"])
         self.assertEqual(state["job_counts"]["new"], 1)
         self.assertTrue(state["has_settings"])
-        self.assertEqual(state["update"], {"available": False, "latest": None})
+        self.assertEqual(state["update"], {"available": False, "latest": None, "store": False})
 
     def test_settings_and_app_settings(self):
         self.assertEqual(self.get("/api/settings").json(), self.config)
@@ -585,6 +585,36 @@ class BackgroundApiTests(ApiTestCase):
             response = self.send("PATCH", "/api/app-settings", {"start_at_login": True})
         self.assertEqual((response.status_code, response.json()), (500, {"error": "autostart_failed"}))
         self.assertFalse(self.get("/api/app-settings").json()["start_at_login"])
+
+    def test_start_at_login_turned_off_in_windows_settings(self):
+        from packaged import StartupTaskBlocked
+
+        def blocked(enabled):
+            raise StartupTaskBlocked("DISABLED_BY_USER")
+        self.services.set_start_at_login = blocked
+        response = self.send("PATCH", "/api/app-settings", {"start_at_login": True})
+        self.assertEqual((response.status_code, response.json()), (409, {"error": "autostart_blocked"}))
+        self.assertFalse(self.get("/api/app-settings").json()["start_at_login"])
+
+
+class StoreAppTests(ApiTestCase):
+    """The Microsoft Store app: the Store updates it, so it never asks GitHub."""
+
+    def setUp(self):
+        super().setUp()
+        self.services.store = True
+
+        def never():
+            raise AssertionError("the Store app must not ask GitHub for releases")
+        self.services.fetch_latest_release = never
+
+    def test_update_check_defers_to_the_store(self):
+        self.assertEqual(self.get("/api/update?force=1").json(), {"available": False, "store": True})
+
+    def test_state_never_offers_a_github_download(self):
+        self.app_settings["latest_version"] = "9.0.0"  # e.g. remembered from an earlier GitHub install
+        update = self.get("/api/state").json()["update"]
+        self.assertEqual((update["available"], update["store"]), (False, True))
 
 
 class StaleLocationTests(ApiTestCase):

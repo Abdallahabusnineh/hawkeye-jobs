@@ -76,6 +76,7 @@ class AppServices:
     launch: Callable
     fetch_latest_release: Callable
     version: str
+    store: bool = False                            # the Microsoft Store app: the Store delivers updates
     show_window: Callable = lambda: None           # set by app.py once the window exists
     background: Callable = lambda: {"tray": False, "autostart": False}  # what this system supports
     set_start_at_login: Callable = lambda enabled: None
@@ -86,6 +87,7 @@ class AppServices:
 
     @classmethod
     def default(cls, manager) -> "AppServices":
+        import packaged
         import paths
         import settings
         from browser import find_chrome
@@ -107,4 +109,5 @@ class AppServices:
             launch=_launch,
             fetch_latest_release=_fetch_latest_release,
             version=__version__,
+            store=packaged.is_packaged(),
         )

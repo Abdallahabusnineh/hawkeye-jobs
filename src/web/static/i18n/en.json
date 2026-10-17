@@ -198,5 +198,7 @@
   "wizard.ready_title": "Ready to start",
   "wizard.ready_body": "The first search takes a few minutes. You can keep using the app while it runs; new jobs appear as soon as they are found.",
   "wizard.start": "Start the first search",
-  "error.autostart_failed": "Could not change the start-at-login setting. Please try again."
+  "error.autostart_failed": "Could not change the start-at-login setting. Please try again.",
+  "error.autostart_blocked": "Starting Hawkeye Jobs with your computer was turned off in Windows Settings. To turn it on, open Settings → Apps → Startup.",
+  "settings.store_updates": "Updates arrive automatically from the Microsoft Store."
 }

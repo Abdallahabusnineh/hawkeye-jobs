@@ -19,3 +19,7 @@ desktop-notifier==6.2.0
 # Tray icon (keep running after the window closes) and its image.
 pystray==0.19.5
 pillow==12.3.0
+# Microsoft Store app (MSIX): start at login through its StartupTask (packaged.py).
+winrt-runtime==3.2.1; sys_platform == "win32"
+winrt-Windows.ApplicationModel==3.2.1; sys_platform == "win32"
+winrt-Windows.ApplicationModel.Activation==3.2.1; sys_platform == "win32"
