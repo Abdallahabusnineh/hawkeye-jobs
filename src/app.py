@@ -15,6 +15,7 @@ import argparse
 import logging
 import os
 import secrets
+import shutil
 import socket
 import sys
 import threading
@@ -78,10 +79,22 @@ def window_url(port: int, token: str) -> str:
     return f"http://127.0.0.1:{port}/?token={token}"
 
 
+def _remove_old_linkedin_profile() -> None:
+    """LinkedIn posts (removed in 1.2.0) kept a logged-in Chrome profile in the data folder. Delete it
+    so the session does not linger. Only that app-owned folder: never LINKEDIN_PROFILE_DIR or the
+    old ~/.hawkeye-linkedin-profile, which the user created."""
+    from paths import old_linkedin_profile_dir
+    folder = old_linkedin_profile_dir()
+    if folder.is_dir():
+        shutil.rmtree(folder, ignore_errors=True)
+        log.info("Removed the old LinkedIn login profile at %s", folder)
+
+
 def _prepare_data() -> None:
     # The packaged app has no repo folder holding a terminal-era config.json / seen_jobs.json.
     if not FROZEN:
         migrate_legacy_config(ROOT)
+    _remove_old_linkedin_profile()
     with Store() as store:
         if not FROZEN:
             store.import_legacy_seen_file(ROOT / "seen_jobs.json")
@@ -285,7 +298,7 @@ def self_test() -> list:
         problems.append(f"countries: {exc!r}")
     for module in ("jobspy", "tls_client.cffi", "undetected_chromedriver", "selenium.webdriver",
                    "webview", "desktop_notifier", "pipeline", "scraper", "bayt", "naukrigulf",
-                   "google_jobs", "linkedin_posts", "PIL.Image", "cdp_browser", "websocket"):
+                   "google_jobs", "PIL.Image", "cdp_browser", "websocket"):
         try:
             __import__(module)
         except Exception as exc:

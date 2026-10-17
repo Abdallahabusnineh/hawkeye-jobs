@@ -73,7 +73,6 @@ class ApiTestCase(unittest.TestCase):
         self.opened_urls, self.opened_paths, self.launched = [], [], []
         self.release = {"tag_name": "v1.0.0"}
         self.manager = FakeManager()
-        (root / "profile").mkdir()
 
         def save_app(patch):
             import settings
@@ -93,7 +92,6 @@ class ApiTestCase(unittest.TestCase):
             base_countries=lambda: [{"id": "remote", "label": "Remote"}, {"id": "jo", "label": "Jordan"},
                                     {"id": "sa", "label": "Saudi Arabia"}],
             find_chrome=lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            linkedin_profile_dir=lambda: root / "profile",
             data_dir=lambda: root,
             log_path=lambda: root / "hawkeye.log",
             open_url=self.opened_urls.append,
@@ -157,7 +155,6 @@ class ReadTests(ApiTestCase):
         self.assertTrue(state["onboarding_done"])
         self.assertEqual(state["language"], "ar")
         self.assertTrue(state["chrome"]["found"])
-        self.assertFalse(state["linkedin_profile"])  # folder exists but is empty
         self.assertIsNone(state["run"])
         self.assertEqual(state["job_counts"]["new"], 1)
         self.assertTrue(state["has_settings"])
@@ -324,23 +321,7 @@ class ActionTests(ApiTestCase):
         self.assertEqual(self.send("POST", "/api/open-data-folder").status_code, 204)
         self.assertEqual(self.opened_paths, [Path(self.tmp.name)])
 
-    def test_linkedin_login(self):
-        self.assertEqual(self.send("POST", "/api/linkedin/login").status_code, 202)
-        argv = self.launched[0]
-        self.assertTrue(argv[0].endswith("Google Chrome"))
-        self.assertTrue(any(a.startswith("--user-data-dir=") for a in argv))
-        self.assertEqual(argv[-1], "https://www.linkedin.com/login")
-
-    def test_linkedin_login_refused_while_running_or_without_chrome(self):
-        self.manager.is_running = True
-        self.assertEqual(self.send("POST", "/api/linkedin/login").json(), {"error": "run_in_progress"})
-        self.manager.is_running = False
-        self.services.find_chrome = lambda: None
-        response = self.send("POST", "/api/linkedin/login")
-        self.assertEqual((response.status_code, response.json()), (409, {"error": "chrome_not_found"}))
-        self.assertEqual(self.launched, [])
-
-    def test_reset_and_login_refused_while_terminal_holds_run_lock(self):
+    def test_reset_refused_while_terminal_holds_run_lock(self):
         from run_lock import RunLock
         from runner import RunManager
         lock_path = Path(self.tmp.name) / "run.lock"
@@ -352,12 +333,8 @@ class ActionTests(ApiTestCase):
             self.assertEqual(self.send("POST", "/api/reset", {"confirm": "DELETE"}).json(),
                              {"error": "run_in_progress"})
             self.assertTrue(self.db.exists())
-            response = self.send("POST", "/api/linkedin/login")
-            self.assertEqual((response.status_code, response.json()), (409, {"error": "run_in_progress"}))
-            self.assertEqual(self.launched, [])
         finally:
             terminal.release()
-        self.assertEqual(self.send("POST", "/api/linkedin/login").status_code, 202)
 
     def test_report_problem_builds_redacted_issue_url(self):
         (Path(self.tmp.name) / "hawkeye.log").write_text(
@@ -500,24 +477,6 @@ class ErrorBodyTests(ApiTestCase):
         self.assertEqual(self.client.get("/api/nope").status_code, 403)
 
 
-class ProfileDirTests(ApiTestCase):
-    def test_state_survives_profile_path_being_a_file(self):
-        f = Path(self.tmp.name) / "afile"
-        f.write_text("x")
-        self.services.linkedin_profile_dir = lambda: f
-        response = self.get("/api/state")
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.json()["linkedin_profile"])
-
-    def test_state_survives_unreadable_profile_dir(self):
-        from unittest.mock import patch
-        with patch.object(Path, "iterdir", side_effect=PermissionError("no")):
-            (Path(self.tmp.name) / "profile" / "x").write_text("1")
-            response = self.get("/api/state")
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.json()["linkedin_profile"])
-
-
 class EstimateApiTests(ApiTestCase):
     def post(self, path, body):
         return self.client.post(path, json=body, headers={"X-Hawkeye-Token": TOKEN})
@@ -596,6 +555,10 @@ class BackgroundApiTests(ApiTestCase):
         self.services.show_window = lambda: shown.append(1)
         self.assertEqual(self.send("POST", "/api/window/show").status_code, 204)
         self.assertEqual(shown, [1])
+
+    def test_linkedin_login_endpoint_is_gone(self):
+        self.assertIn(self.send("POST", "/api/linkedin/login").status_code, (404, 405))  # no such endpoint
+        self.assertNotIn("linkedin_profile", self.get("/api/state").json())
 
     def test_window_show_needs_the_token(self):
         self.assertEqual(self.client.post("/api/window/show").status_code, 403)

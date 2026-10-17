@@ -2,7 +2,7 @@
 browser.py — Shared Chrome driver factory
 ==========================================
 Creates the undetected-chromedriver (Selenium) instance shared by the browser
-scrapers: bayt.py, naukrigulf.py, google_jobs.py, linkedin_posts.py.
+scrapers: bayt.py, naukrigulf.py, google_jobs.py.
 
 Why undetected-chromedriver?
     Regular Selenium is detected and blocked by Cloudflare (used on Bayt.com).
@@ -32,7 +32,6 @@ import subprocess
 import sys
 
 import logging
-from pathlib import Path
 
 import undetected_chromedriver as uc
 from selenium.common.exceptions import TimeoutException
@@ -114,44 +113,9 @@ def _detect_chrome_major(chrome_path=None):
 
 # Keep rendering when the Chrome window is behind other windows. The user works in other apps while
 # a search runs; Chrome then stops painting the hidden window, and pages that draw their content
-# only when visible (LinkedIn's 2026 search results) stay empty.
+# only when visible stay empty.
 KEEP_RENDERING_FLAGS = ("--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding",
                         "--disable-background-timer-throttling")
-
-
-def profile_in_use(user_data_dir) -> bool:
-    """True if a running Chrome holds this profile (e.g. the "Log in to LinkedIn" window is still
-    open). Chrome lets one process use a profile; a second one started on it exits at once.
-
-    macOS/Linux: SingletonLock is a symlink to "<host>-<pid>"; only a live pid counts (a crashed
-    Chrome leaves a stale link). Windows: Chrome keeps "lockfile" open exclusively.
-    """
-    path = Path(str(user_data_dir))
-    if sys.platform == "win32":
-        lock = path / "lockfile"
-        if not lock.exists():
-            return False
-        try:
-            os.close(os.open(lock, os.O_RDWR))
-            return False
-        except OSError:
-            return True
-    try:
-        target = os.readlink(path / "SingletonLock")
-    except OSError:
-        return False
-    pid = target.rpartition("-")[2]
-    if not pid.isdigit():
-        return False
-    try:
-        os.kill(int(pid), 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True  # alive, owned by someone else
-    except OSError:
-        return False
-    return True
 
 
 def wait_for(driver, css: str, timeout: float) -> bool:
@@ -199,9 +163,8 @@ def _create_uc_driver(chrome, headless=False, user_data_dir=None):
     Args:
         headless (bool): Run Chrome with no visible window.
                          Default False — Bayt.com blocks headless mode via Cloudflare.
-        user_data_dir (str|None): Persistent Chrome profile directory, so a
-                         logged-in LinkedIn session survives between runs
-                         (see paths.linkedin_profile_dir()).
+        user_data_dir (str|None): Chrome profile directory; None (the default) uses a fresh
+                         temporary profile.
 
     Chrome options explained:
         --no-sandbox                       : required in some Linux/CI environments

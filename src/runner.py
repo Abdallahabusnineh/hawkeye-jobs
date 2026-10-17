@@ -8,7 +8,6 @@ pipeline.run_search on a worker thread. While it runs it:
   * keeps a small `current` progress snapshot for /api/state,
   * fans every event out to SSE subscribers (bounded queues; a subscriber
     that falls behind is dropped and the UI reconnects),
-  * enforces "LinkedIn posts at most once per 24 h" (the user's own account).
 After the run it reports new jobs through the notifier (reporting.py).
 AutoSearch (below) starts runs on a timer through the same RunManager.
 """
@@ -27,8 +26,6 @@ from store import Store
 
 log = logging.getLogger(__name__)
 
-POSTS_SOURCE = "linkedin_posts"
-POSTS_INTERVAL_SECONDS = 24 * 3600
 _SUBSCRIBER_QUEUE_SIZE = 1000
 _FINISHED_QUERY = ("query_done", "query_failed", "query_skipped")
 
@@ -41,10 +38,6 @@ class NoSearchSettings(RuntimeError):
     """The user has not set up a search yet."""
 
 
-def _iso(ts: float) -> str:
-    return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def _parse_iso(value) -> float | None:
     if not value:
         return None
@@ -52,21 +45,6 @@ def _parse_iso(value) -> float | None:
         return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
     except ValueError:
         return None
-
-
-def apply_posts_gate(settings: dict, saved_iso, remembered, now: float):
-    """Drop the LinkedIn-posts source if posts ran less than 24 h ago (protects the user's account).
-
-    `saved_iso` is last_posts_run from the app settings file; `remembered` is the in-memory
-    timestamp of this process (used when saving failed). Returns (settings, skipped)."""
-    if POSTS_SOURCE not in settings.get("sources", []):
-        return settings, False
-    last = _parse_iso(saved_iso)
-    if remembered is not None and (last is None or remembered > last):
-        last = remembered
-    if last is not None and now - last < POSTS_INTERVAL_SECONDS:
-        return {**settings, "sources": [s for s in settings["sources"] if s != POSTS_SOURCE]}, True
-    return settings, False
 
 
 def _default_country_labels() -> dict:
@@ -94,7 +72,6 @@ class RunManager:
         self._subscribers = set()
         self._worker = None
         self._cancel = None
-        self._last_posts_run = None
         self._current = None
         self._exclusive = False
         self._closing = False
@@ -198,7 +175,6 @@ class RunManager:
                 settings = self._settings_loader()
                 if not settings:
                     raise NoSearchSettings("no search settings saved")
-                settings, posts_skipped = self._apply_posts_gate(dict(settings))
                 self._cancel = threading.Event()
                 started = threading.Event()
                 holder = {}
@@ -209,24 +185,16 @@ class RunManager:
                 self._worker = None
                 self._run_lock.release()
                 raise
-        if posts_skipped:
-            self._publish({"type": "posts_skipped", "reason": "daily_limit"})
         started.wait(timeout=10)
         return holder.get("run_id")
 
-    def _apply_posts_gate(self, settings: dict):
-        return apply_posts_gate(settings, self._app_settings_loader().get("last_posts_run"),
-                                self._last_posts_run, self._clock())
-
     def _run(self, settings, trigger, started, holder) -> None:
         store = None
-        posts_marked = False
         try:
             store = self._store_factory()
             labels = self._country_labels_loader()
 
             def on_event(event: dict) -> None:
-                nonlocal posts_marked
                 kind = event["type"]
                 if kind == "run_started":
                     holder["run_id"] = event["run_id"]
@@ -244,14 +212,6 @@ class RunManager:
                             self._current["done"] += 1
                             self._current["found"] += int(event.get("found") or 0)
                             self._current["new"] += int(event.get("new") or 0)
-                elif kind == "query_started" and event.get("source") == POSTS_SOURCE and not posts_marked:
-                    posts_marked = True
-                    now = self._clock()
-                    self._last_posts_run = now
-                    try:
-                        self._app_settings_saver({"last_posts_run": _iso(now)})
-                    except Exception:
-                        log.exception("Could not save last_posts_run")
                 self._publish({**event, "trigger": trigger})
 
             self._run_search(settings, on_event=on_event, cancel=self._cancel, country_labels=labels,

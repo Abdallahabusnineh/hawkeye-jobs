@@ -33,7 +33,7 @@ class FormatEventTests(unittest.TestCase):
 
     def test_failure_points_to_log(self):
         line = main.format_event(
-            {"type": "query_failed", "index": 0, "source": "linkedin_posts", "keyword": "Java",
+            {"type": "query_failed", "index": 0, "source": "google_jobs", "keyword": "Java",
              "location_id": None, "error": "TimeoutException"})
         self.assertIn("TimeoutException", line)
         self.assertIn("hawkeye.log", line)
@@ -252,46 +252,6 @@ class MainTests(unittest.TestCase):
         with Store() as st:
             state = st.conn.execute("SELECT state FROM runs WHERE id=?", (run_id,)).fetchone()[0]
         self.assertEqual(state, "running")
-
-    def _posts_settings(self):
-        return {"keywords": ["Java"], "locations": ["jo"], "sources": ["bayt", "linkedin_posts"]}
-
-    def test_posts_skipped_when_run_within_24_hours(self):
-        import time
-        from datetime import datetime, timezone
-        recent = datetime.fromtimestamp(time.time() - 3600, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        seen = []
-
-        def fake(chosen, **kw):
-            seen.append(chosen["sources"])
-            return RunSummary(1, "done", 0, [])
-
-        with patch("main.collect_settings", return_value=self._posts_settings()), \
-                patch("main.load_app_settings", return_value={"last_posts_run": recent}), \
-                patch("main.run_search", side_effect=fake):
-            main.main()
-        self.assertEqual(seen, [["bayt"]])
-        self.assertIn("LinkedIn posts skipped", sys.stdout.getvalue())
-
-    def test_posts_run_and_stamp_last_posts_run_when_due(self):
-        seen = []
-
-        def fake(chosen, on_event=None, **kw):
-            seen.append(chosen["sources"])
-            on_event({"type": "query_started", "index": 0, "source": "linkedin_posts", "keyword": "Java",
-                      "location_id": None})
-            on_event({"type": "query_started", "index": 1, "source": "linkedin_posts", "keyword": "Go",
-                      "location_id": None})
-            return RunSummary(1, "done", 0, [])
-
-        with patch("main.collect_settings", return_value=self._posts_settings()), \
-                patch("main.load_app_settings", return_value={"last_posts_run": None}), \
-                patch("main.save_app_settings") as save, patch("main.run_search", side_effect=fake):
-            main.main()
-        self.assertEqual(seen, [["bayt", "linkedin_posts"]])
-        save.assert_called_once()
-        self.assertRegex(save.call_args.args[0]["last_posts_run"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
-        self.assertNotIn("LinkedIn posts skipped", sys.stdout.getvalue())
 
     def _recording_run_lock(self):
         """A RunLock that records every instance main() creates and counts release() calls."""

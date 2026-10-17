@@ -1,8 +1,8 @@
 """
 paths.py — Where hawkeye-jobs keeps its runtime files
 ======================================================
-Every runtime file (database, config, country cache, log, LinkedIn Chrome
-profile) lives in one per-OS data directory, never in the repo:
+Every runtime file (database, config, log) lives in one per-OS data directory,
+never in the repo:
 
     macOS   : ~/Library/Application Support/hawkeye-jobs
     Windows : C:\\Users\\<user>\\AppData\\Local\\hawkeye-jobs
@@ -18,7 +18,6 @@ from pathlib import Path
 import platformdirs
 
 APP_NAME = "hawkeye-jobs"
-LEGACY_LINKEDIN_PROFILE = Path("~/.hawkeye-linkedin-profile")
 
 
 def data_dir() -> Path:
@@ -44,18 +43,7 @@ def log_path() -> Path:
     return data_dir() / "hawkeye.log"
 
 
-def linkedin_profile_dir() -> Path:
-    """
-    Chrome profile used for the LinkedIn login.
-
-    LINKEDIN_PROFILE_DIR wins; otherwise the old ~/.hawkeye-linkedin-profile is
-    kept if it exists (so existing users stay logged in); otherwise
-    <data>/linkedin-profile.
-    """
-    override = os.environ.get("LINKEDIN_PROFILE_DIR", "").strip()
-    if override:
-        return Path(override).expanduser()
-    legacy = LEGACY_LINKEDIN_PROFILE.expanduser()
-    if legacy.exists():
-        return legacy
+def old_linkedin_profile_dir() -> Path:
+    """The Chrome profile versions up to 1.1.5 kept for the LinkedIn posts login. Unused since;
+    app.py deletes it at launch so a logged-in LinkedIn session does not linger on disk."""
     return data_dir() / "linkedin-profile"

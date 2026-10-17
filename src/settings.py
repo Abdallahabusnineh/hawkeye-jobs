@@ -9,11 +9,11 @@ import tempfile
 import threading
 from pathlib import Path
 
-from catalog import SOURCE_ORDER, SOURCES, get_location, normalize_location_id, source_choice_label
+from catalog import REMOVED_SOURCES, SOURCE_ORDER, SOURCES, get_location, normalize_location_id, source_choice_label
 from countries import load_countries
 from paths import config_path
 from utils import DEFAULT_JOB_AGE_DAYS, JOB_AGE_CHOICES
-from picker import color_hint, color_question, color_selected, confirmed_line, pick_many, pick_one, pick_searchable
+from picker import color_question, color_selected, confirmed_line, pick_many, pick_one, pick_searchable
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ THEMES = ("auto", "light", "dark")
 AUTO_HOURS = (2, 4, 6, 12, 24)
 USER_APP_KEYS = ("language", "theme", "auto_search", "job_age_days", "keep_running", "start_at_login",
                  "onboarding_done", "update_check")
-_INTERNAL_APP_KEYS = ("last_update_check", "latest_version", "last_posts_run", "background_hint_shown")
+_INTERNAL_APP_KEYS = ("last_update_check", "latest_version", "background_hint_shown")
 APP_DEFAULTS = {
     "language": "ar",
     "theme": "auto",
@@ -36,7 +36,6 @@ APP_DEFAULTS = {
     "update_check": True,
     "last_update_check": None,
     "latest_version": None,
-    "last_posts_run": None,
     "background_hint_shown": None,  # when we first told the user the app keeps running after close
 }
 # One lock for every read-modify-write of config.json (API threads + the run worker both save).
@@ -91,7 +90,8 @@ def load_config(path=None):
         return None
     keywords = data.get("keywords") or []
     locations = data.get("locations") or []
-    sources = data.get("sources") or []
+    # A source removed in a later version (REMOVED_SOURCES) is dropped, so an old search still runs.
+    sources = [s for s in (data.get("sources") or []) if s not in REMOVED_SOURCES]
     if not keywords or not locations or not sources:
         return None
     return {

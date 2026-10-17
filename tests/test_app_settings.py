@@ -33,7 +33,7 @@ class AppSettingsTests(unittest.TestCase):
         self.assertEqual(app["auto_search"], {"enabled": True, "hours": 6})
         self.assertFalse(app["onboarding_done"])
         self.assertTrue(app["update_check"])
-        self.assertIsNone(app["last_posts_run"])
+        self.assertNotIn("last_posts_run", app)  # LinkedIn posts removed in 1.2.0
         self.assertEqual(app["job_age_days"], 14)
 
     def test_job_age_accepts_only_the_choices(self):
@@ -69,8 +69,22 @@ class AppSettingsTests(unittest.TestCase):
                                                 "nonsense": "unknown"})
         self.assertFalse(self.path.exists())
 
+    def test_old_last_posts_run_is_ignored_and_dropped_on_save(self):
+        self.path.write_text(json.dumps({"app": {"last_posts_run": "2026-10-10T08:00:00Z"}}), encoding="utf-8")
+        self.assertNotIn("last_posts_run", settings.load_app_settings(self.path))
+        settings.save_app_settings({"theme": "dark"}, self.path)
+        self.assertNotIn("last_posts_run", json.loads(self.path.read_text(encoding="utf-8"))["app"])
+
+    def test_saved_search_drops_the_removed_linkedin_posts_source(self):
+        self.path.write_text(json.dumps({"keywords": ["Flutter"], "locations": ["jo"],
+                                         "sources": ["bayt", "linkedin_posts"]}), encoding="utf-8")
+        self.assertEqual(settings.load_config(self.path)["sources"], ["bayt"])
+        self.path.write_text(json.dumps({"keywords": ["Flutter"], "locations": ["jo"],
+                                         "sources": ["linkedin_posts"]}), encoding="utf-8")
+        self.assertIsNone(settings.load_config(self.path))   # nothing left to search: set up again
+
     def test_internal_fields_can_be_saved(self):
-        app = settings.save_app_settings({"last_posts_run": "2026-10-10T08:00:00Z",
+        app = settings.save_app_settings({"background_hint_shown": "2026-10-10T08:00:00Z",
                                           "last_update_check": "2026-10-10T08:00:00Z",
                                           "latest_version": "1.0.1"}, self.path)
         self.assertEqual(app["latest_version"], "1.0.1")
@@ -127,7 +141,7 @@ class ConcurrentSaveTests(unittest.TestCase):
                 try:
                     settings.save_app_settings({"latest_version": f"v{i}"} if i % 3 == 0 else
                                                {"theme": ("dark", "light")[i % 2]}, path)
-                    settings.save_app_settings({"last_posts_run": "2026-01-01T00:00:00Z"}, path)
+                    settings.save_app_settings({"last_update_check": "2026-01-01T00:00:00Z"}, path)
                 except Exception as exc:  # pragma: no cover
                     errors.append(exc)
 
@@ -147,7 +161,7 @@ class ConcurrentSaveTests(unittest.TestCase):
             self.assertEqual(errors, [])
             data = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(data["keywords"], ["Java"])
-            self.assertEqual(data["app"]["last_posts_run"], "2026-01-01T00:00:00Z")
+            self.assertEqual(data["app"]["last_update_check"], "2026-01-01T00:00:00Z")
             self.assertIn(data["app"]["latest_version"], {f"v{i}" for i in range(0, 30, 3)})
             self.assertIn(data["app"]["theme"], {"dark", "light"})
 

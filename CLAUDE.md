@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project does
 
-hawkeye-jobs is a terminal job hunter. The user picks keywords, locations, and sources; it scrapes LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts; deduplicates against the SQLite job store; prints new listings; and emails an HTML digest. It runs only when the user starts it.
+hawkeye-jobs is a terminal job hunter. The user picks keywords, locations, and sources; it scrapes LinkedIn, Indeed, Bayt.com, NaukriGulf and Google Jobs; deduplicates against the SQLite job store; prints new listings; and emails an HTML digest. It runs only when the user starts it.
 
 ## Running the scraper
 
@@ -43,8 +43,7 @@ Every test file must `import _bootstrap` (see tests/_bootstrap.py) — it points
    - `src/bayt.py` — Bayt.com (Jordan + Gulf only)
    - `src/naukrigulf.py` — NaukriGulf (Gulf only)
    - `src/google_jobs.py` — Google Jobs
-   - `src/linkedin_posts.py` — LinkedIn hiring posts. Needs a logged-in Chrome profile (`paths.linkedin_profile_dir()`: `LINKEDIN_PROFILE_DIR`, else an existing `~/.hawkeye-linkedin-profile`, else `<data dir>/linkedin-profile`).
-5. **`src/pipeline.py`** — `run_search()`: plans queries (`catalog.plan_queries`), runs an HTTP lane (JobSpy) and a browser lane (Chrome) in parallel, saves each query's jobs to **`src/store.py`** (SQLite, statuses), emits progress events, supports cancel. **`src/filters.py`** — title/post matching. **`src/email_sender.py`** — Gmail SMTP.
+5. **`src/pipeline.py`** — `run_search()`: plans queries (`catalog.plan_queries`), runs an HTTP lane (JobSpy) and a browser lane (Chrome) in parallel, saves each query's jobs to **`src/store.py`** (SQLite, statuses), emits progress events, supports cancel. **`src/filters.py`** — title matching. (LinkedIn hiring posts were removed in 1.2.0; see docs/ARCHITECTURE.md.) **`src/email_sender.py`** — Gmail SMTP.
 
 ## Credentials
 
@@ -58,12 +57,11 @@ Set in `.env` (gitignored): `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`. Copy 
 | `src/countries.py` | Country list bundled in `src/data/countries.json` (UN states + Palestine, Hong Kong, Macau; Arabic/English); rebuild with `tools/update_countries.py` |
 | `src/settings.py` | Prompt / config.json behaviour |
 | `src/picker.py` | Arrow / space / type-to-search selection UI |
-| `src/filters.py` | Title matching / hiring-post signals |
+| `src/filters.py` | Title matching |
 | `src/scraper.py` | LinkedIn/Indeed JobSpy calls |
 | `src/bayt.py` | Bayt selectors |
 | `src/naukrigulf.py` | NaukriGulf selectors |
 | `src/google_jobs.py` | Google Jobs selectors |
-| `src/linkedin_posts.py` | LinkedIn post selectors |
 | `src/browser.py` | Chrome discovery (`find_chrome`), auto-detected version, `wait_for`, persistent profile |
 | `src/cdp_browser.py` | Fallback when chromedriver cannot run (Smart App Control): Chrome over DevTools, no chromedriver |
 | `src/pipeline.py` | Run orchestration, events, cancel |

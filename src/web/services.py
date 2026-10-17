@@ -6,7 +6,6 @@ fakes (no network, no Chrome, no real folders) and app.py wires the real ones.
 """
 
 import getpass
-import json
 import logging
 import os
 import platform
@@ -70,7 +69,6 @@ class AppServices:
     save_app_settings: Callable
     base_countries: Callable
     find_chrome: Callable
-    linkedin_profile_dir: Callable
     data_dir: Callable
     log_path: Callable
     open_url: Callable
@@ -102,7 +100,6 @@ class AppServices:
             save_app_settings=settings.save_app_settings,
             base_countries=_base_countries_factory(),
             find_chrome=find_chrome,
-            linkedin_profile_dir=paths.linkedin_profile_dir,
             data_dir=paths.data_dir,
             log_path=paths.log_path,
             open_url=webbrowser.open,

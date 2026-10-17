@@ -128,7 +128,6 @@ function hawkeye() {
     showPage(name) { return this.ready && !this.inWizard() && this.page === name; },
     showSearchForm() { return this.showPage("search") || this.wizardStep(3); },
     chromeFound() { return !!(this.state && this.state.chrome && this.state.chrome.found); },
-    linkedinProfile() { return !!(this.state && this.state.linkedin_profile); },
     version() { return this.state ? this.state.version : ""; },
     updateAvailable() { return !!(this.state && this.state.update && this.state.update.available); },
     count(status) { return (this.state && this.state.job_counts && this.state.job_counts[status]) || 0; },
@@ -188,15 +187,6 @@ function hawkeye() {
       switch (event.type) {
         case "query_done":
           if (event.new > 0) this.scheduleRefresh();
-          break;
-        case "posts_skipped":
-          this.notify("info", "notice.posts_skipped");
-          break;
-        case "login_required":
-          this.notify("warn", "notice.login_required", {}, { label: "linkedin.login", run: () => this.linkedinLogin() });
-          break;
-        case "profile_in_use":
-          this.notify("warn", "notice.profile_in_use");
           break;
         case "browser_failed":
           this.notify("warn", L.browserNoticeKey(event.reason), {}, event.reason === "chrome_not_found"
@@ -583,14 +573,6 @@ function hawkeye() {
         this.notify("info", "settings.report_opened");
       } catch (error) {
         this.notify("error", "error.report_failed");
-      }
-    },
-    async linkedinLogin() {
-      try {
-        await api.post("/api/linkedin/login");
-        this.notify("info", "linkedin.opened");
-      } catch (error) {
-        this.showError(error);
       }
     },
     openDeleteDialog() {

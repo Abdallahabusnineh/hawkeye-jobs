@@ -37,23 +37,23 @@
 
 **Mac, from Terminal (optional):** `curl -fsSL https://abdallahabusnineh.github.io/hawkeye-jobs/install.sh | bash` downloads the right build, checks its checksum, installs it to Applications and opens it.
 
-The macOS app is signed and notarized by Apple, so it opens with no warning. The Windows version is not signed, so the first launch shows a warning: click **More info → Run anyway**. Bayt, NaukriGulf, Google Jobs and LinkedIn posts need [Google Chrome](https://www.google.com/chrome/).
+The macOS app is signed and notarized by Apple, so it opens with no warning. The Windows version is not signed, so the first launch shows a warning: click **More info → Run anyway**. Bayt, NaukriGulf and Google Jobs need [Google Chrome](https://www.google.com/chrome/).
 
 ## Features
 
 - **Only new jobs.** Every job it finds is remembered (new / saved / applied / not interested), so you never see the same posting twice.
 - **Searches for you.** Automatic search every few hours, with a desktop notification when new jobs appear; or start one yourself and watch live progress.
 - **Keeps working when you close the window.** It stays in the menu bar / next to the clock, and can start with your computer.
-- **Six sources, one list:** LinkedIn jobs, Indeed, Bayt.com, NaukriGulf, Google Jobs and LinkedIn hiring posts. Titles must match your keywords; you choose how recent: the last week, two weeks (default) or month.
+- **Five sources, one list:** LinkedIn jobs, Indeed, Bayt.com, NaukriGulf and Google Jobs. Titles must match your keywords; you choose how recent: the last week, two weeks (default) or month.
 - **Every country** (the UN member states, plus Palestine, Hong Kong and Macau), with names in Arabic and English (built in, no network).
-- **Polite and safe.** Waits between requests to each site so your connection and LinkedIn account are not flagged; LinkedIn posts run at most once a day.
+- **Polite and safe.** Waits between requests to each site so your connection is not flagged. It never logs in to any site with your account.
 - **Private.** Nothing leaves your computer except the searches, a daily update check (can be turned off), and pages you open.
 - **Terminal mode** too: prompts in the terminal and emails an HTML digest of new jobs.
 
 ## Requirements (run from source)
 
 - Python 3.12 (python-jobspy pins numpy 1.26.3, which has no wheels for newer Pythons)
-- Google Chrome (required for Bayt, NaukriGulf, Google Jobs, LinkedIn posts)
+- Google Chrome (required for Bayt, NaukriGulf, Google Jobs)
 - A Gmail account with an [App Password](https://myaccount.google.com/apppasswords) if you want email
 
 ## Setup
@@ -137,17 +137,11 @@ Everything hawkeye-jobs saves is kept in one folder on your computer:
 | Windows | `C:\Users\<you>\AppData\Local\hawkeye-jobs` |
 | Linux | `~/.local/share/hawkeye-jobs` |
 
-It contains `hawkeye.db` (jobs and searches), `config.json` (your search settings), `hawkeye.log` (attach this when reporting a problem), and `linkedin-profile/` (the Chrome profile used for LinkedIn posts).
+It contains `hawkeye.db` (jobs and searches), `config.json` (your search settings), `hawkeye.log` (attach this when reporting a problem).
 
 Set `HAWKEYE_DATA_DIR` to use a different folder. If you used hawkeye-jobs before this change, your old `config.json` and `seen_jobs.json` are imported automatically the first time you run it. The old files are left in place.
 
 **Reset** (forget all jobs and get notified again): delete `hawkeye.db*` (all three files: `hawkeye.db`, `hawkeye.db-wal`, `hawkeye.db-shm`) from that folder. If you used an older version, also delete the old `seen_jobs.json` in the project folder, otherwise it is imported again on the next run and those jobs stay hidden.
-
-**LinkedIn posts** need a one-time login. Open Chrome with the profile the tool uses, sign in to LinkedIn, and close it:
-
-    open -a "Google Chrome" --args --user-data-dir="$HOME/Library/Application Support/hawkeye-jobs/linkedin-profile"
-
-If you already have `~/.hawkeye-linkedin-profile` from an older version, it keeps being used.
 
 **Chrome** is found automatically on macOS, Windows, and Linux, and its version is detected for you. Set `HAWKEYE_CHROME_MAJOR` only if detection picks the wrong version.
 
@@ -176,7 +170,6 @@ hawkeye-jobs/
 │   ├── bayt.py            # Bayt.com
 │   ├── naukrigulf.py      # NaukriGulf
 │   ├── google_jobs.py     # Google Jobs
-│   ├── linkedin_posts.py  # LinkedIn hiring posts
 │   ├── browser.py         # Chrome discovery + shared driver
 │   ├── pipeline.py        # One search run: lanes, events, cancel
 │   ├── store.py           # SQLite jobs, statuses, runs
@@ -208,7 +201,6 @@ hawkeye-jobs/
 | 0 jobs from Bayt / NaukriGulf | Chrome must be installed; those sites are Gulf/Jordan only |
 | Chrome version error          | Set `HAWKEYE_CHROME_MAJOR` to your Chrome major version    |
 | Gmail auth error              | Generate a new App Password                                |
-| LinkedIn posts empty          | Log in once using the LinkedIn Chrome profile (see above)  |
 
 ## License
 

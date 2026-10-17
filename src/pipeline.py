@@ -7,13 +7,13 @@ to the Store as soon as it finishes, and reports progress as plain-data events
 
 Lanes (one thread each, queries run one after another inside a lane):
     HTTP lane    : linkedin, indeed          (JobSpy, no browser)
-    Browser lane : bayt, naukrigulf, google_jobs, linkedin_posts (one Chrome)
+    Browser lane : bayt, naukrigulf, google_jobs (one Chrome)
 
 Politeness: before each query a lane waits on its host group's Throttle (random
 minimum gap between request starts, see throttle.py, POLITE_DELAYS and
 SITE_GROUPS), so users are not flagged as bots. Throttles are shared by both
-lanes (linkedin and linkedin_posts both hit linkedin.com), back off after a
-failed query, and the wait sleeps in short slices that honour `cancel`.
+lanes (sources on the same host share one), back off after a failed query, and
+the wait sleeps in short slices that honour `cancel`.
 
 Lanes never touch the Store and never call on_event: they push messages onto a
 queue, and the thread that called run_search() does all saving and reporting.
@@ -36,7 +36,6 @@ from dataclasses import dataclass, field
 from browser import ChromeNotFound
 from utils import set_job_age_days
 from catalog import BROWSER_SOURCES, SOURCE_ORDER, plan_queries
-from linkedin_posts import LinkedInLoginRequired
 from store import Store
 from throttle import Throttle
 
@@ -51,7 +50,6 @@ POLITE_DELAYS = {  # (min, max) seconds between requests to the same site
     "bayt": (6, 10),
     "naukrigulf": (4, 7),
     "google_jobs": (8, 12),
-    "linkedin_posts": (10, 20),  # the user's own LinkedIn account: slowest
 }
 
 # Rough time per query on top of the polite gap (page load, parsing). Only used
@@ -69,10 +67,8 @@ def estimate_seconds(queries: list) -> int:
     return int(round(max(lanes.values())))
 
 # Sources that hit the same host share one Throttle, whichever lane they run on
-# (e.g. linkedin via JobSpy and linkedin_posts via the user's logged-in Chrome).
 SITE_GROUPS = {
     "linkedin": "linkedin.com",
-    "linkedin_posts": "linkedin.com",
     "indeed": "indeed.com",
     "bayt": "bayt.com",
     "naukrigulf": "naukrigulf.com",
@@ -91,7 +87,6 @@ class RunSummary:
 def _default_fetchers() -> dict:
     from bayt import fetch_bayt
     from google_jobs import fetch_google_jobs
-    from linkedin_posts import fetch_linkedin_posts
     from naukrigulf import fetch_naukrigulf
     from scraper import fetch_indeed, fetch_linkedin
 
@@ -101,22 +96,13 @@ def _default_fetchers() -> dict:
         "bayt": fetch_bayt,
         "naukrigulf": fetch_naukrigulf,
         "google_jobs": fetch_google_jobs,
-        "linkedin_posts": fetch_linkedin_posts,
     }
 
 
-def _default_driver_factory(use_profile=True):
+def _default_driver_factory():
     from browser import create_driver
-    from paths import linkedin_profile_dir
 
-    return create_driver(headless=False, user_data_dir=str(linkedin_profile_dir()) if use_profile else None)
-
-
-def _default_profile_in_use() -> bool:
-    from browser import profile_in_use
-    from paths import linkedin_profile_dir
-
-    return profile_in_use(linkedin_profile_dir())
+    return create_driver(headless=False)  # a fresh temporary Chrome profile for every search
 
 
 def _query_fields(query: dict) -> dict:
@@ -230,33 +216,13 @@ def _http_lane(queries, fetchers, keywords, cancel, out, throttles) -> None:
         out.put(("done", query, jobs))
 
 
-def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out, throttles,
-                  profile_in_use=_default_profile_in_use) -> None:
+def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out, throttles) -> None:
     seen_urls = set()
     driver = None
     restarts_left = 1
-    login_blocked = False
     try:
         if cancel.is_set():
             return
-        try:
-            busy = profile_in_use()
-        except Exception:
-            log.debug("Could not check the LinkedIn profile lock", exc_info=True)
-            busy = False
-        if busy:
-            # The "Log in to LinkedIn" window still holds the profile, so Chrome cannot start on it.
-            # Skip LinkedIn posts (they need that login) and run the other sites on a fresh profile.
-            log.warning("The LinkedIn profile is in use (login window open?); skipping LinkedIn posts")
-            posts = [q for q in queries if q["source"] == "linkedin_posts"]
-            if posts:
-                out.put(("event", {"type": "profile_in_use"}))
-                _skip_all(posts, "profile_in_use", out)
-            queries = [q for q in queries if q["source"] != "linkedin_posts"]
-            if not queries:
-                return
-            plain_factory = driver_factory
-            driver_factory = lambda: plain_factory(use_profile=False)  # noqa: E731
         try:
             driver = driver_factory()
         except ChromeNotFound:
@@ -273,23 +239,11 @@ def _browser_lane(queries, fetchers, driver_factory, keywords, cancel, out, thro
         for i, query in enumerate(queries):
             if cancel.is_set():
                 return
-            if query["source"] == "linkedin_posts" and login_blocked:
-                out.put(("skipped", query, "login_required"))
-                continue
             if not _may_proceed(throttles, query["source"], cancel):
                 return
             out.put(("started", query))
             try:
                 jobs = fetchers[query["source"]](driver, query["args"], seen_urls, keywords)
-            except LinkedInLoginRequired as exc:
-                if cancel.is_set():
-                    return  # Ctrl+C killed Chrome too; the failure is spurious
-                log.warning("LinkedIn login required (%s); skipping post searches", exc)
-                login_blocked = True
-                _back_off(throttles, query["source"])
-                out.put(("failed", query, "LinkedInLoginRequired"))
-                out.put(("event", {"type": "login_required", "source": query["source"]}))
-                continue
             except Exception as exc:
                 if cancel.is_set():
                     return  # interrupted by cancel, not a real failure: no restart, no event
@@ -342,7 +296,7 @@ def _make_emitter(on_event):
 
 def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=None,
                store=None, fetchers=None, driver_factory=None, delays=None,
-               trigger="manual", job_age_days=None, profile_in_use=None) -> RunSummary:
+               trigger="manual", job_age_days=None) -> RunSummary:
     """
     Run one search. settings = {"keywords", "locations", "sources"}.
 
@@ -359,7 +313,7 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
     `trigger` is recorded on the run (`manual`, `auto` or `terminal`).
 
     `job_age_days` (7, 14 or 30; None → the default) is how old a job may be. It is set
-    for this run in utils (see utils.set_job_age_days); LinkedIn posts keep their own week.
+    for this run in utils (see utils.set_job_age_days).
     """
     cancel = cancel or threading.Event()
     set_job_age_days(job_age_days)
@@ -393,8 +347,7 @@ def run_search(settings: dict, on_event=None, cancel=None, *, country_labels=Non
             name="hawkeye-http-lane", daemon=True))
     if browser_queries:
         lanes.append(threading.Thread(
-            target=_browser_lane, args=(browser_queries, fetchers, driver_factory, keywords, cancel, out, throttles,
-                                        profile_in_use or _default_profile_in_use),
+            target=_browser_lane, args=(browser_queries, fetchers, driver_factory, keywords, cancel, out, throttles),
             name="hawkeye-browser-lane", daemon=True))
     for lane in lanes:
         lane.start()

@@ -126,33 +126,5 @@ class CreateDriverFallbackTests(unittest.TestCase):
         driver.wait_css.assert_called_once_with(".x", 3)
 
 
-
-@unittest.skipIf(sys.platform == "win32", "SingletonLock is a symlink on macOS and Linux")
-class ProfileInUseTests(unittest.TestCase):
-    def setUp(self):
-        import tempfile
-        self.tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self.tmp.cleanup)
-        self.dir = Path(self.tmp.name)
-
-    def lock_to(self, pid):
-        import os
-        os.symlink(f"Some-Mac-{pid}", self.dir / "SingletonLock")
-
-    def test_no_lock_is_free(self):
-        self.assertFalse(browser.profile_in_use(self.dir))
-
-    def test_lock_of_a_running_chrome_is_in_use(self):
-        import os
-        self.lock_to(os.getpid())
-        self.assertTrue(browser.profile_in_use(self.dir))
-
-    def test_stale_lock_from_a_crashed_chrome_is_free(self):
-        import subprocess
-        dead = subprocess.Popen([sys.executable, "-c", "pass"])
-        dead.wait()
-        self.lock_to(dead.pid)
-        self.assertFalse(browser.profile_in_use(self.dir))
-
 if __name__ == "__main__":
     unittest.main()

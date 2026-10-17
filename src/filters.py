@@ -1,4 +1,4 @@
-"""Title and post relevance filters driven by the user's search keywords."""
+"""Title relevance filter driven by the user's search keywords."""
 
 import re
 
@@ -7,14 +7,6 @@ _STOPWORDS = {
     "jobs", "job", "senior", "junior", "mid", "the", "and", "for",
     "with", "role", "position", "specialist",
 }
-
-_HIRING_SIGNALS = [
-    "hiring", "we're hiring", "were hiring", "we are hiring",
-    "looking for", "wanted", "join our team", "join us",
-    "open position", "open role", "opening", "vacancy", "vacancies",
-    "now hiring", "apply now", "send your cv", "send your resume", "dm me",
-]
-
 
 def keyword_stems(keywords: list) -> list:
     """Distinct meaningful tokens from user keywords, skipping generic role words."""
@@ -45,22 +37,3 @@ def is_relevant_job(title: str, keywords: list) -> bool:
         if re.search(r"\b" + re.escape(stem) + r"\b", text):
             return True
     return False
-
-
-# Three or more hashtags in a row: a tag pile like "#opentowork #jobsearch #hiring #techjobs". Job
-# seekers and unrelated posts add #hiring there for reach, so a signal found only in a pile does not
-# count. A hashtag inside a sentence ("We're #hiring a Flutter developer") still does.
-_HASHTAG_PILE = re.compile(r"(?:#[^\s#]+[\s…]*){3,}")
-# Whole words only: "looking for" must not match "looking forward to my new role".
-_HIRING_RE = re.compile(r"\b(?:" + "|".join(re.escape(s) for s in _HIRING_SIGNALS) + r")\b")
-
-
-def is_hiring_post(text: str, keywords: list) -> bool:
-    """True if post text looks like a hiring post and mentions a user keyword."""
-    body = _HASHTAG_PILE.sub(" ", (text or "").lower())
-    if not _HIRING_RE.search(body):
-        return False
-    stems = keyword_stems(keywords)
-    if not stems:
-        return True
-    return any(re.search(r"\b" + re.escape(stem) + r"\b", body) for stem in stems)

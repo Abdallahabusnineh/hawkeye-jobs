@@ -13,7 +13,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _bootstrap  # noqa: F401  — isolates data dirs, adds src/ to sys.path
 
 from browser import ChromeNotFound
-from linkedin_posts import LinkedInLoginRequired
 import pipeline
 from pipeline import run_search
 from store import Store
@@ -74,12 +73,11 @@ class Recorder:
 
     def fetchers(self):
         result = {s: self.http(s) for s in ("linkedin", "indeed")}
-        result.update({s: self.browser(s) for s in ("bayt", "naukrigulf", "google_jobs", "linkedin_posts")})
+        result.update({s: self.browser(s) for s in ("bayt", "naukrigulf", "google_jobs")})
         return result
 
-    def driver_factory(self, use_profile=True):
+    def driver_factory(self):
         driver = FakeDriver()
-        driver.use_profile = use_profile
         self.drivers.append(driver)
         return driver
 
@@ -141,9 +139,9 @@ class HappyPathTests(PipelineTestCase):
         self.assertEqual(self.events[-1]["new"], 0)
 
     def test_browser_lane_runs_sources_in_order(self):
-        self.run_search(settings(sources=("linkedin_posts", "google_jobs", "bayt")))
+        self.run_search(settings(sources=("google_jobs", "bayt")))
         order = [source for source, _ in self.rec.calls]
-        self.assertEqual(order, ["bayt", "google_jobs", "linkedin_posts", "linkedin_posts"])
+        self.assertEqual(order, ["bayt", "google_jobs"])
 
     def test_no_driver_without_browser_sources(self):
         summary = self.run_search(settings(sources=("linkedin",)))
@@ -203,18 +201,6 @@ class FailureTests(PipelineTestCase):
         failed = self.of_type("query_failed")
         self.assertEqual([(e["source"], e["error"]) for e in failed], [("linkedin", "ValueError")])
         self.assertEqual([e["source"] for e in self.of_type("query_done")], ["bayt"])
-        self.assertEqual(summary.state, "done")
-
-    def test_login_required_skips_remaining_posts(self):
-        def logged_out(driver, args):
-            raise LinkedInLoginRequired("https://www.linkedin.com/authwall")
-        self.rec.behaviour["linkedin_posts"] = logged_out
-        summary = self.run_search(settings(sources=("linkedin_posts",)))
-        self.assertEqual(len(self.rec.calls), 1)
-        self.assertEqual(self.of_type("login_required"), [{"type": "login_required", "source": "linkedin_posts"}])
-        self.assertEqual(self.of_type("query_failed")[0]["error"], "LinkedInLoginRequired")
-        skipped = self.of_type("query_skipped")
-        self.assertEqual([(e["index"], e["reason"]) for e in skipped], [(1, "login_required")])
         self.assertEqual(summary.state, "done")
 
     def test_chrome_not_found_skips_browser_but_http_completes(self):
@@ -344,19 +330,6 @@ class CancelTests(PipelineTestCase):
         self.assertEqual(summary.state, "cancelled")
         self.assertTrue(self.rec.drivers[0].quit_called)
 
-    def test_cancel_with_login_required_emits_no_login_event(self):
-        cancel = threading.Event()
-
-        def login_with_cancel(driver, args):
-            cancel.set()
-            raise LinkedInLoginRequired("https://www.linkedin.com/authwall")
-
-        self.rec.behaviour["linkedin_posts"] = login_with_cancel
-        summary = self.run_search(settings(keywords=("Java", "Kotlin"), sources=("linkedin_posts",)), cancel=cancel)
-        self.assertEqual(self.of_type("login_required"), [])
-        self.assertEqual(self.of_type("query_failed"), [])
-        self.assertEqual(summary.state, "cancelled")
-
     def test_cancel_stops_after_in_flight_query(self):
         cancel = threading.Event()
 
@@ -471,30 +444,7 @@ class ThrottleTests(PipelineTestCase):
             run_search(settings(sources=("bayt",)), **kwargs)
         self.assertEqual(fetched_while_waited, [True])
         self.assertEqual(sorted(t.gap for t in built),
-                         sorted([(10, 20), (3, 6), (6, 10), (4, 7), (8, 12)]))
-
-    def test_linkedin_sources_share_one_throttle_at_the_largest_gap(self):
-        starts = []
-
-        def stamp(driver, args):
-            starts.append(time.monotonic())
-            return [job_for("linkedin_posts", args)]
-
-        def stamp_http(driver, args):
-            starts.append(time.monotonic())
-            return [job_for("linkedin", args)]
-
-        self.rec.behaviour["linkedin_posts"] = stamp
-        self.rec.behaviour["linkedin"] = stamp_http
-        begin = time.monotonic()
-        self.run_search(settings(keywords=("Java", "Kotlin"), sources=("linkedin", "linkedin_posts")),
-                        delays={"linkedin": (0.05, 0.05), "linkedin_posts": (0.1, 0.1)})
-        starts.sort()
-        self.assertGreaterEqual(len(starts), 4)
-        # The k-th request may not start before k gaps (0.1 s, the larger one) have passed. Measured
-        # this way, a thread paused after its slot (busy CI machine) can only make a start later.
-        offsets = [round(t - begin, 3) for t in starts]
-        self.assertTrue(all(off >= k * 0.1 - 0.01 for k, off in enumerate(offsets)), offsets)
+                         sorted([(3, 6), (3, 6), (6, 10), (4, 7), (8, 12)]))
 
     def test_group_gap_is_per_field_maximum(self):
         built = []
@@ -503,10 +453,12 @@ class ThrottleTests(PipelineTestCase):
             def __init__(self, low, high, *args, **kwargs):
                 built.append((low, high))
 
-        with mock.patch.object(pipeline, "Throttle", RecordingThrottle):
-            throttles = pipeline._make_throttles({"linkedin": (6, 7), "linkedin_posts": (5, 30)})
+        # Two sources on one host (none ship today; LinkedIn posts did) share one Throttle.
+        with mock.patch.object(pipeline, "Throttle", RecordingThrottle), \
+             mock.patch.dict(pipeline.SITE_GROUPS, {"other_linkedin": "linkedin.com"}):
+            throttles = pipeline._make_throttles({"linkedin": (6, 7), "other_linkedin": (5, 30)})
         self.assertEqual(built, [(6, 30)])
-        self.assertIs(throttles["linkedin"], throttles["linkedin_posts"])
+        self.assertIs(throttles["linkedin"], throttles["other_linkedin"])
 
     def test_gap_doubles_after_a_failed_query(self):
         starts = []
@@ -670,28 +622,6 @@ class EstimateTests(unittest.TestCase):
     def test_estimate_of_nothing_is_zero(self):
         from pipeline import estimate_seconds
         self.assertEqual(estimate_seconds([]), 0)
-
-
-class ProfileInUseTests(PipelineTestCase):
-    def test_login_window_open_skips_posts_and_runs_other_sites_without_the_profile(self):
-        summary = self.run_search(settings(sources=("bayt", "linkedin_posts")), profile_in_use=lambda: True)
-        self.assertEqual(summary.state, "done")
-        self.assertEqual(len(self.of_type("profile_in_use")), 1)
-        skipped = self.of_type("query_skipped")
-        self.assertTrue(skipped and all(e["source"] == "linkedin_posts" for e in skipped))
-        self.assertTrue(all(e["reason"] == "profile_in_use" for e in skipped))
-        self.assertEqual([d.use_profile for d in self.rec.drivers], [False])   # Bayt still ran
-        self.assertEqual(self.of_type("browser_failed"), [])
-
-    def test_only_posts_selected_starts_no_chrome(self):
-        self.run_search(settings(sources=("linkedin_posts",)), profile_in_use=lambda: True)
-        self.assertEqual(self.rec.drivers, [])
-        self.assertEqual(len(self.of_type("profile_in_use")), 1)
-
-    def test_free_profile_changes_nothing(self):
-        self.run_search(settings(sources=("bayt", "linkedin_posts")), profile_in_use=lambda: False)
-        self.assertEqual(self.of_type("profile_in_use"), [])
-        self.assertEqual([d.use_profile for d in self.rec.drivers], [True])
 
 
 if __name__ == "__main__":

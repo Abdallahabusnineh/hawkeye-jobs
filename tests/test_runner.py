@@ -13,7 +13,7 @@ from pipeline import RunSummary
 from runner import AutoSearch, NoSearchSettings, RunInProgress, RunManager
 from store import Store
 
-SETTINGS = {"keywords": ["Java"], "locations": ["jo"], "sources": ["bayt", "linkedin_posts"]}
+SETTINGS = {"keywords": ["Java"], "locations": ["jo"], "sources": ["bayt", "google_jobs"]}
 
 
 def job(n):
@@ -40,8 +40,8 @@ class FakeSearch:
                 time.sleep(0.01)
         new = store.add_jobs(run_id, [job(1), job(2)])
         on_event({"type": "query_done", **q, "found": 2, "new": len(new)})
-        if "linkedin_posts" in settings["sources"]:
-            p = {"index": 1, "source": "linkedin_posts", "keyword": "Java", "location_id": None}
+        if "google_jobs" in settings["sources"]:
+            p = {"index": 1, "source": "google_jobs", "keyword": "Java", "location_id": "jo"}
             on_event({"type": "query_started", **p})
             on_event({"type": "query_done", **p, "found": 0, "new": 0})
         state = "cancelled" if cancel.is_set() else "done"
@@ -58,7 +58,7 @@ class RunnerTestCase(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.db = Path(self.tmp.name) / "t.db"
         self.lock_path = Path(self.tmp.name) / "run.lock"
-        self.app = {"last_posts_run": None, "language": "en"}
+        self.app = {"language": "en"}
         self.saved_app = []
         self.notified = []
         self.search = FakeSearch()
@@ -102,7 +102,7 @@ class StartTests(RunnerTestCase):
         self.assertEqual(types[-1], "jobs_reported")
         with Store(self.db) as store:
             details = store.run_details(run_id)
-            self.assertEqual([x["source"] for x in details["queries"]], ["bayt", "linkedin_posts"])
+            self.assertEqual([x["source"] for x in details["queries"]], ["bayt", "google_jobs"])
             self.assertEqual(store.unnotified_jobs(), [])
         self.assertEqual(self.notified, [2])
         self.assertFalse(manager.is_running)
@@ -230,30 +230,6 @@ class StartTests(RunnerTestCase):
         self.assertFalse(manager.is_running)
 
 
-class PostsGateTests(RunnerTestCase):
-    def test_posts_run_marks_last_posts_run(self):
-        manager = self.make(clock=lambda: 1_000_000.0)
-        manager.start()
-        manager.wait(5)
-        self.assertEqual(self.saved_app, [{"last_posts_run": "1970-01-12T13:46:40Z"}])
-
-    def test_posts_skipped_within_24h(self):
-        self.app["last_posts_run"] = "1970-01-12T13:46:40Z"
-        manager = self.make(clock=lambda: 1_000_000.0 + 3600)
-        q = manager.subscribe()
-        manager.start()
-        manager.wait(5)
-        self.assertNotIn("linkedin_posts", self.search.calls[0]["settings"]["sources"])
-        self.assertIn({"type": "posts_skipped", "reason": "daily_limit"}, self.drain(q))
-
-    def test_posts_allowed_after_24h(self):
-        self.app["last_posts_run"] = "1970-01-12T13:46:40Z"
-        manager = self.make(clock=lambda: 1_000_000.0 + 86400)
-        manager.start()
-        manager.wait(5)
-        self.assertIn("linkedin_posts", self.search.calls[0]["settings"]["sources"])
-
-
 class HistoryFailureTests(RunnerTestCase):
     def test_record_query_failure_does_not_abort_the_run(self):
         class BrokenHistory(Store):
@@ -275,7 +251,7 @@ class RobustnessTests(RunnerTestCase):
     def test_lock_released_when_start_fails_after_acquire(self):
         def bad_loader():
             raise RuntimeError("settings unreadable")
-        manager = self.make(app_settings_loader=bad_loader)
+        manager = self.make(settings_loader=bad_loader)
         with self.assertRaises(RuntimeError):
             manager.start()
         self.assertFalse(manager.is_running)
@@ -295,19 +271,6 @@ class RobustnessTests(RunnerTestCase):
         other = RunLock(self.lock_path)
         self.assertTrue(other.acquire())
         other.release()
-
-    def test_failed_posts_mark_still_blocks_second_run_within_24h(self):
-        def bad_saver(patch):
-            raise OSError("disk full")
-        manager = self.make(app_settings_saver=bad_saver, clock=lambda: 1_000_000.0)
-        with self.assertLogs("runner", "ERROR"):
-            manager.start()
-            manager.wait(5)
-        q = manager.subscribe()
-        manager.start()
-        manager.wait(5)
-        self.assertNotIn("linkedin_posts", self.search.calls[1]["settings"]["sources"])
-        self.assertIn({"type": "posts_skipped", "reason": "daily_limit"}, self.drain(q))
 
 
 class SubscriberTests(RunnerTestCase):

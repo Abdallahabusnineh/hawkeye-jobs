@@ -13,8 +13,6 @@ are kept, printed and emailed. Runtime files live in the data directory
 import logging
 import os
 import sys
-import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -23,19 +21,18 @@ from catalog import SOURCES
 from countries import load_countries
 from email_sender import email_configured, send_email
 from logs import setup_logging
-from paths import data_dir, linkedin_profile_dir
+from paths import data_dir
 from pipeline import run_search
 from reporting import REPORT_LIMIT, report_pending
 from run_lock import RunLock
-from runner import POSTS_SOURCE, apply_posts_gate
-from settings import collect_settings, load_app_settings, migrate_legacy_config, save_app_settings
+from settings import collect_settings, load_app_settings, migrate_legacy_config
 from store import Store
 
 log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parent.parent
 
 _BROWSER_FAILED = {
-    "chrome_not_found": "⚠ Google Chrome is not installed — skipping Bayt, NaukriGulf, Google Jobs and LinkedIn posts.",
+    "chrome_not_found": "⚠ Google Chrome is not installed — skipping Bayt, NaukriGulf and Google Jobs.",
     "start_failed": "⚠ Could not start Chrome — skipping browser sources (details in hawkeye.log).",
     "crashed": "⚠ Chrome crashed twice — skipping the remaining browser searches.",
 }
@@ -74,15 +71,6 @@ def format_event(event: dict, country_labels=None):
         return f"{_query_label(event, country_labels)}: failed ({event['error']}) — details in hawkeye.log"
     if kind == "query_skipped":
         return f"{_query_label(event, country_labels)}: skipped ({event['reason'].replace('_', ' ')})"
-    if kind == "login_required":
-        return (
-            "⚠ Not logged into LinkedIn — skipping post search.\n"
-            f'  Log in once: open Chrome with --user-data-dir="{linkedin_profile_dir()}", '
-            "sign in to LinkedIn, then close it."
-        )
-    if kind == "profile_in_use":
-        return ("⚠ The LinkedIn login window is still open, so LinkedIn posts were skipped.\n"
-                "  Close that Chrome window, then search again.")
     if kind == "browser_failed":
         return _BROWSER_FAILED.get(event["reason"], f"⚠ Browser problem: {event['reason']}")
     if kind == "run_finished":
@@ -121,23 +109,9 @@ def main():
         if store.import_legacy_seen_file(ROOT / "seen_jobs.json"):
             print("Imported your previously seen jobs into the data folder.")
 
-        # LinkedIn posts at most once per 24 h, same rule as the app (protects the user's account).
-        chosen, posts_skipped = apply_posts_gate(dict(chosen), load_app_settings().get("last_posts_run"),
-                                                 None, time.time())
-        if posts_skipped:
-            print("[main] LinkedIn posts skipped — they already ran within the last 24 hours.")
-        posts_marked = False
-
         country_labels = {c["id"]: c["label"] for c in load_countries()}
 
         def print_event(event):
-            nonlocal posts_marked
-            if event["type"] == "query_started" and event.get("source") == POSTS_SOURCE and not posts_marked:
-                posts_marked = True
-                try:
-                    save_app_settings({"last_posts_run": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
-                except Exception:
-                    log.exception("Could not save last_posts_run")
             line = format_event(event, country_labels)
             if line:
                 print(line)

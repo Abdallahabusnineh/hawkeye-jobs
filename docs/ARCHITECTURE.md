@@ -1,6 +1,6 @@
 # hawkeye-jobs — Architecture & Code Reference
 
-Terminal job hunter. The user picks keywords, locations, and sources; it scrapes LinkedIn, Indeed, Bayt.com, NaukriGulf, Google Jobs, and LinkedIn hiring posts, then prints and emails new listings.
+Terminal job hunter. The user picks keywords, locations, and sources; it scrapes LinkedIn, Indeed, Bayt.com, NaukriGulf and Google Jobs, then prints and emails new listings.
 
 ---
 
@@ -23,7 +23,6 @@ hawkeye-jobs/
 │   ├── bayt.py          # Bayt.com via Selenium
 │   ├── naukrigulf.py    # NaukriGulf via Selenium
 │   ├── google_jobs.py   # Google Jobs via Selenium
-│   ├── linkedin_posts.py # LinkedIn content/post search via Selenium (needs login)
 │   ├── browser.py       # Chrome discovery, version detection, driver factory, wait_for()
 │   ├── utils.py         # Shared: clean_url(), is_recent()
 │   ├── version.py       # __version__
@@ -59,7 +58,7 @@ Runtime files live in the per-OS data directory (see src/paths.py), never in the
 2. The run is recorded (`store.start_run`) and `run_started` is emitted.
 3. Two lanes, one thread each, run in parallel; queries inside a lane run one after another:
    - **HTTP lane** — `linkedin`, `indeed` (JobSpy, no browser).
-   - **Browser lane** — `bayt`, `naukrigulf`, `google_jobs`, `linkedin_posts` (one Chrome driver for the whole lane).
+   - **Browser lane** — `bayt`, `naukrigulf`, `google_jobs` (one Chrome driver for the whole lane, on a fresh temporary profile).
 4. Lanes never touch the Store and never call `on_event`. They push messages on a queue. The thread that called `run_search` drains it: it sets each job's `keyword` and `location_id`, calls `store.add_jobs()` for that query (so a crash or Ctrl+C keeps everything saved so far), and emits events. `on_event` therefore always runs on the caller's thread. If `on_event` raises, the error is logged and ignored.
 5. After the lanes are joined, the last request time per host group is saved (see Polite throttling), then `store.finish_run()` records the final state, then `run_finished` is emitted. If `run_search` created its own Store, it closes it.
 
@@ -75,8 +74,7 @@ Every event is a dict with a `type` key. Values are data only (never English sen
 | `query_started` | `index`, `source`, `keyword`, `location_id` |
 | `query_done` | `index`, `source`, `keyword`, `location_id`, `found`, `new` |
 | `query_failed` | `index`, `source`, `keyword`, `location_id`, `error` (exception class name) |
-| `query_skipped` | `index`, `source`, `keyword`, `location_id`, `reason` in `login_required`, `browser_unavailable` |
-| `login_required` | `source` |
+| `query_skipped` | `index`, `source`, `keyword`, `location_id`, `reason` `browser_unavailable` (History may also show `login_required` / `profile_in_use` from LinkedIn posts runs before 1.2.0) |
 | `browser_failed` | `reason` in `chrome_not_found`, `start_failed`, `crashed` |
 | `run_finished` | `run_id`, `state`, `found`, `new` |
 
@@ -86,7 +84,6 @@ Guarantees: `run_started` is first and `run_finished` last. A query's `query_sta
 
 - One failed query emits `query_failed` and the lane continues.
 - `ChromeNotFound` or a failed Chrome start: `browser_failed` and every browser query is skipped (`browser_unavailable`); the HTTP lane is unaffected.
-- `LinkedInLoginRequired`: `query_failed`, then `login_required`; the remaining `linkedin_posts` queries are skipped (`login_required`).
 - Chrome dying mid-run: the driver is restarted once; a second crash emits `browser_failed` (`crashed`) and skips the rest.
 - Errors before `run_started` (e.g. the database cannot be written) raise. After it, `run_search` never raises: an unexpected error gives state `failed`.
 
@@ -94,18 +91,17 @@ Guarantees: `run_started` is first and `run_finished` last. A query's `query_sta
 
 Each lane waits on a `Throttle` (`src/throttle.py`) before every query: a random minimum gap between the **start** of consecutive requests to the same host (page-load time counts toward the gap). This protects users' accounts and IPs from bot detection (LinkedIn account restrictions, Google CAPTCHAs, Bayt/Cloudflare challenges, HTTP 429). Slower is acceptable; harm is not. The first request waits only for the gap left by a request saved from an earlier run (see Across runs); otherwise it goes immediately; the wait sleeps in slices of at most 0.5 s and stops as soon as `cancel` is set (the lane then ends as on its pre-query cancel check, with no events for that query).
 
-- **Host groups:** throttles are keyed by `pipeline.SITE_GROUPS` (`linkedin` and `linkedin_posts` both map to `linkedin.com`), built once in `run_search` and shared by both lanes. Slots are reserved under a lock, so two lanes never get requests closer than the gap, including on the user's own LinkedIn account. A group uses the per-field largest (min, max) among its sources, so linkedin.com gets 10-20 s.
+- **Host groups:** throttles are keyed by `pipeline.SITE_GROUPS` (one host per source today), built once in `run_search` and shared by both lanes. Slots are reserved under a lock, so two lanes never get requests closer than the gap. If two sources ever share a host, the group uses the per-field largest (min, max) among them.
 - **Back-off:** when a query fails (not on cancel), its group's gap doubles for the rest of the run, capped at 4x (`Throttle.back_off()`).
 - **Across runs:** spacing persists. Before the run is recorded, `run_search` reads `store.site_last_requests()` and `prime()`s each host group's throttle with its saved Unix time, so the first request of a new run waits out the remaining gap. As each query starts, and again after the lanes are joined, it saves `throttle.last_request_wall()` per group with `store.save_site_requests()` (table `site_requests`; the time never moves backwards). The save is best effort (failures are logged, Ctrl+C is retried) and also happens when the run is cancelled or failed, since requests that were sent still count. Saving at each query start means a killed process still leaves its times behind. Lanes never touch the store; priming and saving run on the calling thread. Known limit: the times are wall-clock, so a clock that jumps forward between runs can shorten the first gap. `delays={}` throttles nothing and saves nothing.
 
 | Source | Gap (seconds, min-max) |
 |---|---|
-| linkedin | 3-6 (shares linkedin.com with linkedin_posts, so 10-20) |
+| linkedin | 3-6 |
 | indeed | 3-6 |
 | bayt | 6-10 |
 | naukrigulf | 4-7 |
 | google_jobs | 8-12 |
-| linkedin_posts | 10-20 (the user's own LinkedIn account) |
 
 Values live in `pipeline.POLITE_DELAYS`. `run_search(..., delays={...})` overrides them (tests pass `{}`); a source missing from `delays` is not throttled.
 
@@ -142,7 +138,7 @@ One middleware: the `Host` header must be `127.0.0.1:<port>` or `localhost:<port
 
 ### RunManager / AutoSearch (`src/runner.py`)
 
-- `RunManager.start(trigger)` allows one search at a time: an in-process lock plus `RunLock` (`src/run_lock.py`, file `<data dir>/run.lock`, non-blocking OS lock released by the OS if the holder dies) shared with terminal mode. It runs `pipeline.run_search` on a worker thread, records each finished query in `run_queries`, keeps a `current` progress snapshot, fans events out to SSE subscribers (bounded queues; a slow subscriber is dropped and the UI reconnects) and limits LinkedIn posts to once per 24 h (`runner.apply_posts_gate`, shared with terminal mode, which also stamps `last_posts_run`). Launch recovery (`recover_interrupted`) and `report_pending_now` run only while holding the run lock and are skipped if a search runs anywhere. It raises `RunInProgress` / `NoSearchSettings`.
+- `RunManager.start(trigger)` allows one search at a time: an in-process lock plus `RunLock` (`src/run_lock.py`, file `<data dir>/run.lock`, non-blocking OS lock released by the OS if the holder dies) shared with terminal mode. It runs `pipeline.run_search` on a worker thread, records each finished query in `run_queries`, keeps a `current` progress snapshot, fans events out to SSE subscribers (bounded queues; a slow subscriber is dropped and the UI reconnects). Launch recovery (`recover_interrupted`) and `report_pending_now` run only while holding the run lock and are skipped if a search runs anywhere. It raises `RunInProgress` / `NoSearchSettings`.
 - `exclusive()` is a context manager that refuses (`RunInProgress`) while a search runs and blocks new ones inside the block. Reset and the LinkedIn login window use it.
 - `AutoSearch` ticks every 60 s and starts a `trigger="auto"` run when enabled, onboarding is done and the configured hours have passed since the last finished run. After any attempt it made (started, failed, or no settings) it backs off a full interval; when another run holds the lock it simply tries again next tick.
 - `settings.py` has a `_CONFIG_LOCK` (RLock) that serialises every write to `config.json` (search settings and the `app` section).
@@ -177,7 +173,7 @@ No build step. `index.html` loads `app.js` (an ES module that registers the Alpi
 
 | Method | Path | Success | Errors |
 |---|---|---|---|
-| GET | `/state` | 200 version, onboarding, language, theme, chrome, linkedin_profile, run, job_counts, has_settings, update | |
+| GET | `/state` | 200 version, onboarding, language, theme, chrome, run, job_counts, has_settings, update, background | |
 | GET | `/settings` | 200 search settings (empty defaults if unset) | |
 | PUT | `/settings` | 200 cleaned settings | 422 `{errors}` |
 | POST | `/estimate` | 200 `{queries, seconds}` (never fails; zeros for missing input, any body accepted) | |
@@ -224,7 +220,7 @@ Older configs that stored `jordan` / `uae` still work (`LEGACY_IDS` in `catalog.
 
 `get_location(id)` maps a country id (`jo`, `gb`, `remote`, …) to per-site strings/slugs. `OVERRIDES` holds Indeed/Bayt/NaukriGulf aliases. Sources that do not support a country (Bayt/NaukriGulf outside the Gulf, Indeed for Remote) are skipped. Unknown ISO codes still search LinkedIn, Indeed, and Google Jobs.
 
-`plan_queries(keywords, location_ids, source_ids, country_labels=None)` is what the pipeline uses: a flat list of `{source, keyword, location_id, args}` (`location_id` is `None` for LinkedIn posts), where `args` is exactly what that source's `fetch_*` takes. `expand_searches(...)` groups the same `args` per source:
+`plan_queries(keywords, location_ids, source_ids, country_labels=None)` is what the pipeline uses: a flat list of `{source, keyword, location_id, args}`, where `args` is exactly what that source's `fetch_*` takes. `expand_searches(...)` groups the same `args` per source:
 
 ```python
 {
@@ -233,7 +229,6 @@ Older configs that stored `jordan` / `uae` still work (`LEGACY_IDS` in `catalog.
   "bayt": [(term_slug, country_slug), ...],
   "naukrigulf": [(keyword, location_slug), ...],
   "google_jobs": [(term, location), ...],
-  "linkedin_posts": ["hiring {keyword}", "looking for {keyword}", ...],
 }
 ```
 
@@ -381,48 +376,9 @@ SKIP_DOMAINS = ["google.com", "google.jo", "google.ae", "google.co", "accounts.g
 
 ---
 
-### `src/linkedin_posts.py` — LinkedIn Content/Post Scraper
+### LinkedIn hiring posts — removed in 1.2.0
 
-Scrapes LinkedIn's **global content search** (feed posts) — *not* the Jobs board that `scraper.py`/JobSpy reads. Targets hiring posts like "We're hiring a Flutter developer!".
-
-**Authentication (required):** LinkedIn shows an auth wall to anonymous visitors. The scraper reuses a **persistent Chrome profile** created by `create_driver(user_data_dir=...)`. The pipeline passes `paths.linkedin_profile_dir()`, resolved in this order: `LINKEDIN_PROFILE_DIR` if set; else the old `~/.hawkeye-linkedin-profile` if it exists (so existing users stay logged in); else `<data dir>/linkedin-profile`. Log into LinkedIn **once by hand** in that profile; the session cookie is reused every run. If logged out, `fetch_linkedin_posts()` raises `LinkedInLoginRequired` (checked before and after the wait); the pipeline emits `login_required`, skips the remaining post queries, and carries on with the other sources.
-
-**Markup (October 2026):** LinkedIn's search results no longer carry `data-urn="urn:li:activity:…"` or the `feed-shared-update-v2` / `update-components-*` classes, and there is no link to the post itself. On the first search of a session posts carry `data-view-name` attributes (`feed-full-update`, `feed-commentary`, `feed-actor`); from the second search on LinkedIn drops those attributes and scrambles class names (a fresh page load does not bring them back). What every page keeps is a visually hidden heading "Feed post" before each post, so `_post_containers()` finds posts by that heading (climbing to the largest ancestor holding only that one post), and `_split_post()` reads the visible strings in their fixed order: author, [• degree], [headline], relative time (`now`, `22m`, `3h`, `2d`), Follow/Connect, post text (cut before Like/Comment/Repost/Send). When `feed-commentary` exists its text is used instead. A block without a relative time is skipped (the inner part of a share). The old URN selectors remain as a fallback. `_wait_for_posts()` polls for the heading (or an old card) with JavaScript, which works for both drivers. Since there is no post link, a post's URL is the author's recent activity (`/in/<id>/recent-activity/all/`, or `/company/<id>/posts/`) plus `#hawkeye-<16-hex fingerprint of author + text>`, so every post stays one distinct job (`clean_url` keeps fragments). LinkedIn also drops `datePosted` on redirect, so recency rests on `_post_is_recent()`. Note: the heading text depends on the account's LinkedIn language; it was checked for English.
-
-**Hiring filter:** `filters.is_hiring_post()` matches signals as whole words ("looking for" does not match "looking forward") and ignores signals that appear only inside a pile of 3+ consecutive hashtags (`#opentowork #jobsearch #hiring …`), which job seekers and unrelated posts add for reach; a hashtag inside a sentence ("We're #hiring a …") still counts.
-
-**Login window still open.** Chrome lets one process use a profile at a time; while the "Log in to LinkedIn" window is open, a search Chrome on that profile exits at once. `browser.profile_in_use()` detects it (macOS/Linux: the `SingletonLock` symlink names a live pid — a stale link from a crashed Chrome does not count; Windows: `lockfile` is held exclusively). `_browser_lane` then emits `profile_in_use`, skips the LinkedIn post queries (`skipped`, reason `profile_in_use`, shown in the window and in History) and runs the other browser sources on a fresh temporary profile (`driver_factory(use_profile=False)`), so Bayt, NaukriGulf and Google Jobs are not lost. Skipped posts do not count toward the once-a-day posts limit.
-
-**First-time setup:**
-```bash
-# Open Chrome with the same profile the automation uses, sign into LinkedIn, then close it.
-open -a "Google Chrome" --args --user-data-dir="<paths.linkedin_profile_dir()>"
-```
-
-**URL pattern:**
-```
-https://www.linkedin.com/search/results/content/?keywords=<enc>&datePosted=%22past-week%22&sortBy=%22date_posted%22
-```
-`datePosted=past-week` keeps posts to the last 7 days; `sortBy=date_posted` surfaces newest first. Cross-run dedup (`store.py`) prevents re-emailing the same post.
-
-**Search phrases:** built from the user's keywords, e.g. `hiring Flutter Developer`, `looking for Flutter Developer`.
-
-**Relevance filter (`is_hiring_post`):** does **not** use `is_relevant_job()` (post text is prose, not a title). A post is kept only if its text mentions a user keyword stem **and** contains a hiring signal (`hiring`, `looking for`, `wanted`, `vacancy`, `open position`, …). Recency is enforced by the URL filter plus `_post_is_recent()` for LinkedIn's compact times (`5h`, `1d`, `2w`).
-
-**HTML selectors (as of 2026 — LinkedIn changes its DOM often):**
-| Data | Selector |
-|------|----------|
-| Post card | `div[data-urn*="urn:li:activity"]` (fallback `.feed-shared-update-v2`) |
-| Post URL | built from `data-urn` → `/feed/update/<urn>/` |
-| Post text | `.update-components-text, .feed-shared-update-v2__description, .feed-shared-inline-show-more-text` |
-| Author | `.update-components-actor__title, .update-components-actor__name` |
-| Relative time | `.update-components-actor__sub-description` |
-
-**Wait / scroll:** `wait_for(driver, CARD_SELECTOR, 15)`, then 4 scrolls × 2s to lazy-load more posts. If no cards load and nothing is parsed it logs a timeout warning (page title included).
-
-**Note:** `source` is `"LinkedIn Post"`; `title` is the post's opening hook (truncated to ~90 chars); `description` is `"{author} · LinkedIn hiring post"`.
-
----
+Versions up to 1.1.5 also searched LinkedIn's content search for hiring posts ("We're hiring a Flutter developer"). It was removed because it was the one source that ran on the user's **own logged-in LinkedIn account** (a restriction risk for that account, against the project's no-harm rule), it needed a separate login step that confused users (a Chrome window left open blocked every search), and LinkedIn changed the page twice in one day (October 2026: new markup without activity URNs or post links, then markup without any stable attributes from the second search of a session). What remains for compatibility: `catalog.REMOVED_SOURCES` (a saved search naming `linkedin_posts` has it dropped in `settings.load_config()`), the `source.linkedin_posts` labels and `JOB_SOURCE_IDS["linkedin post"]` so jobs saved by older versions still display, the `history.q.skipped.login_required` / `profile_in_use` texts for old History entries, and `app._remove_old_linkedin_profile()`, which deletes the app's old `<data dir>/linkedin-profile` (a logged-in Chrome profile) at launch — never `LINKEDIN_PROFILE_DIR` or `~/.hawkeye-linkedin-profile`, which users created themselves. An old `last_posts_run` app setting is ignored and dropped on the next save.
 
 ### `src/utils.py` — Shared Utilities
 
@@ -436,7 +392,7 @@ Example: `https://indeed.com/viewjob?jk=abc123&utm_source=google` → `https://i
 
 **`is_recent(date_str: str, today=None, max_days=None) -> bool`**
 
-Returns `True` if the job was posted within N days, where N (`max_days`, default `job_age_days()`) is the user's **job age** setting: 7, 14 (default) or 30 (`JOB_AGE_CHOICES`, `DEFAULT_JOB_AGE_DAYS`; app setting `job_age_days`, chosen on the Search page). `run_search(..., job_age_days=)` calls `set_job_age_days()` at the start of each run; the setting is module-level because one search runs at a time per process. JobSpy gets `hours_old = job_age_days() * 24`. It applies to LinkedIn jobs, Indeed, Bayt and NaukriGulf; LinkedIn posts keep LinkedIn's own past-week filter, and Google Jobs shows no dates. Why 14 by default: Bayt and NaukriGulf post far less often than LinkedIn and most of their open jobs are 1–4 weeks old, so a 7-day window often showed nothing from them; dedup means a wider window only adds to the first search. `today` (a date) is injectable for tests; dates are compared as UTC calendar dates.
+Returns `True` if the job was posted within N days, where N (`max_days`, default `job_age_days()`) is the user's **job age** setting: 7, 14 (default) or 30 (`JOB_AGE_CHOICES`, `DEFAULT_JOB_AGE_DAYS`; app setting `job_age_days`, chosen on the Search page). `run_search(..., job_age_days=)` calls `set_job_age_days()` at the start of each run; the setting is module-level because one search runs at a time per process. JobSpy gets `hours_old = job_age_days() * 24`. It applies to LinkedIn jobs, Indeed, Bayt and NaukriGulf; Google Jobs shows no dates. Why 14 by default: Bayt and NaukriGulf post far less often than LinkedIn and most of their open jobs are 1–4 weeks old, so a 7-day window often showed nothing from them; dedup means a wider window only adds to the first search. `today` (a date) is injectable for tests; dates are compared as UTC calendar dates.
 
 Handles multiple formats:
 | Input format | Example | Behavior |
@@ -526,7 +482,7 @@ All scrapers produce job dicts with this shape:
     "description": str,   # "{company} - {location}" or just location
     "source":      str,   # "Linkedin", "Indeed", "Bayt", "NaukriGulf", "Google Jobs"
     "keyword":     str,   # The user keyword that found the job (set by the pipeline)
-    "location_id": str,   # Normalised country id of the query (e.g. "jo"); None for LinkedIn posts
+    "location_id": str,   # Normalised country id of the query (e.g. "jo")
     "location":    str,   # Search location (e.g. "United Arab Emirates")
     "published":   str,   # Raw date string from the source
     "date_found":  str,   # UTC timestamp when the scraper ran
@@ -546,7 +502,6 @@ Locations are chosen from the world list in the terminal. Per-source support:
 | Bayt | Jordan + Gulf only (`OVERRIDES` slugs) |
 | NaukriGulf | Gulf only (`OVERRIDES` slugs) |
 | Google Jobs | Any country from the API, plus Remote |
-| LinkedIn Posts | Global (content search — not location-scoped) |
 
 ---
 

@@ -6,8 +6,8 @@
 
 export const STATUSES = ["new", "saved", "applied", "dismissed"];
 export const FILTERS = ["new", "saved", "applied", "all"];
-export const SOURCE_ORDER = ["linkedin", "indeed", "bayt", "naukrigulf", "google_jobs", "linkedin_posts"];
-export const BROWSER_SOURCES = ["bayt", "naukrigulf", "google_jobs", "linkedin_posts"];
+export const SOURCE_ORDER = ["linkedin", "indeed", "bayt", "naukrigulf", "google_jobs"];
+export const BROWSER_SOURCES = ["bayt", "naukrigulf", "google_jobs"];
 export const AUTO_HOURS = [2, 4, 6, 12, 24];
 export const JOB_AGE_DAYS = [7, 14, 30];
 export const MAX_KEYWORDS = 20;
@@ -137,7 +137,7 @@ export function filterCountries(countries, query, selected, limit = 50) {
 }
 
 export function defaultSources(chromeFound) {
-  return SOURCE_ORDER.filter((id) => id !== "linkedin_posts" && (chromeFound || !BROWSER_SOURCES.includes(id)));
+  return SOURCE_ORDER.filter((id) => chromeFound || !BROWSER_SOURCES.includes(id));
 }
 
 export function orderSources(ids) {
@@ -157,7 +157,8 @@ export function jobsQuery({ filter, text, offset, limit }) {
 
 const JOB_SOURCE_IDS = {
   linkedin: "linkedin", indeed: "indeed", bayt: "bayt", "bayt.com": "bayt", naukrigulf: "naukrigulf",
-  "google jobs": "google_jobs", "linkedin post": "linkedin_posts",
+  "google jobs": "google_jobs",
+  "linkedin post": "linkedin_posts",  // LinkedIn posts (removed in 1.2.0): jobs saved by older versions
 };
 
 export function jobSourceId(source) {
@@ -188,6 +189,7 @@ export function apiErrorKey(status, body) {
 export function queryOutcome(query) {
   if (query.status === "done") return { key: "history.q.done", params: { found: query.found, new: query.new } };
   if (query.status === "failed") return { key: "history.q.failed", params: {} };
+  // login_required / profile_in_use: LinkedIn posts queries recorded by versions before 1.2.0 (History).
   const reason = ["login_required", "browser_unavailable", "profile_in_use"].includes(query.detail) ? query.detail : "other";
   return { key: `history.q.skipped.${reason}`, params: {} };
 }

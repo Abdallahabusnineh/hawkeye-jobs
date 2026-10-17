@@ -45,11 +45,6 @@ def _version_tuple(text):
 def get_state(request: Request):
     s = _services(request)
     app = s.load_app_settings()
-    profile = s.linkedin_profile_dir()
-    try:
-        has_profile = profile.is_dir() and any(profile.iterdir())
-    except OSError:
-        has_profile = False
     with s.store_factory() as store:
         counts = store.job_counts()
     latest = app.get("latest_version")
@@ -59,7 +54,6 @@ def get_state(request: Request):
         "language": app["language"],
         "theme": app["theme"],
         "chrome": {"found": bool(s.find_chrome())},
-        "linkedin_profile": has_profile,
         "run": s.manager.current,
         "job_counts": counts,
         "has_settings": s.load_config() is not None,
@@ -280,20 +274,6 @@ def show_window(request: Request):
 def open_data_folder(request: Request):
     s = _services(request)
     s.open_path(s.data_dir())
-
-
-@router.post("/linkedin/login", status_code=202)
-def linkedin_login(request: Request):
-    s = _services(request)
-    try:
-        with s.manager.exclusive():  # the login window shares the profile a search would use
-            chrome = s.find_chrome()
-            if not chrome:
-                return JSONResponse({"error": "chrome_not_found"}, status_code=409)
-            s.launch([chrome, f"--user-data-dir={s.linkedin_profile_dir()}", "https://www.linkedin.com/login"])
-    except RunInProgress:
-        return JSONResponse({"error": "run_in_progress"}, status_code=409)
-    return {"ok": True}
 
 
 def _issue_url(s, lines):

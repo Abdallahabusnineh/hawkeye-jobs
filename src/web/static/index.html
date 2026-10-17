@@ -222,10 +222,6 @@
             </template>
           </div>
           <p class="field-error" role="alert" x-show="search.errors.sources" x-text="fieldError('sources')"></p>
-          <div class="warning" role="note">
-            <p x-text="t('search.posts_warning')"></p>
-            <button type="button" class="btn-ghost" @click="linkedinLogin()" x-text="t('linkedin.login')"></button>
-          </div>
         </div>
 
         <div class="panel">
@@ -331,13 +327,6 @@
               <span class="ok" x-show="chromeFound()" x-text="t('settings.chrome_found')"></span>
               <span class="warn-text" x-show="!chromeFound()" x-text="t('settings.chrome_missing')"></span>
               <button type="button" class="btn-ghost" x-show="!chromeFound()" @click="openUrl(chromeUrl)" x-text="t('action.download_chrome')"></button>
-            </span>
-          </div>
-          <div class="setting">
-            <span x-text="t('settings.linkedin')"></span>
-            <span class="setting-value">
-              <span class="hint" x-text="linkedinProfile() ? t('settings.linkedin_ready') : t('settings.linkedin_none')"></span>
-              <button type="button" class="btn-ghost" @click="linkedinLogin()" x-text="t('linkedin.login')"></button>
             </span>
           </div>
           <div class="setting">

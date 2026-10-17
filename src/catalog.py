@@ -101,7 +101,6 @@ SOURCES = {
     "bayt": "Bayt.com",
     "naukrigulf": "NaukriGulf",
     "google_jobs": "Google Jobs",
-    "linkedin_posts": "LinkedIn hiring posts",
 }
 
 SOURCE_HINTS = {
@@ -110,14 +109,18 @@ SOURCE_HINTS = {
     "bayt": "Jordan + Gulf only",
     "naukrigulf": "Gulf only",
     "google_jobs": "worldwide",
-    "linkedin_posts": "global posts — LinkedIn login required",
 }
 
 SOURCE_ORDER = [
-    "linkedin", "indeed", "bayt", "naukrigulf", "google_jobs", "linkedin_posts",
+    "linkedin", "indeed", "bayt", "naukrigulf", "google_jobs",
 ]
 
-BROWSER_SOURCES = {"bayt", "naukrigulf", "google_jobs", "linkedin_posts"}
+# LinkedIn hiring posts were a source until 1.1.5. They were removed: they needed the user's own
+# LinkedIn login (a restriction risk for their account) and LinkedIn kept changing the page.
+# Settings saved by older versions may still name the source; it is dropped when they are read.
+REMOVED_SOURCES = {"linkedin_posts"}
+
+BROWSER_SOURCES = {"bayt", "naukrigulf", "google_jobs"}
 
 # JobSpy Indeed country_indeed values. Jordan is not in this list.
 INDEED_COUNTRIES = frozenset({
@@ -198,8 +201,7 @@ def plan_queries(keywords: list, location_ids: list, source_ids: list, country_l
     Every query to run, in order, as {"source", "keyword", "location_id", "args"}.
 
     `args` is exactly what that source's fetch function takes. `location_id` is the
-    normalised country id ('jo', 'remote', ...), or None for LinkedIn posts, which
-    are not location-scoped. The UI uses location_id to show a translated country name.
+    normalised country id ('jo', 'remote', ...). The UI uses it to show a translated country name.
     """
     selected = set(source_ids)
     keywords = [kw.strip() for kw in keywords if str(kw).strip()]
@@ -229,11 +231,6 @@ def plan_queries(keywords: list, location_ids: list, source_ids: list, country_l
                     add("google_jobs", keyword, nid, (f"{keyword} remote", ""))
                 elif loc.get("google") is not None:
                     add("google_jobs", keyword, nid, (keyword, loc["google"]))
-
-    if "linkedin_posts" in selected:
-        for keyword in keywords:
-            add("linkedin_posts", keyword, None, f"hiring {keyword}")
-            add("linkedin_posts", keyword, None, f"looking for {keyword}")
 
     return queries
 

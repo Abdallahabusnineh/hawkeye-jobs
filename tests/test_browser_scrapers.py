@@ -9,7 +9,6 @@ import _bootstrap  # noqa: F401  — isolates data dirs, adds src/ to sys.path
 
 import bayt
 import google_jobs
-import linkedin_posts
 import naukrigulf
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -159,74 +158,6 @@ class GoogleJobsTests(unittest.TestCase):
             self.assertEqual(google_jobs.fetch_google_jobs(driver, ("Java Developer", "UAE"), set(), KEYWORDS), [])
         self.assertIn("Just a moment", logs.output[0])
         self.assertIn(driver.visited[0], logs.output[0])
-
-
-class LinkedInPostsTests(unittest.TestCase):
-    def test_warns_when_nothing_loaded(self):
-        driver = FakeDriver("<html></html>", title="Just a moment...",
-                            current_url="https://www.linkedin.com/search/results/content/")
-        with patch("linkedin_posts._wait_for_posts", return_value=False), \
-             patch("linkedin_posts.time.sleep"), \
-             self.assertLogs("linkedin_posts", "WARNING") as logs:
-            self.assertEqual(linkedin_posts.fetch_linkedin_posts(driver, "hiring Java", set(), KEYWORDS), [])
-        self.assertIn("Just a moment", logs.output[0])
-        self.assertIn(driver.visited[0], logs.output[0])
-
-    def test_fetch_keeps_recent_hiring_posts(self):
-        driver = FakeDriver(fixture("linkedin_posts.html"), current_url="https://www.linkedin.com/search/results/content/")
-        with patch("linkedin_posts._wait_for_posts", return_value=True) as wait, \
-             patch("linkedin_posts.time.sleep"):
-            jobs = linkedin_posts.fetch_linkedin_posts(driver, "hiring Java Developer", set(), KEYWORDS)
-        wait.assert_called_once_with(driver, 15)
-        self.assertEqual(len(driver.scripts), linkedin_posts._MAX_SCROLLS)
-        self.assertEqual(len(jobs), 1)
-        job = jobs[0]
-        self.assertEqual(job["url"], "https://www.linkedin.com/feed/update/urn:li:activity:7300000000000000001/")
-        self.assertEqual(job["description"], "Sample Recruiter · LinkedIn hiring post")
-        self.assertEqual((job["source"], job["published"]), ("LinkedIn Post", "5h"))
-
-    def test_current_markup_keeps_real_hiring_posts_only(self):
-        jobs = linkedin_posts._parse_posts_page(fixture("linkedin_posts_2026.html"), set(), "hiring Flutter",
-                                                ["Flutter Developer"])
-        self.assertEqual(len(jobs), 1)   # the tag-pile post and the 3-week-old post are dropped
-        job = jobs[0]
-        self.assertEqual(job["description"], "Acme Apps · LinkedIn hiring post")
-        self.assertEqual(job["published"], "3h")
-        self.assertTrue(job["url"].startswith("https://www.linkedin.com/company/acme-apps/posts/#hawkeye-"), job["url"])
-        self.assertIn("Flutter Developer in Amman", job["title"])
-
-    def test_current_markup_post_urls_are_stable_and_distinct(self):
-        html = fixture("linkedin_posts_2026.html").replace("3w", "1d")
-        first = [j["url"] for j in linkedin_posts._parse_posts_page(html, set(), "k", ["Flutter Developer"])]
-        again = [j["url"] for j in linkedin_posts._parse_posts_page(html, set(), "k", ["Flutter Developer"])]
-        self.assertEqual(first, again)            # same post, same URL: the store will not show it twice
-        self.assertEqual(len(first), len(set(first)))
-        self.assertEqual(len(first), 2)
-
-    def test_later_searches_without_attributes_are_read_too(self):
-        jobs = linkedin_posts._parse_posts_page(fixture("linkedin_posts_2026_plain.html"), set(), "k",
-                                                ["Flutter Developer"])
-        self.assertEqual([j["description"] for j in jobs], ["Acme Apps · LinkedIn hiring post"])
-        self.assertEqual(jobs[0]["published"], "3h")
-        self.assertIn("Flutter Developer in Amman", jobs[0]["title"])
-
-    def test_search_url_covers_the_past_week(self):
-        self.assertIn("datePosted=%22past-week%22", linkedin_posts._build_url("hiring Java"))
-
-    def test_post_is_recent(self):
-        for rel in ("34m", "5h", "1d", "7d", "1w", "", "soon"):
-            self.assertTrue(linkedin_posts._post_is_recent(rel), rel)
-        for rel in ("8d", "2w", "3mo", "1yr"):
-            self.assertFalse(linkedin_posts._post_is_recent(rel), rel)
-
-    def test_raises_when_logged_out(self):
-        driver = FakeDriver("<html></html>", current_url="https://www.linkedin.com/authwall?trk=x")
-        with patch("linkedin_posts._wait_for_posts", return_value=False), \
-             patch("linkedin_posts.time.sleep"):
-            with self.assertRaises(linkedin_posts.LinkedInLoginRequired):
-                linkedin_posts.fetch_linkedin_posts(driver, "hiring Java", set(), KEYWORDS)
-        self.assertEqual(driver.scripts, [])
-
 
 if __name__ == "__main__":
     unittest.main()

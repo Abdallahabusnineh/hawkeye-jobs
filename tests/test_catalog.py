@@ -67,20 +67,6 @@ class ExpandSearchesTests(unittest.TestCase):
             [("Flutter Developer remote", "")],
         )
 
-    def test_linkedin_posts_build_hiring_phrases(self):
-        searches = expand_searches(
-            ["Flutter Developer"],
-            ["jordan"],
-            ["linkedin_posts"],
-        )
-        self.assertEqual(
-            searches["linkedin_posts"],
-            [
-                "hiring Flutter Developer",
-                "looking for Flutter Developer",
-            ],
-        )
-
     def test_unselected_sources_are_empty(self):
         searches = expand_searches(["X"], ["jordan"], ["linkedin"])
         self.assertEqual(searches["bayt"], [])
@@ -151,12 +137,8 @@ class PlanQueriesTests(unittest.TestCase):
              "args": {"term": "Java", "location": "Remote"}},
         ])
 
-    def test_linkedin_posts_have_no_location(self):
-        plan = plan_queries(["Java"], ["jo", "ae"], ["linkedin_posts"])
-        self.assertEqual(plan, [
-            {"source": "linkedin_posts", "keyword": "Java", "location_id": None, "args": "hiring Java"},
-            {"source": "linkedin_posts", "keyword": "Java", "location_id": None, "args": "looking for Java"},
-        ])
+    def test_removed_linkedin_posts_source_plans_nothing(self):
+        self.assertEqual(plan_queries(["Java"], ["jo", "ae"], ["linkedin_posts"]), [])
 
     def test_unsupported_combination_plans_nothing(self):
         self.assertEqual(plan_queries(["Java"], ["jo"], ["naukrigulf"]), [])
@@ -171,7 +153,7 @@ class PlanQueriesTests(unittest.TestCase):
             self.assertEqual(searches[source], grouped.get(source, []))
 
 
-SOURCE_IDS = ("linkedin", "indeed", "bayt", "naukrigulf", "google_jobs", "linkedin_posts")
+SOURCE_IDS = ("linkedin", "indeed", "bayt", "naukrigulf", "google_jobs")
 
 
 if __name__ == "__main__":

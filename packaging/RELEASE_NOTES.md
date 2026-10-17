@@ -10,8 +10,8 @@ Hawkeye Jobs is a free, open-source job finder for LinkedIn, Indeed, Bayt, Naukr
 | Windows 10 / 11 | `HawkeyeJobs-Windows-Setup.exe` (برنامج تثبيت · installer) — أو · or `HawkeyeJobs-Windows.zip` |
 | Linux (x86-64) | `HawkeyeJobs-Linux.AppImage` — أو · or `HawkeyeJobs-Linux.tar.gz` |
 
-يتطلب البحث في Bayt وNaukriGulf وGoogle Jobs ومنشورات LinkedIn وجود متصفح Google Chrome.
-Bayt, NaukriGulf, Google Jobs and LinkedIn posts need Google Chrome installed.
+يتطلب البحث في Bayt وNaukriGulf وGoogle Jobs وجود متصفح Google Chrome.
+Bayt, NaukriGulf and Google Jobs need Google Chrome installed.
 
 ## التشغيل أول مرة · First launch
 
