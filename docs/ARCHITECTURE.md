@@ -17,7 +17,7 @@ hawkeye-jobs/
 │   ├── settings.py      # Terminal prompts + config.json
 │   ├── picker.py        # Arrow/space checkbox, searchable country list, yes/no
 │   ├── catalog.py       # Country/source → per-site queries
-│   ├── countries.py     # Offline world country list (Babel/CLDR)
+│   ├── countries.py     # Bundled country list (data/countries.json, Arabic + English)
 │   ├── filters.py       # Title / hiring-post matching
 │   ├── scraper.py       # LinkedIn + Indeed via JobSpy
 │   ├── bayt.py          # Bayt.com via Selenium
@@ -206,7 +206,7 @@ No build step. `index.html` loads `app.js` (an ES module that registers the Alpi
 
 `collect_settings()` loads `config.json` if present and shows a Yes/No picker (`↑↓` + enter). Yes reuses it. No (or no saved file) prompts for keywords (typed), then a searchable country list (`type` to filter, `↑↓` move, space select, `*` all visible, enter confirm), then **Confirm these countries: …?** (`Yes, continue` / `No, choose again`). Same confirm step after website checkboxes (`↑↓` move, space select, `a` all, `d` remove all, enter confirm). Writes `config.json`. If stdin is not a TTY, it falls back to numbered lists and `[Y/n]` confirms.
 
-Country names come from Babel's bundled CLDR data (`src/countries.py`), so the list needs no network: `load_countries()` returns Remote plus every two-letter CLDR territory in English, minus non-places (`_NOT_A_COUNTRY`: EU, UN, pseudo-locales, Canary Islands and similar sub-areas). `localized_countries(lang, base)` relabels it in Arabic or English for the window. `_LABEL_OVERRIDES` replaces a few CLDR names (PS → Palestine / فلسطين). Older versions fetched the list from public APIs and wrote `countries_cache.json`; that file is no longer read.
+Country names come from `src/data/countries.json`, bundled with the app (no network): the 193 UN member states plus the Vatican, Palestine, Hong Kong and Macau, each with its common English and Arabic name. It is built from [mledoze/countries](https://github.com/mledoze/countries) (pinned commit, ODbL 1.0 — `src/data/COUNTRIES-LICENSE.md`) by `tools/update_countries.py`, which also applies reviewed spelling fixes (`NAME_FIXES`: المكسيك، صربيا، أوزبكستان، جمهورية الكونغو الديمقراطية …). Territories, uninhabited islands and disputed regions (Western Sahara, Taiwan, Kosovo) are deliberately not listed. `load_countries()` returns Remote plus the list in English; `localized_countries(lang, base)` relabels it in Arabic or English. `GET /api/settings` drops a saved location that is no longer listed, so a search saved by an older version still saves. To change the list, edit the script and rerun it; review the diff.
 
 `config.json` shape:
 
@@ -569,7 +569,7 @@ If `.PUpOsf` or `[role="list"].EDblX` selectors stop working:
 
 ## Dependencies
 
-`requirements.txt` pins every runtime dependency (exact versions), so each release is built from the same code: python-jobspy (LinkedIn + Indeed), pandas, requests, beautifulsoup4, undetected-chromedriver + selenium (Chrome sources), setuptools (distutils for undetected-chromedriver), platformdirs, fastapi + uvicorn (local API), pywebview (window; on Linux with the Qt extra), desktop-notifier, babel (country names). `requirements-dev.txt` adds httpx2 (FastAPI test client), PyInstaller and Pillow (icon conversion).
+`requirements.txt` pins every runtime dependency (exact versions), so each release is built from the same code: python-jobspy (LinkedIn + Indeed), pandas, requests, beautifulsoup4, undetected-chromedriver + selenium (Chrome sources), setuptools (distutils for undetected-chromedriver), platformdirs, fastapi + uvicorn (local API), pywebview (window; on Linux with the Qt extra), desktop-notifier. `requirements-dev.txt` adds httpx2 (FastAPI test client), PyInstaller and Pillow (icon conversion).
 
 Python 3.12: python-jobspy pins `numpy==1.26.3`, which has wheels only up to 3.12. Releases and CI use 3.12.
 

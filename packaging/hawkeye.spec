@@ -21,12 +21,13 @@ SIGN_IDENTITY = os.environ.get("MACOS_SIGN_IDENTITY") or None
 ENTITLEMENTS = str(ROOT / "packaging" / "macos" / "entitlements.plist") if SIGN_IDENTITY else None
 VERSION = re.search(r'__version__ = "([^"]+)"', (SRC / "version.py").read_text()).group(1)
 
-datas = [(str(SRC / "web" / "static"), "web/static"), (str(ROOT / "packaging" / "icon.png"), ".")]
+datas = [(str(SRC / "web" / "static"), "web/static"), (str(ROOT / "packaging" / "icon.png"), "."),
+         (str(SRC / "data" / "countries.json"), "data")]
 binaries = []
 hiddenimports = collect_submodules("uvicorn")
 
 # Packages with data files, native libraries or dynamic imports that the import scan misses.
-for package in ("jobspy", "tls_client", "babel", "webview", "desktop_notifier",
+for package in ("jobspy", "tls_client", "webview", "desktop_notifier",
                 "undetected_chromedriver", "selenium"):
     d, b, h = collect_all(package)
     datas += d

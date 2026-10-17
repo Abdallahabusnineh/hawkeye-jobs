@@ -16,7 +16,6 @@ pywebview==6.2.1
 # Linux has no built-in web view: the window uses Qt WebEngine there.
 pywebview[qt]==6.2.1; sys_platform == "linux"
 desktop-notifier==6.2.0
-babel==2.18.0
 # Tray icon (keep running after the window closes) and its image.
 pystray==0.19.5
 pillow==12.3.0

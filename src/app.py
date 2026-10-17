@@ -277,10 +277,10 @@ def self_test() -> list:
     try:
         from countries import load_countries, localized_countries
         rows = load_countries()
-        if len(rows) < 200:
-            problems.append(f"country list has only {len(rows)} entries (Babel data missing?)")
+        if len(rows) < 190:
+            problems.append(f"country list has only {len(rows)} entries (data/countries.json missing?)")
         if {c["id"]: c["label"] for c in localized_countries("ar", rows)}.get("jo") != "الأردن":
-            problems.append("Arabic country names missing (Babel data)")
+            problems.append("Arabic country names missing (data/countries.json)")
     except Exception as exc:
         problems.append(f"countries: {exc!r}")
     for module in ("jobspy", "tls_client.cffi", "undetected_chromedriver", "selenium.webdriver",

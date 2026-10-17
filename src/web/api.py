@@ -71,7 +71,13 @@ def get_state(request: Request):
 
 @router.get("/settings")
 def get_settings(request: Request):
-    return _services(request).load_config() or EMPTY_SETTINGS
+    saved = _services(request).load_config()
+    if not saved:
+        return EMPTY_SETTINGS
+    # A location saved by an older version may no longer be listed (e.g. a territory): drop it here
+    # so the Search page can save again instead of failing validation.
+    allowed = {c["id"] for c in _services(request).base_countries()}
+    return {**saved, "locations": [loc for loc in saved.get("locations", []) if loc in allowed]}
 
 
 @router.get("/app-settings")

@@ -1,20 +1,22 @@
-"""World country list, built offline from Babel's bundled CLDR data (no network)."""
+"""World country list, bundled with the app (src/data/countries.json; no network).
+
+The list is the UN member states plus Palestine, Hong Kong and Macau, with English and Arabic
+names, built from mledoze/countries by tools/update_countries.py (ODbL; see
+src/data/COUNTRIES-LICENSE.md). Territories, uninhabited islands and disputed regions are not
+listed; a location saved by an older version that is no longer listed is dropped quietly
+(web/api.py).
+"""
 
 from __future__ import annotations
 
+import json
 import re
+from functools import lru_cache
+from pathlib import Path
 
+DATA = Path(__file__).resolve().parent / "data" / "countries.json"
 REMOTE = {"id": "remote", "label": "Remote"}
-
 _REMOTE_LABELS = {"ar": "عن بُعد", "en": "Remote"}
-
-# Two-letter CLDR codes that are not places a job can be in: unions, pseudo-locales,
-# unknown region, and sub-areas whose jobs are listed under their country.
-_NOT_A_COUNTRY = {"ZZ", "EU", "EZ", "UN", "QO", "XA", "XB",
-                  "AC", "CP", "CQ", "DG", "EA", "IC", "TA"}
-
-# Names we show instead of CLDR's, per language.
-_LABEL_OVERRIDES = {"PS": {"en": "Palestine", "ar": "فلسطين"}}
 
 
 def pretty_country_name(name: str) -> str:
@@ -23,48 +25,21 @@ def pretty_country_name(name: str) -> str:
     return re.sub(r"\s*\(the\)\s*$", "", text, flags=re.IGNORECASE).strip()
 
 
-def _territories(language: str) -> dict:
-    try:
-        from babel import Locale
-        return Locale.parse(language).territories
-    except Exception:
-        return {}
-
-
-def _label(code: str, language: str, territories: dict, fallback: str) -> str:
-    override = _LABEL_OVERRIDES.get(code, {}).get(language)
-    if override:
-        return override
-    return territories.get(code, fallback)
+@lru_cache(maxsize=1)
+def _rows() -> tuple:
+    return tuple(json.loads(DATA.read_text(encoding="utf-8")))
 
 
 def load_countries() -> list:
-    """Remote + every country in English, sorted by name. Offline; never fails."""
-    territories = _territories("en")
-    rows = [
-        {"id": code.lower(), "label": _label(code, "en", territories, code)}
-        for code in territories
-        if len(code) == 2 and code.isalpha() and code not in _NOT_A_COUNTRY
-    ]
-    if not rows:
-        # Babel data missing (should not happen): fall back to the countries we have site mappings for.
-        from catalog import OVERRIDES
-        rows = [{"id": cid, "label": spec["label"]} for cid, spec in OVERRIDES.items()]
+    """Remote + every listed country in English, sorted by name."""
+    rows = [{"id": r["id"], "label": r["en"]} for r in _rows()]
     rows.sort(key=lambda c: c["label"].casefold())
     return [dict(REMOTE), *rows]
 
 
 def localized_countries(language: str, base: list) -> list:
-    """[{id, label}] in the UI language (Babel/CLDR, offline), Remote first, the rest sorted by label."""
-    territories = _territories(language)
-    rest = []
-    for c in base:
-        if c["id"] == "remote":
-            continue
-        code = c["id"].upper()
-        label = c["label"]
-        if code not in _NOT_A_COUNTRY:
-            label = _label(code, language, territories, label)
-        rest.append({"id": c["id"], "label": label})
+    """[{id, label}] in the UI language, Remote first, the rest sorted by label."""
+    names = {r["id"]: r.get(language) or r["en"] for r in _rows()}
+    rest = [{"id": c["id"], "label": names.get(c["id"], c["label"])} for c in base if c["id"] != "remote"]
     rest.sort(key=lambda c: c["label"].casefold())
     return [{"id": "remote", "label": _REMOTE_LABELS.get(language, "Remote")}] + rest

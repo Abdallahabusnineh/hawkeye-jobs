@@ -608,3 +608,12 @@ class BackgroundApiTests(ApiTestCase):
             response = self.send("PATCH", "/api/app-settings", {"start_at_login": True})
         self.assertEqual((response.status_code, response.json()), (500, {"error": "autostart_failed"}))
         self.assertFalse(self.get("/api/app-settings").json()["start_at_login"])
+
+
+class StaleLocationTests(ApiTestCase):
+    def test_saved_location_no_longer_listed_is_dropped(self):
+        self.config["locations"] = ["jo", "eh", "remote"]   # "eh" was listed by older versions
+        response = self.get("/api/settings")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["locations"], ["jo", "remote"])
+        self.assertEqual(self.config["locations"], ["jo", "eh", "remote"])  # reading never rewrites the file

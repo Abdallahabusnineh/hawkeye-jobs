@@ -11,26 +11,43 @@ from picker import SearchSelectState, apply_search_key
 
 
 class LoadCountriesTests(unittest.TestCase):
-    def test_offline_world_list_with_remote_first(self):
+    def test_offline_list_is_un_states_plus_three(self):
         with patch("requests.get", side_effect=AssertionError("no network")):
             countries = load_countries()
         ids = [c["id"] for c in countries]
         self.assertEqual(countries[0], {"id": "remote", "label": "Remote"})
-        self.assertGreater(len(ids), 200)
-        for cid in ("jo", "ae", "de", "us", "ps", "xk"):
-            self.assertIn(cid, ids)
-        for not_a_country in ("eu", "un", "zz", "xa", "ic"):
-            self.assertNotIn(not_a_country, ids)
+        self.assertEqual(len(ids), 1 + 197)          # Remote + 193 UN states + Vatican, Palestine, HK, Macau
         self.assertEqual(len(ids), len(set(ids)))
+        for cid in ("jo", "ae", "sa", "eg", "de", "us", "ps", "hk", "mo", "va"):
+            self.assertIn(cid, ids)
+        for not_listed in ("eh", "tw", "xk", "aq", "bv", "pr", "gl", "eu", "zz"):
+            self.assertNotIn(not_listed, ids)
 
     def test_sorted_by_english_name(self):
         labels = [c["label"] for c in load_countries()[1:]]
         self.assertEqual(labels, sorted(labels, key=str.casefold))
 
-    def test_palestine_named_plainly(self):
-        labels = {c["id"]: c["label"] for c in load_countries()}
-        self.assertEqual(labels["ps"], "Palestine")
-        self.assertEqual({c["id"]: c["label"] for c in localized_countries("ar", load_countries())}["ps"], "فلسطين")
+    def test_every_row_has_both_names_in_the_right_script(self):
+        import json
+        import re
+        import countries
+        rows = json.loads(countries.DATA.read_text(encoding="utf-8"))
+        for r in rows:
+            self.assertRegex(r["id"], r"^[a-z]{2}$")
+            self.assertTrue(r["en"] and r["ar"], r)
+            self.assertIsNone(re.search(r"[\u0600-\u06FF]", r["en"]), r)
+            self.assertRegex(r["ar"], r"[\u0621-\u064A]", r)
+            # Persian/Urdu-only letters (ڤ ک ی پ چ گ) mean a non-Arabic spelling slipped in
+            self.assertIsNone(re.search("[\u06A4\u06A9\u06CC\u067E\u0686\u06AF]", r["ar"]), r)
+
+    def test_reviewed_name_fixes(self):
+        ar = {c["id"]: c["label"] for c in localized_countries("ar", load_countries())}
+        self.assertEqual(ar["mx"], "المكسيك")
+        self.assertEqual(ar["rs"], "صربيا")
+        self.assertEqual(ar["cd"], "جمهورية الكونغو الديمقراطية")
+        self.assertEqual(ar["cg"], "جمهورية الكونغو")
+        self.assertEqual(ar["ps"], "فلسطين")
+        self.assertEqual(ar["sa"], "السعودية")
 
     def test_every_site_mapping_is_in_the_list(self):
         from catalog import OVERRIDES
@@ -88,8 +105,8 @@ class LocalizedCountriesTests(unittest.TestCase):
         self.assertEqual(result[0], {"id": "remote", "label": "عن بُعد"})
         labels = {c["id"]: c["label"] for c in result}
         self.assertEqual(labels["jo"], "الأردن")
-        self.assertEqual(labels["sa"], "المملكة العربية السعودية")
-        self.assertEqual(labels["zz"], "Zedland")  # unknown to CLDR: keep the base label
+        self.assertEqual(labels["sa"], "السعودية")
+        self.assertEqual(labels["zz"], "Zedland")  # not in the data: keep the base label
 
     def test_english_sorted(self):
         result = localized_countries("en", self.BASE)

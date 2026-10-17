@@ -45,7 +45,7 @@ The macOS app is signed and notarized by Apple, so it opens with no warning. The
 - **Searches for you.** Automatic search every few hours, with a desktop notification when new jobs appear; or start one yourself and watch live progress.
 - **Keeps working when you close the window.** It stays in the menu bar / next to the clock, and can start with your computer.
 - **Six sources, one list:** LinkedIn jobs, Indeed, Bayt.com, NaukriGulf, Google Jobs and LinkedIn hiring posts. Titles must match your keywords; you choose how recent: the last week, two weeks (default) or month.
-- **Every country**, with names in Arabic and English (built in, no network).
+- **Every country** (the UN member states, plus Palestine, Hong Kong and Macau), with names in Arabic and English (built in, no network).
 - **Polite and safe.** Waits between requests to each site so your connection and LinkedIn account are not flagged; LinkedIn posts run at most once a day.
 - **Private.** Nothing leaves your computer except the searches, a daily update check (can be turned off), and pages you open.
 - **Terminal mode** too: prompts in the terminal and emails an HTML digest of new jobs.
@@ -170,7 +170,7 @@ hawkeye-jobs/
 │   ├── settings.py        # Terminal prompts + config.json
 │   ├── picker.py          # Arrow/space checkbox menus + searchable country list
 │   ├── catalog.py         # Country/source → per-site queries
-│   ├── countries.py       # Offline world country list (Babel/CLDR)
+│   ├── countries.py       # Bundled country list (Arabic + English)
 │   ├── filters.py         # Title / hiring-post matching
 │   ├── scraper.py         # LinkedIn + Indeed (JobSpy)
 │   ├── bayt.py            # Bayt.com
@@ -213,3 +213,5 @@ hawkeye-jobs/
 ## License
 
 MIT
+
+Country names: [mledoze/countries](https://github.com/mledoze/countries), Open Database License (ODbL) 1.0 — see `src/data/COUNTRIES-LICENSE.md`.
