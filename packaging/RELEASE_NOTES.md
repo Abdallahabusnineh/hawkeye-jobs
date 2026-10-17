@@ -15,23 +15,12 @@ Bayt, NaukriGulf, Google Jobs and LinkedIn posts need Google Chrome installed.
 
 ## التشغيل أول مرة · First launch
 
-التطبيق غير موقَّع بشهادة مدفوعة، لذلك يعرض النظام تحذيرًا في المرة الأولى فقط.
-The app is not signed with a paid certificate, so your system warns you the first time only.
+**macOS**
+افتح ملف ‎.dmg واسحب Hawkeye Jobs إلى مجلد Applications، ثم افتحه. التطبيق موقَّع وموثَّق من Apple، فيفتح دون أي تحذير.
+Open the .dmg, drag Hawkeye Jobs into Applications and open it. The app is signed and notarized by Apple, so it opens with no warning.
 
-**macOS — أسهل طريقة · easiest way**
-
-افتح تطبيق Terminal والصق هذا السطر (يُنزِّل التطبيق ويثبّته ويفتحه دون تحذير):
-Open Terminal and paste this line (downloads, installs and opens the app with no warning):
-
-```
-curl -fsSL https://abdallahabusnineh.github.io/hawkeye-jobs/install.sh | bash
-```
-
-**macOS — من الملف · from the file**
-1. افتح ملف ‎.dmg واسحب Hawkeye Jobs إلى مجلد Applications.
-   Open the .dmg and drag Hawkeye Jobs into Applications.
-2. افتح التطبيق. إذا ظهرت رسالة «لا يمكن التحقق من المطوّر»، فافتح «إعدادات النظام ← الخصوصية والأمان» واضغط «افتح على أي حال».
-   Open the app. If macOS says it cannot verify the developer, go to System Settings → Privacy & Security and click **Open Anyway**.
+نسخة Windows غير موقَّعة بشهادة مدفوعة، لذلك يعرض Windows تحذيرًا في المرة الأولى فقط.
+The Windows version is not signed with a paid certificate, so Windows warns you the first time only.
 
 **Windows — أسهل طريقة · easiest way**
 

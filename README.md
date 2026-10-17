@@ -37,7 +37,7 @@
 
 **Mac, easiest:** open Terminal and paste `curl -fsSL https://abdallahabusnineh.github.io/hawkeye-jobs/install.sh | bash` — it downloads the right build, checks its checksum, installs it to Applications and opens it, with no warning.
 
-The app is not signed with a paid certificate, so the first launch shows a warning: on macOS open **System Settings → Privacy & Security → Open Anyway**; on Windows click **More info → Run anyway**. Bayt, NaukriGulf, Google Jobs and LinkedIn posts need [Google Chrome](https://www.google.com/chrome/).
+The macOS app is signed and notarized by Apple, so it opens with no warning. The Windows version is not signed, so the first launch shows a warning: click **More info → Run anyway**. Bayt, NaukriGulf, Google Jobs and LinkedIn posts need [Google Chrome](https://www.google.com/chrome/).
 
 ## Features
 
