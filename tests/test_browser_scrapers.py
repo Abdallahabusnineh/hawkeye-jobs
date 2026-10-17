@@ -165,7 +165,7 @@ class LinkedInPostsTests(unittest.TestCase):
     def test_warns_when_nothing_loaded(self):
         driver = FakeDriver("<html></html>", title="Just a moment...",
                             current_url="https://www.linkedin.com/search/results/content/")
-        with patch("linkedin_posts.wait_for", return_value=False), \
+        with patch("linkedin_posts._wait_for_posts", return_value=False), \
              patch("linkedin_posts.time.sleep"), \
              self.assertLogs("linkedin_posts", "WARNING") as logs:
             self.assertEqual(linkedin_posts.fetch_linkedin_posts(driver, "hiring Java", set(), KEYWORDS), [])
@@ -174,10 +174,10 @@ class LinkedInPostsTests(unittest.TestCase):
 
     def test_fetch_keeps_recent_hiring_posts(self):
         driver = FakeDriver(fixture("linkedin_posts.html"), current_url="https://www.linkedin.com/search/results/content/")
-        with patch("linkedin_posts.wait_for", return_value=True) as wait, \
+        with patch("linkedin_posts._wait_for_posts", return_value=True) as wait, \
              patch("linkedin_posts.time.sleep"):
             jobs = linkedin_posts.fetch_linkedin_posts(driver, "hiring Java Developer", set(), KEYWORDS)
-        wait.assert_called_once_with(driver, linkedin_posts.CARD_SELECTOR, 15)
+        wait.assert_called_once_with(driver, 15)
         self.assertEqual(len(driver.scripts), linkedin_posts._MAX_SCROLLS)
         self.assertEqual(len(jobs), 1)
         job = jobs[0]
@@ -203,6 +203,13 @@ class LinkedInPostsTests(unittest.TestCase):
         self.assertEqual(len(first), len(set(first)))
         self.assertEqual(len(first), 2)
 
+    def test_later_searches_without_attributes_are_read_too(self):
+        jobs = linkedin_posts._parse_posts_page(fixture("linkedin_posts_2026_plain.html"), set(), "k",
+                                                ["Flutter Developer"])
+        self.assertEqual([j["description"] for j in jobs], ["Acme Apps · LinkedIn hiring post"])
+        self.assertEqual(jobs[0]["published"], "3h")
+        self.assertIn("Flutter Developer in Amman", jobs[0]["title"])
+
     def test_search_url_covers_the_past_week(self):
         self.assertIn("datePosted=%22past-week%22", linkedin_posts._build_url("hiring Java"))
 
@@ -214,7 +221,7 @@ class LinkedInPostsTests(unittest.TestCase):
 
     def test_raises_when_logged_out(self):
         driver = FakeDriver("<html></html>", current_url="https://www.linkedin.com/authwall?trk=x")
-        with patch("linkedin_posts.wait_for", return_value=False), \
+        with patch("linkedin_posts._wait_for_posts", return_value=False), \
              patch("linkedin_posts.time.sleep"):
             with self.assertRaises(linkedin_posts.LinkedInLoginRequired):
                 linkedin_posts.fetch_linkedin_posts(driver, "hiring Java", set(), KEYWORDS)

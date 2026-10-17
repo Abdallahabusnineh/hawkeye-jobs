@@ -51,12 +51,14 @@ def is_relevant_job(title: str, keywords: list) -> bool:
 # seekers and unrelated posts add #hiring there for reach, so a signal found only in a pile does not
 # count. A hashtag inside a sentence ("We're #hiring a Flutter developer") still does.
 _HASHTAG_PILE = re.compile(r"(?:#[^\s#]+[\s…]*){3,}")
+# Whole words only: "looking for" must not match "looking forward to my new role".
+_HIRING_RE = re.compile(r"\b(?:" + "|".join(re.escape(s) for s in _HIRING_SIGNALS) + r")\b")
 
 
 def is_hiring_post(text: str, keywords: list) -> bool:
     """True if post text looks like a hiring post and mentions a user keyword."""
     body = _HASHTAG_PILE.sub(" ", (text or "").lower())
-    if not any(sig in body for sig in _HIRING_SIGNALS):
+    if not _HIRING_RE.search(body):
         return False
     stems = keyword_stems(keywords)
     if not stems:

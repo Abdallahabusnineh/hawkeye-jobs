@@ -58,6 +58,11 @@ class HiringPostTests(unittest.TestCase):
         post = "Five Flutter tips for clean state. #flutter #opentowork #jobsearch #hiring #techjobs"
         self.assertFalse(is_hiring_post(post, ["Flutter Developer"]))
 
+    def test_looking_forward_is_not_looking_for(self):
+        self.assertFalse(is_hiring_post("Started a new role as a Flutter developer, looking forward to it!",
+                                        ["Flutter Developer"]))
+        self.assertTrue(is_hiring_post("We are looking for a Flutter developer", ["Flutter Developer"]))
+
     def test_hashtag_inside_a_sentence_still_counts(self):
         self.assertTrue(is_hiring_post("We're #hiring a Flutter developer. #mobile #apps #jobs",
                                        ["Flutter Developer"]))

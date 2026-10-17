@@ -112,6 +112,13 @@ def _detect_chrome_major(chrome_path=None):
     return int(match.group(1)) if match else None
 
 
+# Keep rendering when the Chrome window is behind other windows. The user works in other apps while
+# a search runs; Chrome then stops painting the hidden window, and pages that draw their content
+# only when visible (LinkedIn's 2026 search results) stay empty.
+KEEP_RENDERING_FLAGS = ("--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding",
+                        "--disable-background-timer-throttling")
+
+
 def profile_in_use(user_data_dir) -> bool:
     """True if a running Chrome holds this profile (e.g. the "Log in to LinkedIn" window is still
     open). Chrome lets one process use a profile; a second one started on it exits at once.
@@ -212,6 +219,8 @@ def _create_uc_driver(chrome, headless=False, user_data_dir=None):
     opts.add_argument("--disable-dev-shm-usage")
     opts.add_argument("--window-size=1920,1080")
     opts.add_argument("--lang=en-US")
+    for flag in KEEP_RENDERING_FLAGS:
+        opts.add_argument(flag)
     opts.add_argument("--disable-blink-features=AutomationControlled")
     if user_data_dir:
         user_data_dir = os.path.expanduser(str(user_data_dir))

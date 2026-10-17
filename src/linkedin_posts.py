@@ -58,7 +58,6 @@ from urllib.parse import quote
 
 from bs4 import BeautifulSoup
 
-from browser import wait_for
 from filters import is_hiring_post
 
 log = logging.getLogger(__name__)
@@ -66,10 +65,7 @@ log = logging.getLogger(__name__)
 _MAX_SCROLLS = 4          # how many times to scroll to lazy-load more posts
 _SCROLL_PAUSE = 2.0       # seconds to wait after each scroll
 POSTS_WAIT_SECONDS = 15
-# LinkedIn's current search results (2026) mark each post with data-view-name="feed-full-update";
-# the older markup used data-urn="urn:li:activity:…". Wait for either.
-NEW_CARD = '[data-view-name="feed-full-update"]'
-CARD_SELECTOR = 'div[data-urn*="urn:li:activity"], ' + NEW_CARD
+
 
 
 class LinkedInLoginRequired(RuntimeError):
@@ -146,22 +142,57 @@ def _post_url(card, post_text: str) -> str:
     return f"{base}#hawkeye-{fingerprint}"
 
 
+# Every post in LinkedIn's 2026 results starts with a visually hidden heading "Feed post" (for screen
+# readers). From the second search in a session LinkedIn drops the data-view-name attributes and
+# scrambles class names, but the heading stays — so posts are found by it. Inside a post the visible
+# strings come in a fixed order: heading, author, [• degree], [headline], time, Follow/Connect, text.
+_POST_HEADING = re.compile(r"^\s*Feed post\s*$")
+_ACTION_WORDS = {"follow", "connect", "subscribe", "+ follow", "following"}
+_FOOTER_WORDS = {"like", "comment", "repost", "send", "celebrate", "support", "love", "insightful", "funny"}
+
+
+def _post_containers(soup) -> list:
+    """The element wrapping each post: climb from its heading while the parent holds no other post."""
+    containers = []
+    for heading in soup.find_all(string=_POST_HEADING):
+        el = heading.parent
+        while el.parent is not None and len(el.parent.find_all(string=_POST_HEADING)) == 1:
+            el = el.parent
+        containers.append(el)
+    return containers
+
+
+def _split_post(card):
+    """(author, relative time, post text) from a post's strings."""
+    strings = [s for s in card.stripped_strings if not _POST_HEADING.match(s)]
+    t = next((i for i, s in enumerate(strings) if _REL_TIME.match(s.strip())), None)
+    author = strings[0] if strings else ""
+    if t is None:
+        return author, "", " ".join(strings[1:])
+    body = strings[t + 1:]
+    while body and body[0].strip().lower() in _ACTION_WORDS:
+        body = body[1:]
+    for i, s in enumerate(body):
+        if s.strip().lower() in _FOOTER_WORDS:
+            body = body[:i]
+            break
+    return author, strings[t].strip(), " ".join(body)
+
+
 def _parse_new_markup(soup, seen_urls: set, keyword: str, keywords: list) -> list:
-    """LinkedIn's 2026 search results: data-view-name attributes, no activity URNs."""
+    """LinkedIn's 2026 search results (with or without data-view-name attributes)."""
     result = []
-    for card in soup.select(NEW_CARD):
+    for card in _post_containers(soup):
         try:
-            post_text = " ".join(t.get_text(" ", strip=True)
-                                 for t in card.select('[data-view-name="feed-commentary"]'))
+            author, rel, post_text = _split_post(card)
+            commentary = card.select('[data-view-name="feed-commentary"]')
+            if commentary:  # first search of a session: use the precise text node
+                post_text = " ".join(t.get_text(" ", strip=True) for t in commentary)
+            author = re.split(r"\s+•", author)[0].strip() or "LinkedIn member"
+            if not rel:
+                continue  # every post shows its age; without one this is a share's inner block, not a post
             if not is_hiring_post(post_text, keywords):
                 continue
-            actor = card.select_one('[data-view-name="feed-actor"]')
-            author = ""
-            if actor is not None:
-                label = actor.get("aria-label", "") or actor.get_text(" ", strip=True)
-                author = re.split(r"\s+•|\s{2,}\d", label)[0].strip()
-            author = author or "LinkedIn member"
-            rel = next((s for s in card.stripped_strings if _REL_TIME.match(s.strip())), "")
             if not _post_is_recent(rel):
                 continue
             url = _post_url(card, post_text)
@@ -188,7 +219,7 @@ def _parse_new_markup(soup, seen_urls: set, keyword: str, keywords: list) -> lis
 def _parse_posts_page(html: str, seen_urls: set, keyword: str, keywords: list) -> list:
     """Parse a LinkedIn content-search results page into job dicts (current or older markup)."""
     soup = BeautifulSoup(html, "html.parser")
-    if soup.select_one(NEW_CARD) is not None:
+    if soup.find(string=_POST_HEADING) is not None:
         return _parse_new_markup(soup, seen_urls, keyword, keywords)
     result = []
 
@@ -254,6 +285,21 @@ def _parse_posts_page(html: str, seen_urls: set, keyword: str, keywords: list) -
     return result
 
 
+def _wait_for_posts(driver, timeout: float) -> bool:
+    """Wait for post headings (current markup, with or without attributes) or the older cards."""
+    probe = ("return document.body !== null && (document.body.innerText.indexOf('Feed post') !== -1 || "
+             "document.querySelector('div[data-urn*=\"urn:li:activity\"]') !== null)")
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            if driver.execute_script(probe):
+                return True
+        except Exception:
+            pass
+        time.sleep(0.5)
+    return False
+
+
 def fetch_linkedin_posts(driver, args, seen_urls: set, keywords: list) -> list:
     """One LinkedIn content search. args = phrase, e.g. "hiring Java Developer". Raises LinkedInLoginRequired."""
     phrase = args
@@ -261,7 +307,7 @@ def fetch_linkedin_posts(driver, args, seen_urls: set, keywords: list) -> list:
     driver.get(url)
     if _is_logged_out(driver):
         raise LinkedInLoginRequired(driver.current_url)
-    loaded = wait_for(driver, CARD_SELECTOR, POSTS_WAIT_SECONDS)
+    loaded = _wait_for_posts(driver, POSTS_WAIT_SECONDS)
     # Second check: catches a redirect that happens after the page starts loading.
     if _is_logged_out(driver):
         raise LinkedInLoginRequired(driver.current_url)

@@ -74,6 +74,8 @@ class CdpDriver:
         self.switch_to = _SwitchTo(self)
         args = [chrome_path, f"--remote-debugging-port={self.port}", f"--user-data-dir={self.user_data_dir}",
                 "--no-first-run", "--no-default-browser-check", "--window-size=1920,1080", "--lang=en-US",
+                "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding",
+                "--disable-background-timer-throttling",
                 "about:blank"]
         if headless:
             args.insert(1, "--headless=new")
