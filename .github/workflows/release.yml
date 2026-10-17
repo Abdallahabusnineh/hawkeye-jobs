@@ -101,7 +101,7 @@ jobs:
         run: |
           ditto -c -k --keepParent "dist/Hawkeye Jobs.app" "$RUNNER_TEMP/app.zip"
           bash packaging/macos/notarize.sh "$RUNNER_TEMP/app.zip"
-          xcrun stapler staple "dist/Hawkeye Jobs.app"
+          bash packaging/macos/staple.sh "dist/Hawkeye Jobs.app"
 
       - name: Package (macOS)
         if: runner.os == 'macOS'
@@ -122,7 +122,7 @@ jobs:
         run: |
           codesign --sign "$MACOS_SIGN_IDENTITY" --timestamp "$MAC_ASSET"
           bash packaging/macos/notarize.sh "$MAC_ASSET"
-          xcrun stapler staple "$MAC_ASSET"
+          bash packaging/macos/staple.sh "$MAC_ASSET"
           # What a user's Mac will check: the app inside opens without any warning.
           spctl --assess --type open --context context:primary-signature --verbose "$MAC_ASSET"
           spctl --assess --type execute --verbose "dist/Hawkeye Jobs.app"
