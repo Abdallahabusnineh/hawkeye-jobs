@@ -545,7 +545,7 @@ function hawkeye() {
     async checkUpdate() {
       this.settingsPage.checking = true;
       try {
-        this.settingsPage.update = await api.get("/api/update");
+        this.settingsPage.update = await api.get("/api/update?force=1");
         await this.refreshState();
       } catch (error) {
         this.showError(error);

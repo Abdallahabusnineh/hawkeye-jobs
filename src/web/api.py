@@ -242,6 +242,9 @@ ISSUE_URL = "https://github.com/Abdallahabusnineh/hawkeye-jobs/issues/new"
 LOG_LINES = 200
 MAX_ISSUE_URL = 6000  # browsers and GitHub reject very long URLs
 UPDATE_CACHE_SECONDS = 24 * 3600
+# The Settings button asks GitHub again (force=1), but not more than once a minute: GitHub allows
+# 60 unauthenticated API requests an hour per address.
+UPDATE_FORCE_MIN_SECONDS = 60
 
 
 def _iso(ts: float) -> str:
@@ -320,14 +323,17 @@ def report_problem(request: Request):
 
 
 @router.get("/update")
-def check_update(request: Request):
+def check_update(request: Request, force: bool = Query(False)):
+    """The latest release on GitHub, cached for 24 h. force=1 (the Settings button) asks again unless
+    the last check was under a minute ago — otherwise the button showed a day-old answer."""
     s = _services(request)
     app = s.load_app_settings()
     if not app["update_check"]:
         return {"available": False, "disabled": True}
     checked = _parse_iso(app.get("last_update_check"))
     latest = app.get("latest_version")
-    if checked is None or s.clock() - checked >= UPDATE_CACHE_SECONDS:
+    max_age = UPDATE_FORCE_MIN_SECONDS if force else UPDATE_CACHE_SECONDS
+    if checked is None or s.clock() - checked >= max_age:
         patch = {}
         try:
             latest = str(s.fetch_latest_release().get("tag_name", "")).lstrip("vV") or None

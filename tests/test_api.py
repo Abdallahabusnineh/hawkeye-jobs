@@ -387,6 +387,20 @@ class ActionTests(ApiTestCase):
         self.release = {"tag_name": "v9.9.9"}  # cached for 24 h: not fetched again
         self.assertEqual(self.get("/api/update").json()["latest"], "1.2.0")
 
+    def test_update_button_asks_github_again(self):
+        self.release = {"tag_name": "v1.0.0"}
+        self.assertFalse(self.get("/api/update").json()["available"])      # same as current
+        self.release = {"tag_name": "v1.0.1"}                              # released minutes later
+        self.assertFalse(self.get("/api/update").json()["available"])      # daily cache: still old
+        self.services.clock = lambda: 1_000_000.0 + 120
+        body = self.get("/api/update?force=1").json()
+        self.assertEqual((body["available"], body["latest"]), (True, "1.0.1"))
+
+    def test_update_button_within_a_minute_reuses_the_answer(self):
+        self.get("/api/update?force=1")
+        self.release = {"tag_name": "v9.9.9"}
+        self.assertEqual(self.get("/api/update?force=1").json()["latest"], "1.0.0")
+
     def test_update_check_disabled_or_failing(self):
         self.app_settings["update_check"] = False
         self.assertEqual(self.get("/api/update").json(), {"available": False, "disabled": True})

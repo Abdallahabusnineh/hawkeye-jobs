@@ -195,7 +195,7 @@ No build step. `index.html` loads `app.js` (an ES module that registers the Alpi
 | POST | `/open-data-folder` | 204 | |
 | POST | `/linkedin/login` | 202 `{ok}` (opens Chrome on the LinkedIn profile) | 409 `chrome_not_found` / `run_in_progress` |
 | POST | `/report-problem` | 200 `{url}` (the backend has already opened it; the UI must not open it again) | |
-| GET | `/update` | 200 `{current, latest, checked, available}` (cached 24 h; `disabled` if the check is off) | |
+| GET | `/update` | 200 `{current, latest, checked, available}` (cached 24 h; `?force=1` — the Settings button — asks GitHub again unless the last check was under a minute ago; `disabled` if the check is off) | |
 | POST | `/reset` | 204 (body `{"confirm": "DELETE"}`) | 422 `confirm`, 409 `run_in_progress` / `outside_data_dir` |
 
 ---
