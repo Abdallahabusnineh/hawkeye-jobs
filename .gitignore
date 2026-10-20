@@ -40,3 +40,4 @@ build/
 *.certSigningRequest
 *.mobileprovision
 *.provisionprofile
+/store/
