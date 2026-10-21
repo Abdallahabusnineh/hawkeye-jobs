@@ -30,14 +30,16 @@
 |---|---|
 | macOS (Apple M1 or newer) | [HawkeyeJobs-macOS-AppleSilicon.dmg](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-macOS-AppleSilicon.dmg) |
 | macOS (Intel) | [HawkeyeJobs-macOS-Intel.dmg](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-macOS-Intel.dmg) |
-| Windows 10 / 11 | [HawkeyeJobs-Windows-Setup.exe](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows-Setup.exe) (installer) · [.zip](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows.zip) |
+| Windows 10 / 11 | **[Microsoft Store](https://apps.microsoft.com/detail/9PB9XTPR0XH4)** (recommended) · [HawkeyeJobs-Windows-Setup.exe](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows-Setup.exe) (installer) · [.zip](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows.zip) |
 | Linux (x86-64) | [HawkeyeJobs-Linux.AppImage](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Linux.AppImage) · [.tar.gz](https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Linux.tar.gz) |
 
-**Windows, easiest:** open PowerShell and paste `irm https://abdallahabusnineh.github.io/hawkeye-jobs/install.ps1 | iex` — same idea: installs and opens the app, with no warning.
+**Windows, easiest:** install it from the [Microsoft Store](https://apps.microsoft.com/detail/9PB9XTPR0XH4). It is signed by Microsoft, so it runs with no warning (even with Smart App Control), and the Store keeps it updated.
+
+**Windows, without the Store:** open PowerShell and paste `irm https://abdallahabusnineh.github.io/hawkeye-jobs/install.ps1 | iex` — same idea: installs and opens the app, with no warning.
 
 **Mac, from Terminal (optional):** `curl -fsSL https://abdallahabusnineh.github.io/hawkeye-jobs/install.sh | bash` downloads the right build, checks its checksum, installs it to Applications and opens it.
 
-The macOS app is signed and notarized by Apple, so it opens with no warning. The Windows version is not signed, so the first launch shows a warning: click **More info → Run anyway**. Bayt, NaukriGulf and Google Jobs need [Google Chrome](https://www.google.com/chrome/).
+The macOS app is signed and notarized by Apple, so it opens with no warning. The Windows files on GitHub are not signed, so their first launch shows a warning: click **More info → Run anyway** (the Microsoft Store version has none). Bayt, NaukriGulf and Google Jobs need [Google Chrome](https://www.google.com/chrome/).
 
 ## Features
 

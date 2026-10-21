@@ -97,6 +97,7 @@
       <div class="card">
         <h3>Windows</h3>
         <p data-lang="ar">Windows 10 و11</p><p data-lang="en">Windows 10 and 11</p>
+        <a href="https://apps.microsoft.com/detail/9PB9XTPR0XH4">Microsoft Store</a> ·
         <a href="https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows-Setup.exe"><span data-lang="ar">برنامج التثبيت</span><span data-lang="en">Installer</span> (.exe)</a> ·
         <a href="https://github.com/Abdallahabusnineh/hawkeye-jobs/releases/latest/download/HawkeyeJobs-Windows.zip" dir="ltr">.zip</a>
       </div>
@@ -114,15 +115,19 @@
       <li data-lang="en">Searches automatically every few hours and shows you only the new jobs.</li>
       <li data-lang="ar">بلا خادم وبلا حساب: بياناتك تبقى على جهازك.</li>
       <li data-lang="en">No server and no account: your data stays on your computer.</li>
-      <li data-lang="ar">يبحث بهدوء واحترام للمواقع، ويحمي حسابك في LinkedIn.</li>
-      <li data-lang="en">Searches politely, and protects your LinkedIn account.</li>
+      <li data-lang="ar">يبحث بهدوء ويحترم المواقع، فلا يرسل طلبات كثيرة دفعة واحدة.</li>
+      <li data-lang="en">Searches politely, without flooding the sites with requests.</li>
       <li data-lang="ar">بالعربية والإنجليزية، ومجاني إلى الأبد.</li>
       <li data-lang="en">In Arabic and English, and free forever.</li>
     </ul>
 
     <h2><span data-lang="ar">التشغيل أول مرة</span><span data-lang="en">First launch</span></h2>
     <div class="card mac-install">
-      <h3><span data-lang="ar">أسهل طريقة على Windows: أمر واحد</span><span data-lang="en">Easiest on Windows: one command</span></h3>
+      <h3><span data-lang="ar">أسهل طريقة على Windows: Microsoft Store</span><span data-lang="en">Easiest on Windows: the Microsoft Store</span></h3>
+      <p data-lang="ar">ثبّت Hawkeye Jobs من Microsoft Store بضغطة واحدة. النسخة موقَّعة من Microsoft، فتعمل دون أي رسالة تحذير، ويحدّثها المتجر تلقائيًا.</p>
+      <p data-lang="en">Install Hawkeye Jobs from the Microsoft Store in one click. It is signed by Microsoft, so it runs with no warning, and the Store keeps it up to date.</p>
+      <p><a class="btn" href="https://apps.microsoft.com/detail/9PB9XTPR0XH4"><span data-lang="ar">التثبيت من Microsoft Store</span><span data-lang="en">Get it from Microsoft Store</span></a></p>
+      <h3><span data-lang="ar">أو بأمر واحد</span><span data-lang="en">Or with one command</span></h3>
       <p data-lang="ar">افتح «PowerShell» من قائمة Start، والصق هذا السطر، ثم اضغط Enter. سيُنزَّل التطبيق ويُثبَّت ويُفتح مباشرة، دون رسالة التحذير.</p>
       <p data-lang="en">Open PowerShell from the Start menu, paste this line and press Enter. It downloads, installs and opens the app, with no warning.</p>
       <pre dir="ltr"><code id="win-cmd">irm https://abdallahabusnineh.github.io/hawkeye-jobs/install.ps1 | iex</code></pre>
@@ -135,8 +140,8 @@
     </details>
     <details>
       <summary>Windows</summary>
-      <p data-lang="ar">شغّل برنامج التثبيت ‎(Setup.exe)‎ واتبع الخطوات؛ لا يحتاج صلاحيات المسؤول، ويضيف التطبيق إلى قائمة Start. إذا ظهرت رسالة «حمى Windows جهاز الكمبيوتر»، فاضغط «مزيد من المعلومات» ثم «التشغيل على أي حال».</p>
-      <p data-lang="en">Run the installer (Setup.exe) and follow the steps; it needs no administrator rights and adds the app to the Start menu. If Windows shows "Windows protected your PC", click More info → Run anyway.</p>
+      <p data-lang="ar">الأسهل: ثبّته من <a href="https://apps.microsoft.com/detail/9PB9XTPR0XH4">Microsoft Store</a>. أو شغّل برنامج التثبيت ‎(Setup.exe)‎ واتبع الخطوات؛ لا يحتاج صلاحيات المسؤول، ويضيف التطبيق إلى قائمة Start. إذا ظهرت رسالة «حمى Windows جهاز الكمبيوتر»، فاضغط «مزيد من المعلومات» ثم «التشغيل على أي حال».</p>
+      <p data-lang="en">Easiest: install it from the <a href="https://apps.microsoft.com/detail/9PB9XTPR0XH4">Microsoft Store</a>. Or run the installer (Setup.exe) and follow the steps; it needs no administrator rights and adds the app to the Start menu. If Windows shows "Windows protected your PC", click More info → Run anyway.</p>
     </details>
     <details>
       <summary>Linux</summary>
@@ -164,7 +169,7 @@
       }
       function system() {
         var ua = navigator.userAgent;
-        if (/Windows/i.test(ua)) return { file: "HawkeyeJobs-Windows-Setup.exe", ar: "لنظام Windows", en: "for Windows" };
+        if (/Windows/i.test(ua)) return { url: "https://apps.microsoft.com/detail/9PB9XTPR0XH4", ar: "لنظام Windows، من Microsoft Store", en: "for Windows, from the Microsoft Store" };
         if (/Mac/i.test(ua) && !/iPhone|iPad/i.test(ua)) return { file: "HawkeyeJobs-macOS-AppleSilicon.dmg", ar: "لأجهزة Mac بشرائح Apple (لأجهزة Intel اختر من القائمة أدناه)", en: "for Macs with Apple chips (Intel Macs: pick from the list below)" };
         if (/Linux/i.test(ua) && !/Android/i.test(ua)) return { file: "HawkeyeJobs-Linux.AppImage", ar: "لنظام Linux", en: "for Linux" };
         return null;
@@ -174,7 +179,7 @@
         document.getElementById("main-hint").textContent = s ? s[html.lang] : (html.lang === "ar" ? "اختر نظامك من القائمة أدناه." : "Pick your system from the list below.");
       }
       var s = system();
-      if (s) document.getElementById("main-download").href = RELEASE + s.file;
+      if (s) document.getElementById("main-download").href = s.url || RELEASE + s.file;
       var saved = null;
       try { saved = localStorage.getItem("hawkeye-site-lang"); } catch (e) {}
       // Arabic first; English for visitors whose browser asks for English.

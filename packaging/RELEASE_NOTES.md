@@ -7,7 +7,7 @@ Hawkeye Jobs is a free, open-source job finder for LinkedIn, Indeed, Bayt, Naukr
 |---|---|
 | macOS (Apple M1/M2/M3/M4) | `HawkeyeJobs-macOS-AppleSilicon.dmg` |
 | macOS (Intel) | `HawkeyeJobs-macOS-Intel.dmg` |
-| Windows 10 / 11 | `HawkeyeJobs-Windows-Setup.exe` (برنامج تثبيت · installer) — أو · or `HawkeyeJobs-Windows.zip` |
+| Windows 10 / 11 | **Microsoft Store:** https://apps.microsoft.com/detail/9PB9XTPR0XH4 (موصى به · recommended) — `HawkeyeJobs-Windows-Setup.exe` (برنامج تثبيت · installer) — أو · or `HawkeyeJobs-Windows.zip` |
 | Linux (x86-64) | `HawkeyeJobs-Linux.AppImage` — أو · or `HawkeyeJobs-Linux.tar.gz` |
 
 يتطلب البحث في Bayt وNaukriGulf وGoogle Jobs وجود متصفح Google Chrome.
@@ -19,8 +19,12 @@ Bayt, NaukriGulf and Google Jobs need Google Chrome installed.
 افتح ملف ‎.dmg واسحب Hawkeye Jobs إلى مجلد Applications، ثم افتحه. التطبيق موقَّع وموثَّق من Apple، فيفتح دون أي تحذير.
 Open the .dmg, drag Hawkeye Jobs into Applications and open it. The app is signed and notarized by Apple, so it opens with no warning.
 
-نسخة Windows غير موقَّعة بشهادة مدفوعة، لذلك يعرض Windows تحذيرًا في المرة الأولى فقط.
-The Windows version is not signed with a paid certificate, so Windows warns you the first time only.
+**Windows — الأسهل · easiest:** ثبّته من Microsoft Store: موقَّع من Microsoft، ويعمل دون تحذير، ويُحدَّث تلقائيًا.
+Install it from the Microsoft Store: signed by Microsoft, no warning, updated automatically.
+https://apps.microsoft.com/detail/9PB9XTPR0XH4
+
+ملفات Windows هنا غير موقَّعة بشهادة مدفوعة، لذلك يعرض Windows تحذيرًا في المرة الأولى فقط.
+The Windows files here are not signed with a paid certificate, so Windows warns you the first time only.
 
 **Windows — أسهل طريقة · easiest way**
 
