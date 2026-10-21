@@ -1,0 +1,33 @@
+# Checks the Microsoft Store credentials without submitting anything: run it by hand after adding
+# or renewing the Partner Center secrets in the "microsoft-store" environment.
+name: Store credentials check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: windows-latest
+    environment: microsoft-store
+    timeout-minutes: 15
+    steps:
+      - uses: microsoft/microsoft-store-apppublisher@cc9910a8d59f2eb55cbb83df0a3800cf3b5300e0 # v1.4
+      - name: Sign in to Partner Center and read the app
+        shell: pwsh
+        env:
+          TENANT_ID: ${{ secrets.PARTNER_CENTER_TENANT_ID }}
+          SELLER_ID: ${{ secrets.PARTNER_CENTER_SELLER_ID }}
+          CLIENT_ID: ${{ secrets.PARTNER_CENTER_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.PARTNER_CENTER_CLIENT_SECRET }}
+        run: |
+          if (-not ($env:TENANT_ID -and $env:SELLER_ID -and $env:CLIENT_ID -and $env:CLIENT_SECRET)) {
+            throw "Partner Center credentials are missing from the microsoft-store environment."
+          }
+          msstore reconfigure --tenantId $env:TENANT_ID --sellerId $env:SELLER_ID --clientId $env:CLIENT_ID --clientSecret $env:CLIENT_SECRET
+          if ($LASTEXITCODE -ne 0) { throw "msstore reconfigure failed ($LASTEXITCODE)" }
+          msstore apps get 9PB9XTPR0XH4
+          if ($LASTEXITCODE -ne 0) { throw "could not read the app from Partner Center ($LASTEXITCODE)" }
+          msstore submission status 9PB9XTPR0XH4

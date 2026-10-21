@@ -90,7 +90,7 @@ Set in `.env` (gitignored): `GMAIL_USER`, `GMAIL_PASS`, `RECIPIENT_EMAIL`. Copy 
 | `.github/workflows/release.yml` | Builds macOS/Windows/Linux on a `v*` tag and publishes the GitHub release |
 | `site/index.html` | Download page (GitHub Pages, `.github/workflows/pages.yml`); `site/install.sh` / `site/install.ps1` are the one-command installers |
 | `src/packaged.py` | Microsoft Store (MSIX) app: package detection, LocalState data folder, StartupTask, Store product id |
-| `packaging/windows/build_msix.py` | Builds the Store MSIX (manifest `packaging/windows/msix/AppxManifest.xml`, logos); `test_msix.ps1` installs and smoke-tests it in CI |
+| `packaging/windows/build_msix.py` | Builds the Store MSIX (manifest `packaging/windows/msix/AppxManifest.xml`, logos); `test_msix.ps1` installs and smoke-tests it in CI; the `store` job in `release.yml` submits it to the Store on a tag (`store-check.yml` tests the credentials) |
 | `packaging/windows/hawkeye.iss` | Windows installer (Inno Setup); `packaging/linux/` builds the AppImage |
 
 ## Resetting
