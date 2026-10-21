@@ -6,7 +6,7 @@
 
 <p align="center">
   A free, open-source job finder for LinkedIn, Indeed, Bayt, NaukriGulf and Google Jobs.<br>
-  It runs entirely on your computer: no server, no account. Arabic and English.<br>
+  It runs entirely on your computer: no server, no account. Arabic and English. Built on <a href="https://github.com/speedyapply/JobSpy">JobSpy</a>.<br>
   <b>تطبيق مجاني ومفتوح المصدر للبحث عن الوظائف، يعمل كاملًا على جهازك، بالعربية والإنجليزية.</b>
 </p>
 
@@ -205,6 +205,11 @@ hawkeye-jobs/
 | 0 jobs from Bayt / NaukriGulf | Chrome must be installed; those sites are Gulf/Jordan only |
 | Chrome version error          | Set `HAWKEYE_CHROME_MAJOR` to your Chrome major version    |
 | Gmail auth error              | Generate a new App Password                                |
+
+## Built with
+
+- **[JobSpy](https://github.com/speedyapply/JobSpy)**: the open-source job scraping library behind the LinkedIn and Indeed searches. Thank you to its maintainers and contributors.
+- [pywebview](https://github.com/r0x0r/pywebview) for the desktop window, [FastAPI](https://github.com/fastapi/fastapi) for the local API, [Alpine.js](https://github.com/alpinejs/alpine) for the interface, and [Selenium](https://github.com/SeleniumHQ/selenium) / [undetected-chromedriver](https://github.com/ultrafunkamsterdam/undetected-chromedriver) for Bayt, NaukriGulf and Google Jobs.
 
 ## License
 
