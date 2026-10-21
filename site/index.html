@@ -45,6 +45,8 @@
            text-decoration: none; border: 0; }
     .btn:focus-visible, .lang:focus-visible, .card a:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
     .hint { color: var(--muted); font-size: 14px; margin: 0; }
+    .demo { margin: 32px 0 0; }
+    .demo video { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--border); background: #0b1220; }
     h2 { font-size: 22px; margin: 40px 0 12px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
@@ -81,6 +83,11 @@
       </a>
       <p class="hint" id="main-hint"></p>
     </div>
+
+    <figure class="demo">
+      <video src="demo.mp4" poster="demo-poster.jpg" autoplay muted loop playsinline preload="metadata"
+             aria-label="Hawkeye Jobs: first launch, search settings, results"></video>
+    </figure>
 
     <h2><span data-lang="ar">كل الأنظمة</span><span data-lang="en">All systems</span></h2>
     <div class="grid">

@@ -16,6 +16,8 @@
   <a href="docs/ARCHITECTURE.md">How it works</a>
 </p>
 
+<p align="center"><img src="docs/screenshots/demo.gif" alt="Hawkeye Jobs: first launch, search settings, a search and its results" width="800"></p>
+
 | Jobs (Arabic) | Search |
 |---|---|
 | ![Jobs page in Arabic](docs/screenshots/jobs-ar.png) | ![Search page in Arabic](docs/screenshots/search-ar.png) |
