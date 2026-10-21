@@ -2,7 +2,7 @@
 
 Text to paste into Partner Center (Hawkeye Jobs → submission). Product ID `9PB9XTPR0XH4`.
 
-Updates after the first submission are sent by the `store` job in `.github/workflows/release.yml` on every `v*` tag; it reuses this listing, so edit the text (e.g. "What's new") in Partner Center when it should change.
+For each update, upload the new `.msix` (the release run's `microsoft-store` artifact) in Partner Center; the listing carries over, so edit the text (e.g. "What's new") there when it should change.
 
 ## Properties
 
