@@ -13,7 +13,7 @@ Thank you for helping. Hawkeye Jobs is a free, non-profit job finder; contributi
 
 ## Setup
 
-Python 3.12 (python-jobspy pins numpy 1.26.3) and Google Chrome.
+Python 3.12 (3.10 or newer works) and Google Chrome.
 
 ```bash
 python3.12 -m venv venv

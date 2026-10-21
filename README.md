@@ -56,7 +56,7 @@ The macOS app is signed and notarized by Apple, so it opens with no warning. The
 
 ## Requirements (run from source)
 
-- Python 3.12 (python-jobspy pins numpy 1.26.3, which has no wheels for newer Pythons)
+- Python 3.10 or newer (releases are built with 3.12)
 - Google Chrome (required for Bayt, NaukriGulf, Google Jobs)
 - A Gmail account with an [App Password](https://myaccount.google.com/apppasswords) if you want email
 

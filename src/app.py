@@ -356,7 +356,7 @@ def self_test() -> list:
             problems.append("Arabic country names missing (data/countries.json)")
     except Exception as exc:
         problems.append(f"countries: {exc!r}")
-    for module in ("jobspy", "tls_client.cffi", "undetected_chromedriver", "selenium.webdriver",
+    for module in ("jobspy", "curl_cffi", "undetected_chromedriver", "selenium.webdriver",
                    "webview", "desktop_notifier", "pipeline", "scraper", "bayt", "naukrigulf",
                    "google_jobs", "PIL.Image", "cdp_browser", "websocket"):
         try:

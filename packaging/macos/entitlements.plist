@@ -3,7 +3,7 @@
 <!-- Hardened Runtime exceptions the bundled Python needs (required for notarization). -->
 <plist version="1.0">
 <dict>
-    <!-- ctypes / cffi callbacks (tls_client, pyobjc) write executable memory. -->
+    <!-- ctypes / cffi callbacks (curl_cffi, pyobjc) write executable memory. -->
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
     <!-- Load the bundled Python extensions and libraries (signed with our ID, not Apple's). -->

@@ -28,7 +28,7 @@ Runtime files (`hawkeye.db`, `config.json`, `hawkeye.log`, LinkedIn profile) liv
 pip install -r requirements-dev.txt   # runtime pins (requirements.txt) + test client + PyInstaller
 ```
 
-Use Python 3.12: python-jobspy pins numpy 1.26.3 (no wheels for newer Pythons). Releases: bump `src/version.py`, push tag `v<version>`; see docs/ARCHITECTURE.md → Packaging and releases.
+Releases and CI use Python 3.12 (python-jobspy 1.4 needs 3.10+). Releases: bump `src/version.py`, push tag `v<version>`; see docs/ARCHITECTURE.md → Packaging and releases.
 
 Tests: `venv/bin/python3 -m unittest discover -s tests -v` (also runs `node --test tests/js/*.test.mjs` when node is installed)
 

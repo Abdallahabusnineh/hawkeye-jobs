@@ -1,6 +1,7 @@
 # Runtime dependencies, pinned so every release is built from the same code.
-# python-jobspy pins numpy==1.26.3, which has wheels up to Python 3.12: build releases on 3.12.
-python-jobspy==1.1.80
+python-jobspy==1.4.0
+# JobSpy's HTTP client (browser-like TLS); a native library, bundled by packaging/hawkeye.spec.
+curl_cffi==0.16.3
 pandas==2.3.3
 requests==2.33.1
 # CA certificates for the packaged app (its Python has no system list; see app.py).
