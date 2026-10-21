@@ -223,12 +223,14 @@ jobs:
             --notes-file packaging/RELEASE_NOTES.md
 
   # Sends the new MSIX to the Microsoft Store (product 9PB9XTPR0XH4) after the GitHub release.
-  # Runs in the protected "microsoft-store" environment: the Partner Center credentials exist only
-  # there, every run waits for the owner's approval, and only v* tags (and main, for
-  # store-check.yml) may use it. Microsoft re-signs the package and certifies it, usually in hours.
+  # Off until the repository variable STORE_AUTOPUBLISH is "true" (set it once the Partner Center
+  # credentials are in the environment); until then the package is uploaded by hand in Partner
+  # Center from the run's "microsoft-store" artifact. Runs in the protected "microsoft-store"
+  # environment: the credentials exist only there, every run waits for the owner's approval, and
+  # only v* tags (and main, for store-check.yml) may use it.
   store:
     needs: publish
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') && vars.STORE_AUTOPUBLISH == 'true'
     runs-on: windows-latest
     environment: microsoft-store
     timeout-minutes: 60
